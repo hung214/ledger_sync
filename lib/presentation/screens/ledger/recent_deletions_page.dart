@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../application/providers.dart';
 import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
+import '../../category_display.dart';
 import '../../theme/app_theme.dart';
 
 /// 「最近刪除」頁（FR-T3：軟刪除 30 天保留期，acceptance F02 S2.5；
@@ -36,10 +37,10 @@ class RecentDeletionsPage extends ConsumerWidget {
       for (final c in db.categoriesByKind('expense')) c.id: c,
       for (final c in db.categoriesByKind('income')) c.id: c,
     };
+    // 圖示規則（PM 2026-10-25）：共用 category_display（子類別取主類別）。
     String? iconOf(String? categoryId) {
       final c = categoryId == null ? null : catById[categoryId];
-      if (c == null) return null;
-      return c.icon ?? (c.parentId == null ? null : catById[c.parentId]?.icon);
+      return c == null ? null : categoryEmojiOf(c, byId: catById);
     }
 
     return Scaffold(

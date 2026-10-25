@@ -58,8 +58,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('選擇分類'), findsOneWidget);
-      // 上方常用（MRU：交通運輸最新）。
-      expect(find.byKey(const Key('picker-recent-交通運輸')), findsOneWidget);
+      // 開窗預設停在**目前所選分類**的主類別（快記有智慧預設 → selectedId 非 null）。
+      expect(find.byKey(const Key('picker-main-交通運輸')), findsOneWidget);
+      // ⭐ 常用類別（PM 2026-10-25）：左欄**最上方**；點它 → 右欄列出常用類別
+      // **文字**（MRU：交通運輸最新）。原「上方分散 chips」已退役。
+      expect(find.byKey(const Key('picker-freq')), findsOneWidget);
+      expect(find.byKey(const Key('picker-recent-交通運輸')), findsNothing,
+          reason: '舊「上方常用 chips」已退役（改 ⭐ 常用類別）');
+      await tester.tap(find.byKey(const Key('picker-freq')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('picker-freq-交通運輸')), findsOneWidget);
+      expect(find.byKey(const Key('picker-freq-餐飲食品')), findsOneWidget);
       // 左主類別／右子類別。
       expect(find.byKey(const Key('picker-main-餐飲食品')), findsOneWidget);
       await tester.tap(find.byKey(const Key('picker-main-餐飲食品')));

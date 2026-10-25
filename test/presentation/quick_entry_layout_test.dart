@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/first_run_bootstrap.dart';
 import 'package:ledger_sync/application/providers.dart';
-import 'package:ledger_sync/presentation/screens/quick_entry/main_category_grid.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_page.dart';
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
 
@@ -40,8 +39,8 @@ void main() {
   testWidgets('① 手機版**無**三欄快捷格（分類＝欄位→彈窗）', (tester) async {
     await pump(tester);
 
-    expect(find.byType(MainCategoryGrid), findsNothing,
-        reason: '03／10 雛型：分類不再平鋪——三欄格僅桌面面板（08）');
+    expect(find.byKey(const Key('cat-grid-餐飲食品')), findsNothing,
+        reason: 'PM 2026-10-25：兩平台皆**不符**平鋪主類別——分類＝欄位→彈窗');
     expect(find.byKey(const Key('quick-entry-category')), findsOneWidget,
         reason: '分類欄仍在（點選開彈窗）');
     expect(tester.takeException(), isNull);
@@ -60,7 +59,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('③④ 帳戶｜分類同列兩欄＋金額右對齊＋欄位順序', (tester) async {
+  testWidgets('③④ 帳戶｜分類同列兩欄＋金額置中＋欄位順序', (tester) async {
     await pump(tester);
 
     // 同列：兩欄垂直中心相同（同一 Row）。
@@ -81,11 +80,15 @@ void main() {
     expect(top(const Key('quick-entry-merchant')),
         lessThan(top(const Key('quick-entry-note'))));
 
-    // 金額右對齊（03／10 雛型）。
+    // 金額**置中**（03 雛型；PM 2026-10-25：手機版以 03 為準）＋帳戶 Sticky 小字。
     final field = tester.widget<TextField>(
         find.byKey(const Key('quick-entry-amount')));
-    expect(field.textAlign, TextAlign.end);
-    expect(find.text('金額（TWD・整數元）'), findsOneWidget);
+    expect(field.textAlign, TextAlign.center);
+    expect(find.textContaining('（Sticky）'), findsOneWidget,
+        reason: '金額下方小字＝帳戶（03 雛型）');
+    // 商家／備註為**輸入欄位**（03 雛型；PM 2026-10-25）。
+    expect(tester.widget<TextField>(find.byKey(const Key('quick-entry-merchant'))),
+        isA<TextField>());
     expect(tester.takeException(), isNull);
   });
 
@@ -102,7 +105,7 @@ void main() {
     expect(find.byKey(const Key('quick-entry-category')), findsNothing);
     expect(find.byKey(const Key('quick-entry-merchant')), findsNothing);
     expect(find.text('不適用（轉帳語意）'), findsOneWidget);
-    expect(find.byType(MainCategoryGrid), findsNothing);
+    expect(find.byKey(const Key('cat-grid-餐飲食品')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

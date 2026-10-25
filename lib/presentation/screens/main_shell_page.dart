@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../category_display.dart';
 import 'settings/settings_hub_page.dart';
 import '../../core/version.dart';
 import 'budget/budget_page.dart';
@@ -12,7 +13,7 @@ import 'package:intl/intl.dart';
 
 import 'quick_entry/quick_entry_controller.dart';
 import 'quick_entry/category_picker_dialog.dart';
-import 'quick_entry/main_category_grid.dart';
+import 'quick_entry/amount_keypad.dart';
 import '../../application/categories/category_service.dart';
 import 'quick_entry/quick_date_time_picker.dart';
 import 'quick_entry/quick_entry_page.dart';
@@ -346,6 +347,9 @@ class _DesktopQuickPanel extends ConsumerStatefulWidget {
 class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
   final _amountCtrl = TextEditingController();
 
+  /// 計算機運算式（PM 2026-10-25：桌面面板亦常駐鍵盤——與手機共用元件）。
+  String _expr = '';
+
   /// 備註欄（PM 2026-10-24：PC 面板亦有）。
   final _noteCtrl = TextEditingController();
 
@@ -416,6 +420,23 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
     }
   }
 
+  /// 面板儲存（原大按鈕行為；PM 2026-10-25 改由鍵盤 OK 觸發）。
+  void _saveFromPanel() {
+    final controller = ref.read(quickEntryControllerProvider.notifier);
+    controller.save();
+    final s = ref.read(quickEntryControllerProvider);
+    if (s.phase == QuickEntryPhase.savedDialog) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              '已入庫（${s.lastSaveMs} ms）· 本次已記 ${s.sessionCount} 筆')));
+      _amountCtrl.clear();
+      _noteCtrl.clear();
+      controller.setAmount(''); // FR-Q5：金額清空（Sticky 其餘保留）
+      controller.setNote('');
+      if (mounted) setState(() => _expr = '');
+    }
+  }
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -433,19 +454,13 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
     final categories = ref.watch(state.mode == QuickEntryMode.income
         ? incomeCategoriesProvider
         : expenseCategoriesProvider);
-    // 分類圖示/選取跟隨主類別（PM 2026-10-24）：子類別無自身圖示——高亮其所屬主類別。
-    final selMainId = state.category?.parentId ?? state.category?.id;
-    // 分類欄顯示（PM 2026-10-24：與手機一致——顯示所選分類，含**子類別名稱**；
-    // 圖示跟隨主類別）。
-    final catById = {for (final c in categories) c.id: c};
+    // 分類欄顯示（PM 2026-10-24/25：與手機一致——共用 category_display；
+    // 子類別＝**主類別 emoji ＋ 子類別名**；非圖示庫代碼→🏷️，與類別設定一致）。
+    final catById = categoryIndex(categories);
     final selCat = state.category;
-    final selCatIcon = selCat == null
-        ? null
-        : (selCat.icon ??
-            (selCat.parentId == null ? null : catById[selCat.parentId]?.icon));
     final selCatLabel = selCat == null
         ? '選擇分類'
-        : (selCatIcon != null ? '$selCatIcon ${selCat.name}' : selCat.name);
+        : categoryLabelOf(selCat, byId: catById);
     // 欄位 ↔ state 同步（PM 2026-10-24）：記住上次帶入金額/商家時反映。
     ref.listen(
       quickEntryControllerProvider
@@ -456,6 +471,7 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
         if (_amountCtrl.text != amount) _amountCtrl.text = amount;
         if (_merchantCtrl.text != merchant) _merchantCtrl.text = merchant;
         if (_noteCtrl.text != note) _noteCtrl.text = note;
+        if (_expr != amount) setState(() => _expr = amount);
       },
     );
 
@@ -511,13 +527,8 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             onChanged: controller.setAmount,
           ),
           const SizedBox(height: 10),
-          // 三欄主類別格（PM 2026-10-24：手機與桌面**同一元件／版面**）。
-          if (state.mode != QuickEntryMode.transfer)
-            MainCategoryGrid(
-              categories: categories,
-              selectedMainId: selMainId,
-              onSelect: (m) => controller.selectCategoryById(m.id),
-            ),
+          // PM 2026-10-25：**移除個別主類別選項**（三欄快捷格）——分類一律由
+          // 「分類」欄開啟彈窗（⭐ 常用類別／左主／右子）。
           // 日期列（PM 2026-10-24）：◀▶ 快調 ±1 天；點日期開日曆。
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -634,28 +645,13 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             onChanged: controller.setNote,
           ),
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              key: const Key('desktop-quick-save'),
-              onPressed: (int.tryParse(state.amount) ?? 0) > 0 &&
-                      state.account != null
-                  ? () {
-                      controller.save();
-                      final s = ref.read(quickEntryControllerProvider);
-                      if (s.phase == QuickEntryPhase.savedDialog) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(
-                                '已入庫（${s.lastSaveMs} ms）· 本次已記 ${s.sessionCount} 筆')));
-                        _amountCtrl.clear();
-                        _noteCtrl.clear();
-                        controller.setAmount(''); // FR-Q5：金額清空（Sticky 其餘保留）
-                        controller.setNote('');
-                      }
-                    }
-                  : null,
-              child: const Text('OK 儲存（Enter）'),
-            ),
+          // 常駐計算機鍵盤（PM 2026-10-25：桌面面板**與手機共用同一元件**，
+          // OK 跨兩格；原獨立大按鈕「OK 儲存（Enter）」已移除）。
+          AmountKeypad(
+            expr: _expr,
+            onExprChanged: (e) => setState(() => _expr = e),
+            onOk: _saveFromPanel,
+            okEnabled: quickEntrySaveEnabled(state),
           ),
           Text('儲存後停留此面板繼續記（每筆確認）',
               textAlign: TextAlign.center,

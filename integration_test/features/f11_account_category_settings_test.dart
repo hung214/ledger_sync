@@ -531,7 +531,7 @@ void _bind(GherkinRunner runner, _World w) {
     expect(find.text(p['label']!), findsOneWidget, reason: '常用區標題');
     // v3 彈窗：常用區 key picker-recent-{name}——find.text 全樹搜尋會誤中主殼
     // IndexedStack 交易列（f02 教訓），改以 key 精準定位。
-    final recent = find.byKey(Key('picker-recent-${p['name']}'));
+    final recent = find.byKey(Key('picker-freq-${p['name']}'));
     expect(w.tester.any(recent), isTrue,
         reason: '常用區含「${p['name']}」（FR-B1 常用區）');
     // 「在完整清單之前」：常用區 dy < 左欄主類別 dy。

@@ -208,10 +208,26 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | Fix | **明細列顯示補齊＋PC 分類欄（PM 2026-10-24）**：`TxTile` 補分類圖示圓（子類別取主類別）＋標題退回分類名＋副標「時間 · 帳戶 · 分類 · 備註」；轉帳 🏦／儲值 📲／拆分 🔀；PC 快記面板分類欄與手機一致（`desktop-quick-category`）。同步 BDD F2／F02 acceptance S2.11／SDD §8.1／dsl v1.13／雛型 02/08 | ✅（隨快記 v3 一併發佈） |
 | Fix | **子類別無圖示（PM 2026-10-24）**：子類別不擁有 icon——顯示取主類別圖示；分類管理子列不顯 emoji／子類別表單無圖示選項（清空入庫）；快記分類欄「主 emoji＋子名」／彈窗右欄僅名稱／預算子格僅名稱；PC 面板高亮所屬主類別；UI_DEMO 展開態子列＋規則⑤；雛型 09 v4。同步 SPEC FR-B1／SDD §5.6／BDD F11／F11 acceptance S11.2-12／dsl v1.12 | ✅（隨快記 v3 一併發佈） |
 | Feature | **快記 v3（PM 2026-10-24 回饋）**：分類選擇**彈窗**（上常用／左主類別／右子類別；＋置欄頂即建即選）＋**備註**欄（手機／PC）＋**記住上次**（`QuickEntryMemory`：選子分類帶入上次金額/帳戶/商家，settings 本機記憶）；PC 面板補日期列/帳戶/商家/備註（保留三欄分類格）。同步 SPEC FR-Q4/Q5／SDD §5.1／BDD F1／F01 acceptance S1.12-13／dsl §4.6／雛型 03/10/08 | ✅（待 PM 預覽確認後發版） |
+| Fix | **DBG-012／DBG-013 快記第二輪回饋（PM 2026-10-25）**：①**三欄主類別格全面退役**（手機＋桌面；`MainCategoryGrid` 刪除——分類一律「分類」欄→彈窗）②**桌面面板常駐計算機鍵盤**（與手機共用 `AmountKeypad`；原大按鈕移除；`quickEntrySaveEnabled` 抽為共用）③分類彈窗**「⭐ 常用類別」**（左欄最上；右欄常用類別文字——主類別＝名稱／子類別＝主 emoji＋子名；原 chips 退役）④手機對齊 **03**（金額置中＋「帳戶：X（Sticky）」＋「本次已記 N 筆」；附件 📷 依 PM 決策先不做）⑤**分類圖示唯一來源** `category_display.dart`（子類別 `icon=''` 回退主類別；非庫內→🏷️；套用 6 處——修「快記與類別設定不同」）。新增 `category_display_test` 3＋更新 `quick_entry_layout_test`／`desktop_shell_test`／`quick_entry_ui_test` | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-010 最近刪除看不到明細刪除（PM 2026-10-25 實機）**：`tx_edit_sheet` 刪除/拆分後只 `invalidate(ledgerProvider)` → `recentDeletionsProvider` 回舊快取。修復：刪除/拆分、快記「復原上一筆」（軟刪除）、資料管理 `wipeScoped` 成功後一律失效 `recentDeletionsProvider`（資料管理另失效 ledger/分類/帳戶） | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-011 快記手機版版面不符雛型（PM 2026-10-25 實機）**：對齊 **03／10 雛型**——①移除手機頁三欄快捷格（分類不再平鋪；改「分類」欄→彈窗；三欄格僅**桌面面板** 08）②欄位順序回正（模式→金額→日期→帳戶/分類→商家→備註）③帳戶｜分類**同一列兩欄**（`IntrinsicHeight` 等高）④鍵盤第一排 OK **跨兩格**（4 格對齊）⑤金額**右對齊**＋「金額（TWD・整數元）」說明⑥欄位統一圓角方框；新增回歸護欄 `test/presentation/quick_entry_layout_test.dart`（4 情境）；同步 dsl §4.7 v1.19／debug.md | ✅（fix 分支待 PM 驗收） |
 | Feature | **「最近刪除」直接刪除（PM 2026-10-24 需求增補）**：①單筆 `recent-delete-purge-{id}`＋②清空全部 `recent-delete-purge-all`，皆**二次確認**（`recent-delete-purge-confirm`／`-cancel`）→ `PurgeTombstoneUseCase`（`AppDatabase.purgeTombstoneById`／`executeAll` 走同一 30 天清除路徑）＝**實體刪除、oplog 墓標保留**（同步安全）；未刪除者拋 StateError（防誤刪）、清除後回 0（冪等）③原型 `12-recent-deletions.html`＋DEMO「12 最近刪除」。TODOLIST：BE ✅／UC ✅／FE ✅／測試 ✅／雛型 ✅／DEMO ✅／文件 ✅／驗證 ✅ | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-009 分類設定變更不連動＋子分類無法編輯**（PM 實機回報）：`_refresh` 失效衍生快取（expense/income/ledger）＋新增 `incomeCategoriesProvider`；子列 `cat-edit-{name}`（改名/emoji/顏色）；emoji 庫 33；同步 SPEC FR-B1／SDD §5.6/§7.2／BDD F11／acceptance F11 S11.2／ui 09／debug.md | ✅（待 v0.4.21 發佈） |
+
+### 6.1 進行中工作清單（TODOLIST；PM 2026-10-25 回饋批）
+
+> PM 指示：**動手前先列 TASK／TODOLIST**；狀態：⬜ 未開始／🟨 進行中／✅ 完成。
+
+| # | TASK | 範圍（檔案／雛型） | 驗收 | 狀態 |
+|---|---|---|---|---|
+| T1 | **兩平台移除「個別主類別選項」**（三欄格退役；`MainCategoryGrid` 刪除） | `main_shell_page.dart`（移除 `MainCategoryGrid`）；雛型 `08` 同步 | widget test：桌面殼面板無 `MainCategoryGrid` | ✅ |
+| T2 | **電腦版面板版面／按鈕對齊 `10-quick-entry-calc.html`**（PM 決策：**面板也要有計算機鍵盤（OK 跨兩格）**、移除獨立大按鈕） | `main_shell_page.dart`；雛型 `08`／`10` | 截圖對照雛型 | ✅ |
+| T3 | **分類圖示一致性**：抽出共用 `categoryEmojiOf()`（自身 icon 在圖示庫→用；否則取主類別；否則 🏷️），套用至 類別設定／快記彈窗／快記手機分類欄／**快記桌面分類欄**／明細列／最近刪除列。修 `icon=''` 使 `??` 不回退之缺陷 | 新 `category_display.dart`＋6 處呼叫端 | unit：子類別→主類別 emoji；非庫內代碼→🏷️；各頁一致 | ✅ |
+| T4 | **手機版改以 `03-quick-entry.html` 為準**（非 10）：金額**置中**大字＋「帳戶：現金（Sticky）」小字；備註列；「本次已記 N 筆」（PM 決策：**附件 📷 先不做**——屬 F03） | `quick_entry_page.dart`；雛型 `03` | widget test：金額 `TextAlign.center`＋Sticky 小字＋計數文字 | ✅ |
+| T5 | **手機版「商家」「備註」為輸入欄位**（可輸入） | `quick_entry_page.dart` | widget test：兩者為 `TextField` 且可 `enterText` | ✅ |
+| T6 | **分類彈窗「常用類別」**：左欄**最上方**加「⭐ 常用類別」項；選它→右欄顯示**常用類別文字**（PM 決策：全部列出含主類別——主類別＝名稱／子類別＝主 emoji＋子名）；移除上方分散的常用 chips | `category_picker_dialog.dart`；雛型 `03`（彈窗機） | widget test：`picker-freq`（⭐）＋右欄常用清單；舊 `picker-recent-*` 退役 | ✅ |
+| T7 | 雛型／DEMO 同步（03／08／10＋畫廊）；dsl keys 更新 | `specs/plan/ui/*`、`demo/*`、`dsl.md` | 瀏覽器對照 | ✅ |
+| T8 | 文件：SPEC／SDD／BDD／acceptance／tasks／session／`debug.md`（DBG-012 圖示不一致、DBG-013 面板項目） | 各文件 | 同步矩陣 §7.2 | ✅ |
 
 - 狀態更新規則：🔴/🟢 由 CI 與 PR 自動可推導；🔵 與 ✅ 由開發者於 PR 描述更新；每 Sprint 結束回寫本表（對應 research §2.2 出口條件）。
 

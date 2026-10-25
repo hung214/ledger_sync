@@ -32,10 +32,11 @@ td{padding:9px 12px;border-top:1px solid #F0F3F4;color:#1c2b2a}
 .quick h3{font-size:14px;color:#1c2b2a;margin-bottom:2px}
 .quick .sub{font-size:11px;color:#98a5a4;margin-bottom:10px}
 .qamt{font-size:34px;font-weight:800;color:#1c2b2a;text-align:center;background:#F7F9FA;border-radius:12px;padding:12px;margin-bottom:10px}
-.qgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
-.qcat{background:#F7F9FA;border:1px solid #e3e7ea;border-radius:10px;text-align:center;font-size:11px;padding:9px 2px;color:#5c6b6a}
-.qcat.on{background:#0B7A75;color:#fff;border-color:#0B7A75}
-.qsave{background:#0B7A75;color:#fff;text-align:center;font-weight:700;border-radius:12px;padding:12px;font-size:14px}
+.qpad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:2px}
+.qkey{background:#F7F9FA;border:1px solid #e3e7ea;border-radius:12px;text-align:center;padding:10px 0;font-size:14px;color:#1c2b2a}
+.qkey.op{color:#0B7A75;font-weight:700}
+.qkey.fn{color:#0B7A75}
+.qkey.ok{background:#0B7A75;color:#fff;font-weight:800;border-color:#0B7A75}
 .qmeta{font-size:11px;color:#98a5a4;margin-top:8px;line-height:1.8}
 .qlink{font-size:11px;color:#0B7A75;margin:-4px 0 8px;cursor:pointer}
 .qdate{display:flex;align-items:center;justify-content:center;gap:10px;font-size:13px;font-weight:700;color:#1c2b2a;margin-bottom:8px}
@@ -83,17 +84,19 @@ td{padding:9px 12px;border-top:1px solid #F0F3F4;color:#1c2b2a}
       <h3>快速記帳</h3>
       <div class="sub">Ctrl+N 開啟 · Esc 收合</div>
       <div class="qamt">1,240</div>
-      <div class="qgrid">
-        <div class="qcat">🍜 餐飲食品</div><div class="qcat on">👗 服飾美容</div><div class="qcat">🏠 居家生活</div>
-        <div class="qcat">🚇 交通運輸</div><div class="qcat">🎓 教育學習</div><div class="qcat">🎬 休閒娛樂</div>
-      </div>
       <div class="qdate"><span class="qk">◀</span> 10/18（六）09:12 <span class="qk">▶</span></div>
       <div class="qfield"><small>帳戶</small><b>現金</b></div>
       <div class="qfield"><small>分類（點選開彈窗）</small><b>🍜 早餐</b></div>
       <div class="qfield"><small>商家（Sticky）</small><b>陽光</b></div>
       <div class="qfield"><small>備註（選填）</small>早餐</div>
       <div style="flex:1"></div>
-      <div class="qsave">OK 儲存（Enter）</div>
+      <div class="qpad">
+        <div class="qkey fn">C</div><div class="qkey fn">⌫</div><div class="qkey ok" style="grid-column:span 2">OK</div>
+        <div class="qkey">7</div><div class="qkey">8</div><div class="qkey">9</div><div class="qkey op">÷</div>
+        <div class="qkey">4</div><div class="qkey">5</div><div class="qkey">6</div><div class="qkey op">×</div>
+        <div class="qkey">1</div><div class="qkey">2</div><div class="qkey">3</div><div class="qkey op">－</div>
+        <div class="qkey" style="grid-column:span 2">0</div><div class="qkey">.</div><div class="qkey op">＋</div>
+      </div>
       <div class="qmeta" style="text-align:center">儲存後停留此面板繼續記（每筆確認）</div>
     </div>
   </div>
@@ -101,7 +104,7 @@ td{padding:9px 12px;border-top:1px solid #F0F3F4;color:#1c2b2a}
   <div class="note" style="bottom:380px"><b>v5（PM 2026-10-24）已實作</b>桌面明細＝<b>表格</b>（日期｜類型+標籤｜<b>分類</b>｜商家／對象｜帳戶｜金額<b>右對齊</b>＋千分位紅/綠）；手機＝分日卡片（見 02）。寬度 ≥900px 自動切換（RWD 單碼庫）。</div>
   <div class="note"><b>SDD §8 · FR-Q7/S3.9</b>桌面三欄殼：側邊導航＋主內容＋右側快記面板（Ctrl/N，可收合）；工具列掃描（Ctrl+Shift+S）；表格支援寬版資訊（source 標籤：掃描/定期/預扣）。</div>
   <div class="note" style="bottom:120px"><b>F01-S1.11 · F03-S3.9</b>桌面快捷鍵；無相機 PC → 掃描導向相簿/檔案匯入。</div>
-  <div class="note" style="bottom:250px"><b>v4（PM 2026-10-24）</b>分類欄與手機一致：顯示所選分類（含**子類別名稱**，如「🍜 早餐」）；點選開同一彈窗。<br><b>v3（PM 2026-10-24）PC 快記面板補正</b>金額以下依手機版欄位補齊：<b>三欄分類格保留</b>（快捷）＋「更多分類」<b>彈窗</b>（同 03：上常用／左主／右子）；<b>日期列</b>（◀▶ ±1 天／點擊開日曆）；<b>帳戶</b>／<b>商家</b>／<b>備註</b>（新增）；<b>OK 儲存</b>。<br>選子類別 → 帶入該子分類上次金額＋帳戶＋商家。</div>
+  <div class="note" style="bottom:250px"><b>v6（PM 2026-10-25）</b><b>移除「個別主類別選項」</b>（原三欄分類格）——分類一律由「分類」欄開彈窗（⭐ 常用類別／左主類別／右子類別）；面板<b>新增常駐計算機鍵盤</b>（<b>與手機共用同一元件</b>；第一排 C／⌫／OK <b>跨兩格</b>、末排 0 跨兩格），原獨立大按鈕「OK 儲存（Enter）」移除。<br><b>v4</b>分類欄顯示所選分類（含子類別名，如「🍜 早餐」；<b>子類別圖示跟隨主類別</b>）。</div>
 </div>
 </body>
 </html>

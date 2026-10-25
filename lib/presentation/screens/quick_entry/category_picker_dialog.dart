@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/providers.dart';
 import '../../../data/sqlite/app_database.dart';
-import '../settings/category_settings_page.dart' show categoryEmojis;
+import '../../category_display.dart';
 
 /// 分類選擇彈窗結果（PM 2026-10-24）。
 sealed class CategoryPick {
@@ -23,9 +23,13 @@ class CategoryAddRequested extends CategoryPick {
   final String? parentId;
 }
 
-/// 顯示「分類選擇」彈窗：**上方常用／左主類別／右子類別**（PM 2026-10-24）。
+/// 顯示「分類選擇」彈窗：**左欄最上方「⭐ 常用類別」／左主類別／右子類別**
+/// （PM 2026-10-25 定稿；原「上方常用 chips」已移除）。
 ///
-/// 手機與 PC 共用同一元件（RWD 單碼庫）。回傳 null＝取消（不變更）。
+/// - 點「⭐ 常用類別」→ 右欄列出**常用（MRU）類別文字**（主類別＝名稱；
+///   子類別＝主類別 emoji ＋ 子類別名）——點擊即選取。
+/// - 左欄主類別 → 右欄該主類別之子類別；「（不分類）」＝只記主類別。
+/// - 手機與 PC 共用同一元件（RWD 單碼庫）。回傳 null＝取消（不變更）。
 Future<CategoryPick?> showCategoryPicker(
   BuildContext context,
   WidgetRef ref, {
@@ -51,6 +55,9 @@ class _CategoryPickerDialog extends ConsumerStatefulWidget {
 }
 
 class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
+  /// 「⭐ 常用類別」在左欄的識別碼（非真實類別 id）。
+  static const String freqId = '__freq__';
+
   String? _mainId;
 
   @override
@@ -62,20 +69,11 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
     for (final c in cats) {
       if (c.id == sel) selected = c;
     }
-    // 選中子分類 → 左欄高亮其所屬主類別；選中主類別 → 本身；否則首個主類別。
+    // 選中子分類 → 左欄高亮其所屬主類別；選中主類別 → 本身。
+    // 未選任何分類 → 保持 null，由 build 依「常用是否有紀錄」決定預設欄
+    // （PM 2026-10-25：有常用 → 預設 ⭐ 常用類別；否則首個主類別）。
     _mainId = selected?.parentId ?? selected?.id;
-    if (_mainId == null) {
-      for (final c in cats) {
-        if (c.parentId == null) {
-          _mainId = c.id;
-          break;
-        }
-      }
-    }
   }
-
-  static String _label(String? icon, String name) =>
-      (icon != null && categoryEmojis.contains(icon)) ? '$icon $name' : name;
 
   @override
   Widget build(BuildContext context) {
@@ -83,12 +81,22 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
     final text = Theme.of(context).textTheme;
     final cats = ref.watch(dbProvider).categoriesByKind(widget.kind);
     final mains = [for (final c in cats) if (c.parentId == null) c];
-    final subs = [for (final c in cats) if (c.parentId == _mainId) c];
-    final byId = {for (final c in cats) c.id: c};
+    final byId = categoryIndex(cats);
+    // 常用（MRU 前 10；只留本模式 kind 之分類，去重由 provider 負責）。
     final recent = [
       for (final id in ref.watch(recentCategoryIdsProvider))
         if (byId[id] != null) byId[id]!,
     ];
+    // 有效主欄：使用者選擇 ??
+    //   有常用 → ⭐ 常用類別 : 首個主類別（PM 2026-10-25 預設）。
+    final effMain = _mainId ??
+        (recent.isNotEmpty
+            ? freqId
+            : (mains.isEmpty ? null : mains.first.id));
+    final isFreq = effMain == freqId;
+    final subs = isFreq
+        ? const <CategoryRow>[]
+        : [for (final c in cats) if (c.parentId == effMain) c];
 
     Widget head(String s) => Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
@@ -139,40 +147,6 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
               child: Text('點左欄主類別 → 右欄選子類別（不選＝只記主類別）',
                   style: text.labelSmall?.copyWith(color: scheme.outline)),
             ),
-            if (recent.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Text('常用',
-                    style: text.labelSmall?.copyWith(color: scheme.outline)),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final c in recent)
-                      InkWell(
-                        key: Key('picker-recent-${c.name}'),
-                        onTap: () => Navigator.of(context)
-                            .pop(CategoryPicked(c.id)),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(_label(c.icon, c.name),
-                              style: text.bodySmall?.copyWith(fontSize: 12)),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-            ],
             Flexible(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -188,6 +162,14 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                         head('主類別'),
+                        // ⭐ 常用類別（PM 2026-10-25）——置於主類別清單**最上方**。
+                        if (recent.isNotEmpty)
+                          row(
+                            key: const Key('picker-freq'),
+                            label: '⭐ 常用類別',
+                            selected: isFreq,
+                            onTap: () => setState(() => _mainId = freqId),
+                          ),
                         InkWell(
                           key: const Key('picker-add-main'),
                           onTap: () => Navigator.of(context).pop(
@@ -202,8 +184,8 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                         for (final m in mains)
                           row(
                             key: Key('picker-main-${m.name}'),
-                            label: _label(m.icon, m.name),
-                            selected: m.id == _mainId,
+                            label: categoryLabelOf(m, byId: byId),
+                            selected: m.id == effMain,
                             onTap: () => setState(() => _mainId = m.id),
                           ),
                           ]),
@@ -216,40 +198,57 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                       padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                        head('子類別'),
-                        InkWell(
-                          key: const Key('picker-add-sub'),
-                          onTap: _mainId == null
-                              ? null
-                              : () => Navigator.of(context).pop(
-                                  CategoryAddRequested(
-                                      asSub: true, parentId: _mainId)),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                            child: Text('＋ 新增子類別',
-                                style: text.bodySmall
-                                    ?.copyWith(color: scheme.primary)),
-                          ),
-                        ),
-                        if (_mainId != null)
-                          row(
-                            key: const Key('picker-sub-none'),
-                            label: '（不分類）',
-                            selected: false,
-                            onTap: () => Navigator.of(context)
-                                .pop(CategoryPicked(_mainId!)),
-                          ),
-                        for (final s in subs)
-                          row(
-                            key: Key('picker-sub-${s.name}'),
-                            // 子類別無圖示（PM 2026-10-24；左欄主類別已載圖示）。
-                            label: s.name,
-                            selected: s.id == widget.selectedId,
-                            onTap: () => Navigator.of(context)
-                                .pop(CategoryPicked(s.id)),
-                          ),
-                          ]),
+                          children: isFreq
+                              // ⭐ 常用類別：右欄＝常用類別**文字**清單
+                              // （主類別＝名稱；子類別＝主類別 emoji ＋子名）。
+                              ? [
+                                  head('常用類別'),
+                                  for (final c in recent)
+                                    row(
+                                      key: Key('picker-freq-${c.name}'),
+                                      label: c.parentId == null
+                                          ? c.name
+                                          : categoryLabelOf(c, byId: byId),
+                                      selected: c.id == widget.selectedId,
+                                      onTap: () => Navigator.of(context)
+                                          .pop(CategoryPicked(c.id)),
+                                    ),
+                                ]
+                              : [
+                                  head('子類別'),
+                                  InkWell(
+                                    key: const Key('picker-add-sub'),
+                                    onTap: effMain == null
+                                        ? null
+                                        : () => Navigator.of(context).pop(
+                                            CategoryAddRequested(
+                                                asSub: true, parentId: effMain)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          10, 8, 10, 8),
+                                      child: Text('＋ 新增子類別',
+                                          style: text.bodySmall?.copyWith(
+                                              color: scheme.primary)),
+                                    ),
+                                  ),
+                                  if (effMain != null)
+                                    row(
+                                      key: const Key('picker-sub-none'),
+                                      label: '（不分類）',
+                                      selected: false,
+                                      onTap: () => Navigator.of(context)
+                                          .pop(CategoryPicked(effMain)),
+                                    ),
+                                  for (final s in subs)
+                                    row(
+                                      key: Key('picker-sub-${s.name}'),
+                                      // 子類別無圖示（PM 2026-10-24；左欄主類別已載圖示）。
+                                      label: s.name,
+                                      selected: s.id == widget.selectedId,
+                                      onTap: () => Navigator.of(context)
+                                          .pop(CategoryPicked(s.id)),
+                                    ),
+                                ]),
                     ),
                   ),
                 ],

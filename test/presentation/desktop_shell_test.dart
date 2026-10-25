@@ -44,10 +44,13 @@ void main() {
           reason: '右側快記常駐面板');
       expect(find.textContaining('雲端未設定'), findsOneWidget, reason: '側欄雲端狀態（footer 整段文字）');
 
-      // 面板：金額 120 → 儲存 → 交易入庫（智慧預設帳戶）。
+      // PM 2026-10-25：桌面面板**無個別主類別選項**（三欄格已移除）。
+      expect(find.byKey(const Key('cat-grid-餐飲食品')), findsNothing,
+          reason: '面板不應有個別主類別選項（改由「分類」欄開彈窗）');
+      // 面板：金額 120 → 鍵盤 OK 儲存 → 交易入庫（智慧預設帳戶）。
       await tester.enterText(find.byKey(const Key('desktop-quick-amount')), '120');
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('desktop-quick-save')));
+      await tester.tap(find.byKey(const Key('quick-entry-save')));
       await tester.pump(); // 觸發 SnackBar 進場（pumpAndSettle 會快進 4s 自動關閉）
       await tester.pump(const Duration(milliseconds: 300));
       expect(db.allTransactions().length, 1, reason: '快記面板直接入庫');

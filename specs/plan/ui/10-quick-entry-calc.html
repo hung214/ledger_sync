@@ -17,7 +17,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
 .modes{display:flex;gap:6px;margin-bottom:12px}
 .mode{flex:1;text-align:center;padding:10px 0;border-radius:12px;font-size:14px;font-weight:700;color:#9fd4d0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12)}
 .mode.on{background:#F5C86B;color:#12312F;border-color:#F5C86B}
-.expr{color:#fff;text-align:right;font-size:34px;font-weight:800;letter-spacing:1px;margin:6px 0 2px;min-height:44px}
+.expr{color:#fff;text-align:center;font-size:34px;font-weight:800;letter-spacing:1px;margin:6px 0 2px;min-height:44px}
 .expr small{display:block;font-size:13px;color:#9fd4d0;font-weight:400;text-align:center;letter-spacing:0}
 .field{display:flex;gap:8px;margin-bottom:8px}
 .f{flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;color:#d9e8e7;font-size:13px;padding:9px 12px}
@@ -56,7 +56,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
         <div class="mode">收入</div>
         <div class="mode">轉帳</div>
       </div>
-      <div class="expr">165<small>金額（TWD・整數元）</small></div>
+      <div class="expr">165<small>帳戶：現金（Sticky）</small></div>
       <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:8px">
         <span class="key" style="padding:4px 10px;font-size:18px">◀</span>
         <span class="t" style="font-size:19px;font-weight:700;color:#fff">10/20（二）09:30</span>
@@ -66,6 +66,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
       <div class="field"><div class="f"><small>商家</small><b>晨光早餐店</b></div></div>
       <div class="field"><div class="f"><small>備註（選填）</small>早餐</div></div>
       <div style="flex:1"></div>
+      <div style="margin-top:8px;color:#9fd4d0;text-align:center;font-size:13px">本次已記 3 筆</div>
       <div class="panel">
         <div class="numpad">
           <div class="key fn">C</div><div class="key fn">⌫</div><div class="key ok" style="grid-column:span 2">OK</div>
@@ -79,7 +80,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
   </div>
   <div class="note" style="top:60px"><b>S2.9 v4（PM 2026-10-24）</b>鍵盤＝<b>第一排 C／⌫／OK</b>（OK 取代「＝」）；末排 <b>0 跨兩格</b>／.／<b>＋（移至原 ⌫ 位）</b>；<b>無「＝」鍵——運算式即時求值</b>（未完成／÷0 → OK 禁用）；模式列＝支出／收入／轉帳。</div>
   <div class="note" style="top:170px"><b>S2.9 v2（PM 2026-10-23）</b>計算機＝浮動面板貼底；鍵面 0-9／.／＋－×÷／C／⌫（小數點；結果四捨五入至整數元）；連按運算子＝取代。</div>
-  <div class="note" style="top:300px"><b>金額欄（唯讀顯示）</b>系統鍵盤不彈出（TextInputType.none）——輸入一律經常駐鍵盤；運算式未完成（如 120＋）→ 儲存禁用；＝ 求值 165 → 儲存啟用（S2.1 金額必填＞0 即時切換）。</div>
+  <div class="note" style="top:300px"><b>金額欄（唯讀顯示；PM 2026-10-25：手機版以 03 為準）</b>金額<b>置中</b>、下方小字＝<b>帳戶：X（Sticky）</b>；系統鍵盤不彈出（TextInputType.none）——輸入一律經常駐鍵盤；運算式未完成（如 120＋）→ 儲存禁用；求值 165 → 儲存啟用（S2.1 金額必填＞0 即時切換）。<br><b>桌面面板（08）</b>同樣常駐鍵盤（與手機共用元件）。</div>
   <div class="note" style="top:400px"><b>v3（PM 2026-10-24）</b>新增<b>備註欄位</b>（商家下方；手機／PC 皆有）。<br>「分類」欄點選→ <b>分類選擇彈窗</b>（上方常用／左下主類別／右下子類別）——同 03 雛型同一元件；選子類別會<b>帶入上次金額＋帳戶＋商家</b>。</div>
   <div class="note" style="top:560px"><b>日期（PM 2026-10-23）</b>日期在**金額下方**：◀▶ 快調 ±1 天；點擊日期開日曆（同 03 雛型）。<br><b>FR-Q1~Q5 既有語意不變</b>大金額鍵盤＋分類快捷格（見 03 雛型）；Sticky：繼續後金額清空、時間重設、帳戶/分類/商家保留。</div>
 </div>
@@ -95,7 +96,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
         <div class="mode on">轉帳</div>
         <div class="mode">收入</div>
       </div>
-      <div class="expr">500<small>金額（TWD・整數元）</small></div>
+      <div class="expr">500<small>帳戶：銀行（Sticky）</small></div>
       <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:8px">
         <span class="key" style="padding:4px 10px;font-size:18px">◀</span>
         <span class="t" style="font-size:19px;font-weight:700;color:#fff">10/20（二）09:31</span>
@@ -105,6 +106,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
       <div class="field"><div class="f" style="opacity:.55"><small>分類／商家</small><b>不適用（轉帳語意）</b></div></div>
       <div class="field"><div class="f"><small>備註（選填）</small>房租轉帳</div></div>
       <div style="flex:1"></div>
+      <div style="margin-top:8px;color:#9fd4d0;text-align:center;font-size:13px">本次已記 3 筆</div>
       <div class="panel">
         <div class="numpad">
           <div class="key fn">C</div><div class="key fn">⌫</div><div class="key ok" style="grid-column:span 2">OK</div>

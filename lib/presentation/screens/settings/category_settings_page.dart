@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
 import '../../../data/sqlite/app_database.dart';
+import '../../category_display.dart';
 import '../../theme/app_theme.dart';
 
 /// 分類管理頁（SPEC FR-B1；設計基準 `specs/plan/ui/09-category-settings.html`
@@ -303,7 +304,7 @@ class _CategorySettingsPageState extends ConsumerState<CategorySettingsPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,
-                        child: Text(_emojiOf(c.icon),
+                        child: Text(categoryEmojiOf(c),
                             style: const TextStyle(fontSize: 20)),
                       ),
                       const SizedBox(width: 10),
@@ -438,25 +439,10 @@ class _CategorySettingsPageState extends ConsumerState<CategorySettingsPage> {
     );
   }
 
-  String _emojiOf(String? name) =>
-      (name != null && categoryEmojis.contains(name))
-          ? name
-          : '🏷️'; // 未設定→預設標籤
-
   Color _colorOf(String? name) => categoryColors
       .firstWhere((c) => c.$1 == name, orElse: () => categoryColors.first)
       .$2;
 }
-
-/// 分類圖示庫（34 個 emoji；PM 2026-10-23：對齊 DEMO 活潑圖示——
-/// icon 欄直接存 emoji 字元，多色向量改單字元渲染）。
-const List<String> categoryEmojis = [
-  '🍜', '🍚', '🍣', '🍞', '☕', '🍔', '🛒', '👗',
-  '👜', '💄', '🏠', '🛏️', '🧹', '🚇', '🚌', '🚗',
-  '✈️', '🎓', '📚', '✏️', '🎬', '🎮', '🏀', '📱',
-  '💻', '🎧', '💊', '🏥', '🎁', '🧧', '💰', '📈',
-  '🍰', '🐱',
-];
 
 /// 分類顏色庫（10 個）。
 const List<(String, Color)> categoryColors = [

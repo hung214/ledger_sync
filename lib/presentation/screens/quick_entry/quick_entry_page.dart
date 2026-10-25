@@ -5,11 +5,10 @@ import 'package:intl/intl.dart';
 import '../../../application/appearance/theme_mode_state.dart';
 import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
-import '../../../data/sqlite/app_database.dart';
+import '../../category_display.dart';
 import 'amount_keypad.dart';
 import 'category_picker_dialog.dart';
 import 'quick_date_time_picker.dart';
-import '../settings/category_settings_page.dart';
 import 'quick_entry_controller.dart';
 
 /// 快記頁（FR-Q1~Q8，acceptance F01）。
@@ -91,12 +90,9 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
     final categories = ref.watch(state.mode == QuickEntryMode.income
         ? incomeCategoriesProvider
         : expenseCategoriesProvider);
-    // 分類圖示解析（PM 2026-10-24）：子類別無自身圖示——取**主類別**圖示。
-    final catById = {for (final c in categories) c.id: c};
-    String? iconOfCategory(CategoryRow? c) => c == null
-        ? null
-        : (c.icon ??
-            (c.parentId == null ? null : catById[c.parentId]?.icon));
+    // 分類索引＋顯示規則（PM 2026-10-25：共用 category_display——修正子類別
+    // icon='' 導致 `??` 不回退主類別圖示之缺陷）。
+    final catById = categoryIndex(categories);
     ref.listen(
       quickEntryControllerProvider.select((s) => s.phase),
       (prev, next) => _onPhaseChange(prev, next),
@@ -157,13 +153,13 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                         controller.setMode(modes.first),
                   ),
                   const SizedBox(height: 12),
-                  // 金額大顯示（03／10 雛型：**右對齊**）。
+                  // 金額大顯示（**03 雛型：置中**——PM 2026-10-25：手機版以 03 為準）。
                   TextField(
                     key: const Key('quick-entry-amount'),
                     controller: _amountCtrl,
                     autofocus: true, // S1.1-5
                     keyboardType: TextInputType.none, // 常駐鍵盤（F02 S2.9）
-                    textAlign: TextAlign.end,
+                    textAlign: TextAlign.center,
                     style: Theme.of(context)
                         .textTheme
                         .displaySmall
@@ -172,9 +168,12 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                         hintText: '0', border: InputBorder.none),
                     onChanged: controller.setAmount,
                   ),
-                  // 金額說明（原型 10）。
+                  // 金額下方小字＝**帳戶（Sticky）**（03 雛型；PM 2026-10-25）。
                   Center(
-                    child: Text('金額（TWD・整數元）',
+                    child: Text(
+                        state.account == null
+                            ? '帳戶：未選擇'
+                            : '帳戶：${state.account!.name}（Sticky）',
                         style: TextStyle(
                             fontSize: 13,
                             color: Theme.of(context).colorScheme.outline)),
@@ -281,13 +280,15 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                                     decoration: const InputDecoration(
                                         labelText: '分類',
                                         border: OutlineInputBorder(),
-                                        isDense: true),
+                                        isDense: true,
+                                        // 03 雛型「›」：可點提示（與輸入欄位區隔）。
+                                        suffixIcon: Icon(Icons.chevron_right,
+                                            size: 18)),
                                     child: Text(
                                         state.category == null
                                             ? '選擇分類'
-                                            : _chipLabel(
-                                                iconOfCategory(state.category),
-                                                state.category!.name),
+                                            : categoryLabelOf(state.category!,
+                                                byId: catById),
                                         overflow: TextOverflow.ellipsis),
                                   ),
                                 ),
@@ -327,6 +328,16 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                         isDense: true),
                     onChanged: controller.setNote,
                   ),
+                  // 本次已記 N 筆（03 雛型；PM 2026-10-25。附件 📷 先不做）。
+                  if (state.sessionCount > 0) ...[
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Text('本次已記 ${state.sessionCount} 筆',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.outline)),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -357,7 +368,7 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     expr: _expr,
                     onExprChanged: _onKeypadExpr,
                     onOk: controller.save,
-                    okEnabled: _saveEnabled(state),
+                    okEnabled: quickEntrySaveEnabled(state),
                   ),
                 ],
               ),
@@ -446,17 +457,6 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
       '（${_weekdays[t.weekday - 1]}）'
       '${DateFormat('HH:mm').format(t)}';
 
-  static bool _saveEnabled(QuickEntryState state) {
-    // 即時求值（PM 2026-10-24：移除 ＝ 鍵）——未完成／無效 → 金額未定 → 禁用。
-    final amountOk = (AmountKeypadEvaluator.evaluate(state.amount) ?? 0) > 0;
-    switch (state.mode) {
-      case QuickEntryMode.transfer:
-        return amountOk && state.toAccount != null;
-      case QuickEntryMode.expense:
-      case QuickEntryMode.income:
-        return amountOk;
-    }
-  }
 
   /// 分類選單項（主類別→子分類縮排；FR-B1 階層）。
   /// 第三元素＝是否子分類（結構化縮排渲染——文字保持原樣供精確比對）。
@@ -538,9 +538,20 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   }
 }
 
-/// chip 標籤：emoji 前綴（有設定且在圖示庫內才顯示；PM 2026-10-23）。
-String _chipLabel(String? icon, String name) =>
-    (icon != null && categoryEmojis.contains(icon)) ? '$icon $name' : name;
+/// OK 儲存啟用判定（**手機與桌面共用**；PM 2026-10-25）。
+///
+/// 即時求值（PM 2026-10-24：移除 ＝ 鍵）——運算式未完成／無效 → 金額未定 → 禁用；
+/// 轉帳另需目標帳戶。
+bool quickEntrySaveEnabled(QuickEntryState state) {
+  final amountOk = (AmountKeypadEvaluator.evaluate(state.amount) ?? 0) > 0;
+  switch (state.mode) {
+    case QuickEntryMode.transfer:
+      return amountOk && state.toAccount != null;
+    case QuickEntryMode.expense:
+    case QuickEntryMode.income:
+      return amountOk;
+  }
+}
 
 class SavedDialog extends ConsumerWidget {
   const SavedDialog({super.key, required this.onFinish});

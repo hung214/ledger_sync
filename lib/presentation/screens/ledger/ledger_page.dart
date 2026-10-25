@@ -10,6 +10,7 @@ import '../../../application/scan/scan_state.dart';
 import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
 import '../../../domain/services/balance_calculator.dart';
+import '../../category_display.dart';
 import '../../theme/app_theme.dart';
 import 'recent_deletions_page.dart';
 import 'tx_edit_sheet.dart';
@@ -95,10 +96,11 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       for (final c in db.categoriesByKind('expense')) c.id: c,
       for (final c in db.categoriesByKind('income')) c.id: c,
     };
+    // 圖示規則（PM 2026-10-25）：共用 category_display——子類別取**主類別**、
+    // 非圖示庫代碼→🏷️（與類別設定一致；修正子類別 icon='' 之空圖示）。
     String? iconOf(String? categoryId) {
       final c = categoryId == null ? null : catById[categoryId];
-      if (c == null) return null;
-      return c.icon ?? (c.parentId == null ? null : catById[c.parentId]?.icon);
+      return c == null ? null : categoryEmojiOf(c, byId: catById);
     }
 
     // 交易列建構（手機卡片／桌面表格共用；日期由分日標題承載時 showFullDate=false）。

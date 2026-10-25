@@ -130,7 +130,7 @@ body{background:#e8ecef;display:flex;gap:80px;padding:40px;align-items:flex-star
 
   <div class="note" style="top:60px"><b>v4（PM 2026-10-24 定稿）</b>模式列＝**支出／收入／轉帳**（無拆分/預算）。分類**不再平鋪**：點「分類」欄 → **彈窗**：上方**常用**、下方**左主類別／右子類別**。<br>欄位順序：模式 → 金額 → 日期 → 帳戶/分類 → 商家 → <b>備註</b>（新增）→ 計算機/OK。</div>
   <div class="note" style="top:300px"><b>記住上次（PM 2026-10-24）</b>點選**子分類**時帶入該子分類**上次的金額＋帳戶＋商家**（日期仍預設「現在」）；方便微調後直接存。<br>無紀錄 → 沿用 Sticky（上一筆）值。</div>
-  <div class="note" style="top:520px"><b>日期（PM 2026-10-23）</b>金額下方：◀▶ 快調 ±1 天；點日期才開日曆。<br><b>OK 儲存</b>在計算機上方；計算機貼底常駐（含「.」小數鍵）。</div>
+  <div class="note" style="top:520px"><b>日期（PM 2026-10-23）</b>金額下方：◀▶ 快調 ±1 天；點日期才開日曆。<br><b>OK 儲存</b>在鍵盤第一排（跨兩格）；計算機貼底常駐（含「.」小數鍵）。<br><b>附件 📷（PM 2026-10-25）</b>屬 F03 掃描入口——<b>App 尚未實作，先不做</b>；「本次已記 N 筆」App 已實作。</div>
 </div>
 
 <!-- ② 手機（亮）快記 v3 -->
@@ -199,20 +199,12 @@ body{background:#e8ecef;display:flex;gap:80px;padding:40px;align-items:flex-star
     <div class="modal">
       <div class="picker">
         <h2>選擇分類</h2>
-        <div class="sub">點左欄主類別 → 右欄選子類別（不選子類別＝只記主類別）</div>
-        <div class="recent">
-          <div class="lab">常用</div>
-          <div class="rchips">
-            <span class="rc">🚇 交通運輸</span>
-            <span class="rc on">🍜 餐飲食品</span>
-            <span class="rc">🛒 服飾美容</span>
-            <span class="rc">🏠 居家生活</span>
-          </div>
-        </div>
+        <div class="sub">左欄最上＝⭐ 常用類別；點主類別 → 右欄選子類別（不選＝只記主類別）</div>
         <div class="cols">
           <div class="colL">
             <div class="lab" style="padding-left:10px">主類別</div>
-            <div class="it on"><span class="e">🍜</span>餐飲食品</div>
+            <div class="it on"><span class="e">⭐</span>常用類別</div>
+            <div class="it"><span class="e">🍜</span>餐飲食品</div>
             <div class="it"><span class="e">👗</span>服飾美容</div>
             <div class="it"><span class="e">🏠</span>居家生活</div>
             <div class="it"><span class="e">🚇</span>交通運輸</div>
@@ -222,16 +214,13 @@ body{background:#e8ecef;display:flex;gap:80px;padding:40px;align-items:flex-star
             <div class="addc">＋ 新增主類別</div>
           </div>
           <div class="colR">
-            <div class="lab">子類別</div>
-            <div class="it"><span class="e">↳</span>（不分類）</div>
-            <div class="it on"><span class="e">↳</span>早餐</div>
-            <div class="it"><span class="e">↳</span>中餐</div>
-            <div class="it"><span class="e">↳</span>晚餐</div>
-            <div class="it"><span class="e">↳</span>下午茶</div>
-            <div class="it"><span class="e">↳</span>宵夜</div>
-            <div class="it"><span class="e">↳</span>水果</div>
-            <div class="it"><span class="e">↳</span>食材</div>
-            <div class="addc">＋ 新增子類別</div>
+            <div class="lab">常用類別（點文字即選取）</div>
+            <div class="it">交通運輸</div>
+            <div class="it on">🍜 早餐</div>
+            <div class="it">服飾美容</div>
+            <div class="it">🚇 大眾運輸</div>
+            <div class="it">居家生活</div>
+            <div class="it">☕ 下午茶</div>
           </div>
         </div>
         <div class="foot"><span class="cbtn">取消</span></div>
@@ -239,7 +228,7 @@ body{background:#e8ecef;display:flex;gap:80px;padding:40px;align-items:flex-star
     </div>
   </div>
 
-  <div class="note" style="top:60px"><b>分類選擇彈窗（PM 2026-10-24）</b>① 上方<b>常用</b>（MRU 前 10，可直接點；無紀錄時隱藏）② 下方<b>左＝主類別清單／右＝所選主類別的子類別清單</b>（可捲動）③ 選「（不分類）」＝只記主類別 ④ 各欄底部「＋」即建即選 ⑤ 取消不變更。<br>手機與 PC 共用**同一彈窗元件**。</div>
+  <div class="note" style="top:60px"><b>分類選擇彈窗（PM 2026-10-25 定稿）</b>① <b>左欄最上方＝「⭐ 常用類別」</b>（MRU 前 10；無紀錄時隱藏）——點它 → <b>右欄列出常用類別文字</b>（<b>主類別＝名稱；子類別＝主類別 emoji ＋ 子類別名</b>，如「🍜 早餐」），<b>點文字即選取</b> ② 點左欄主類別 → 右欄該主類別之子類別 ③ 選「（不分類）」＝只記主類別 ④ 各欄「＋」即建即選 ⑤ 取消不變更。<br>原「上方常用 chips」已移除；手機與 PC 共用**同一彈窗元件**。</div>
   <div class="note" style="top:262px"><b>圖示（PM 2026-10-24）</b><b>子類別無圖示</b>——右欄子類別只顯示名稱（↳）／選擇後「分類」欄顯示<b>主類別 emoji ＋ 子類別名</b>。</div>
   <div class="note" style="top:400px"><b>選取即帶入上次</b>選子分類 → 帶入該子分類上次的<b>金額／帳戶／商家</b>（日期＝現在）→ 可微調 → OK 儲存。<br>此記憶為**本機 UX 記憶**（settings，不隨雲端同步）。</div>
 </div>

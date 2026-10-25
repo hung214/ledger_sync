@@ -87,7 +87,7 @@ class _QuickEntryCalcDemoContentState extends State<QuickEntryCalcDemoContent> {
                             fontSize: 36,
                             fontWeight: FontWeight.w800),
                       ),
-                      const Text('金額（TWD・整數元・系統鍵盤不彈出）',
+                      const Text('帳戶：現金（Sticky）· 金額置中（03 雛型）',
                           style:
                               TextStyle(fontSize: 12, color: Color(0xFF9FD4D0))),
                     ],
