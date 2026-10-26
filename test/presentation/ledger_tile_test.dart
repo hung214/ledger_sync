@@ -9,10 +9,10 @@ import 'package:ledger_sync/presentation/theme/app_theme.dart';
 
 import '../helpers/db_fixture.dart';
 
-/// 明細交易列顯示（PM 2026-10-24 回饋：原本缺 分類／帳戶／商家／備註）。
-/// - 標題＝商家（無商家→分類名）
+/// 明細交易列顯示。
+/// - **標題＝分類（含子類別名）**（PM 2026-10-26：原為商家，常態顯示「—」）
 /// - 左側＝分類圖示圓（**子類別取主類別圖示**）
-/// - 副標＝時間 · 帳戶 · 分類[ · 備註]
+/// - 副標＝時間 · 帳戶[ · 商家][ · 備註][ · 標籤]
 void main() {
   testWidgets('明細列：商家／分類（主類別圖示）／帳戶／備註 齊備', (tester) async {
     final db = DbFixture.create();
@@ -45,20 +45,21 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('晨光早餐店'), findsOneWidget, reason: '商家為標題');
+    expect(find.text('早餐'), findsWidgets,
+        reason: '標題＝分類（含子類別名；PM 2026-10-26）');
     expect(find.text('🍜'), findsOneWidget,
         reason: '分類圖示圓＝主類別 emoji（子類別無自身圖示）');
     final expected =
         '${DateFormat('yyyy/MM/dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(occurredAt))}'
-        ' · 現金 · 早餐 · 早餐';
+        ' · 現金 · 晨光早餐店 · 早餐';
     expect(find.text(expected), findsOneWidget,
-        reason: '副標＝時間 · 帳戶 · 分類 · 備註');
+        reason: '副標＝時間 · 帳戶 · 商家 · 備註（商家自標題移入）');
     expect(find.text('-120'), findsOneWidget, reason: '支出顯示負號');
     expect(tester.takeException(), isNull);
     db.close();
   });
 
-  testWidgets('明細列：無商家→以分類名為標題', (tester) async {
+  testWidgets('明細列：無商家→仍以分類名為標題（不再出現「—」）', (tester) async {
     final db = DbFixture.create();
     await DbFixture.seedAccount(
         db, id: 'a-1', type: 'cash', name: '現金', opening: 0);
@@ -85,10 +86,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('—'), findsOneWidget,
-        reason: '商家欄為空 → 標題「—」（PM 2026-10-24：商家欄對應商家，不退回分類）');
-    expect(find.textContaining('交通運輸'), findsWidgets,
-        reason: '分類仍顯示（副標／分類欄）');
+    expect(find.text('—'), findsNothing,
+        reason: 'PM 2026-10-26：標題改為分類——無商家時不再顯示「—」');
+    expect(find.text('交通運輸'), findsWidgets,
+        reason: '標題＝分類名（無商家仍可讀）');
     expect(find.text('🚇'), findsOneWidget);
     expect(find.textContaining('現金'), findsWidgets, reason: '副標含帳戶');
     expect(tester.takeException(), isNull);
@@ -150,9 +151,10 @@ void main() {
           reason: '當日小計＝淨額（-195-120；雛型 02）');
       expect(find.text('小計 50,000'), findsOneWidget, reason: '收入日小計為正');
       expect(find.byType(TxTile), findsNWidgets(3));
-      // 副標（手機）：時分 · 帳戶 · 分類（日期在分日標題）。
-      expect(find.textContaining('09:12 · 現金 · 餐飲食品'), findsOneWidget,
-          reason: '副標＝時間 · 帳戶 · 分類');
+      // 標題＝分類（PM 2026-10-26）；副標＝時分 · 帳戶[ · 商家]（日期在分日標題）。
+      expect(find.text('餐飲食品'), findsWidgets, reason: '標題＝分類（主類別）');
+      expect(find.textContaining('09:12 · 現金 · 陽光超商'), findsOneWidget,
+          reason: '副標＝時間 · 帳戶 · 商家');
       // 子類別列圖示取主類別 🍜；金額顏色（支出紅／收入綠）。
       expect(find.text('🍜'), findsNWidgets(2), reason: '分類圖示圓（子→主類別）');
       final texts = tester

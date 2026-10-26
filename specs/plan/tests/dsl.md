@@ -555,7 +555,7 @@
 | PC 面板日期列 | `desktop-quick-date-prev`／`desktop-quick-date`／`desktop-quick-date-next` | ◀▶ ±1 天；點擊開日曆 |
 | PC 面板分類欄 | `desktop-quick-category`（v1.13 取代 `desktop-quick-more-categories`） | 顯示所選分類（含子類別名）；點選開同一彈窗 |
 | 統計月份列 | `stats-month-prev`／`stats-month`／`stats-month-next`（v1.17；文字契約不變） |
-| 明細交易列 | `TxTile`（widget test：`test/presentation/ledger_tile_test.dart`） | `tableLayout=false`＝手機卡片（分類圖示圓＋商家＋副標「時分 · 帳戶 · 分類 · 備註 · 標籤」）；`true`＝桌面表格列（`tx-row-{id}`） |
+| 明細交易列 | `TxTile`（widget test：`test/presentation/ledger_tile_test.dart`） | `tableLayout=false`＝手機卡片（分類圖示圓＋**標題＝分類（含子類別名）**＋副標「時分 · 帳戶[ · 商家][ · 備註][ · 標籤]」；PM 2026-10-26 原標題「商家」改分類）；`true`＝桌面表格列（`tx-row-{id}`，欄位＝日期/類型/分類/商家／對象/帳戶/金額） |
 | 明細分日／表格 | `day-header-{epochMs}`（手機）／表頭文字（桌面） | 分日小計（淨額）；桌面表頭：日期/類型/分類/商家／對象/帳戶/金額 |
 
 > **回歸護欄**（頁面情境）依 PM 2026-10-22 分流原則落 **widget test**：

@@ -70,20 +70,20 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
 
       <div class="day">今天 10/18 <span>小計 −315</span></div>
       <div class="card">
-        <div class="tx"><div class="cat">🛒<span class="att">📷</span></div><div class="m"><b>陽光超商</b><span>09:12 · 現金 · 購物 · 掃描入帳</span></div><div class="amt red">−195</div></div>
-        <div class="tx"><div class="cat">🍜</div><div class="m"><b>晨光早餐店</b><span>08:15 · 現金 · 餐飲</span></div><div class="amt red">−120</div></div>
+        <div class="tx"><div class="cat">🛒<span class="att">📷</span></div><div class="m"><b>購物</b><span>09:12 · 現金 · 陽光超商 · 掃描入帳</span></div><div class="amt red">−195</div></div>
+        <div class="tx"><div class="cat">🍜</div><div class="m"><b>餐飲</b><span>08:15 · 現金 · 晨光早餐店</span></div><div class="amt red">−120</div></div>
       </div>
 
       <div class="day">昨天 10/17 <span>小計 −1,205</span></div>
       <div class="card">
         <div class="tx"><div class="cat">💳</div><div class="m"><b>信用卡繳款</b><span>20:10 · 薪轉 → 示例卡 · 已繳</span></div><div class="amt">−5,000</div></div>
         <div class="tx"><div class="cat">🏦</div><div class="m"><b>轉帳 現金→銀行</b><span>12:00 · 轉帳</span></div><div class="amt">400</div></div>
-        <div class="tx"><div class="cat">🚇</div><div class="m"><b>捷運</b><span>08:30 · 票證卡 · 交通</span></div><div class="amt red">−35</div></div>
+        <div class="tx"><div class="cat">🚇</div><div class="m"><b>交通</b><span>08:30 · 票證卡 · 捷運</span></div><div class="amt red">−35</div></div>
       </div>
 
       <div class="day">10/15 <span>小計 −8,000</span></div>
       <div class="card">
-        <div class="tx"><div class="cat">💻</div><div class="m"><b>筆電（分期 1/6）</b><span>示例卡 · 購物 · 預扣</span></div><div class="amt red">−5,000</div></div>
+        <div class="tx"><div class="cat">💻</div><div class="m"><b>購物</b><span>示例卡 · 筆電（分期 1/6） · 預扣</span></div><div class="amt red">−5,000</div></div>
       </div>
     </div>
 
@@ -101,7 +101,7 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
   <div class="note" style="top:300px"><b>FR-A4 · S2.3</b>帳戶橫滑列：信用卡顯示「應付 8,000」而非餘額；餘額一律由交易重算。</div>
   <div class="note" style="top:470px"><b>FR-S4 · S3.3</b>掃描入帳之交易：分類圖示帶 📷 附件標記，點開可看原圖。</div>
   <div class="note" style="top:620px"><b>FR-T2 · FR-C6</b>交易列顯示語意標籤（已繳／預扣）；軟刪除交易不顯示（30 天內可還原）。</div>
-  <div class="note" style="top:700px"><b>v3（PM 2026-10-24）已實作</b>①<b>分日群組</b>：今天／昨天／MM/DD（週）＋<b>每日小計</b>（淨額，轉帳不計）②交易列＝<b>分類圖示圓</b>（子→<b>主類別</b>）＋商家（無商家→分類名）＋副標「時分 · 帳戶 · 分類 · 備註 · 標籤」③金額<b>千分位</b>＋顏色（支出紅／收入綠／轉帳中性）④語意標籤：掃描入帳／預扣／定期／已繳⑤待確認＝琥珀 pill（⏳）。</div>
+  <div class="note" style="top:700px"><b>v4（PM 2026-10-26）</b>手機卡片<b>標題＝<u>分類</u></b>（含子類別名）——原標題＝<b>商家</b>，但多數交易無商家 → <b>常態顯示「—」很奇怪</b>；商家改列入副標。<br><b>副標</b>＝「<b>時分 · 帳戶</b>[ · 商家][ · 備註][ · 標籤]」。轉帳／還款仍以型別語意為標題。<br><b>v3（PM 2026-10-24）</b>①<b>分日群組</b>：今天／昨天／MM/DD（週）＋<b>每日小計</b>（淨額，轉帳不計）②交易列＝<b>分類圖示圓</b>（子→<b>主類別</b>）③金額<b>千分位</b>＋顏色（支出紅／收入綠／轉帳中性）④語意標籤：掃描入帳／預扣／定期／已繳⑤待確認＝琥珀 pill（⏳）。</div>
 </div>
 </body>
 </html>

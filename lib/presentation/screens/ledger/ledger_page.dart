@@ -658,8 +658,10 @@ class _CatCircle extends StatelessWidget {
 
 /// 交易列（BDD：明細頁即時顯示該 N 筆 → 金額文字計數）。
 ///
-/// 兩種版面（PM 2026-10-24）：手機＝02 卡片列（分日群組由頁面提供）；
+/// 兩種版面：手機＝02 卡片列（分日群組由頁面提供）；
 /// 桌面（`tableLayout`）＝08 表格列。金額千分位＋支出紅／收入綠／轉帳中性。
+/// **手機卡片（PM 2026-10-26）**：標題＝**分類（含子類別名）**；副標＝
+/// `時分 · 帳戶[ · 商家][ · 備註][ · 標籤]`（原標題＝商家，常態為「—」）。
 class TxTile extends StatelessWidget {
   const TxTile({
     super.key,
@@ -810,10 +812,14 @@ class TxTile extends StatelessWidget {
         trailing: Text(amount, style: amountStyle),
       );
     }
+    // PM 2026-10-26（手機版）：**標題＝分類（含子類別名）**、商家移入副標——
+    // 原標題＝商家，但多數交易無商家 → 常態顯示「—」很奇怪；分類則幾乎必有，
+    // 放標題更易掃讀（圖示圓已載 emoji，標題不重複 emoji）。
+    final title = tx.categoryId == null ? '未分類' : categoryName;
     final subtitle = [
       _timeLabel,
       if (accountName.isNotEmpty) accountName,
-      if (tx.categoryId != null) categoryName,
+      if ((tx.merchant ?? '').isNotEmpty) tx.merchant!,
       if ((note ?? '').isNotEmpty) note!,
       ..._tags,
     ].join(' · ');
@@ -823,7 +829,7 @@ class TxTile extends StatelessWidget {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(child: Text(_title)),
+          Flexible(child: Text(title)),
           if (hasAttachment) ...[
             const SizedBox(width: 4),
             const Text('📷', key: Key('tx-attachment')),
