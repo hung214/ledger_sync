@@ -18,14 +18,12 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
 .msel{flex:1;background:#fff;border:1px solid #e3e7ea;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;color:#1c2b2a;text-align:center}
 .msel small{color:#98a5a4;font-weight:400;font-size:10px;display:block}
 .cards{display:flex;gap:8px;margin-bottom:12px}
-.c{flex:1;background:#EDF1F2;border-radius:12px;padding:9px 8px;text-align:center}
+.c{flex:1;background:#EDF1F2;border:1px solid #e3e7ea;border-radius:12px;padding:9px 8px;text-align:center}
 .c small{display:block;font-size:10px;color:#98a5a4;margin-bottom:3px}
 .c b{font-size:14px}
 .card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .card h3{font-size:12px;color:#7d8b8a;margin-bottom:10px}
-.donut{width:150px;height:150px;border-radius:50%;margin:0 auto 12px;background:conic-gradient(#0B7A75 0 46%,#F5C86B 46% 72%,#6D4FC4 72% 88%,#D64545 88% 100%);display:flex;align-items:center;justify-content:center}
-.donut .hole{width:88px;height:88px;background:#fff;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.donut .hole small{font-size:10px;color:#98a5a4}.donut .hole b{font-size:15px;color:#1c2b2a}
+.donut{width:100%;margin:0 auto 6px}
 .lg{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #F0F3F4;font-size:12px;color:#1c2b2a}
 .lg:last-child{border:none}
 .lg .dot{width:12px;height:12px;border-radius:4px}
@@ -55,8 +53,34 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
       </div>
 
       <div class="card">
-        <h3>分類占比（本月）</h3>
-        <div class="donut"><div class="hole"><small>合計</small><b>12,340</b></div></div>
+        <h3>分類占比（本月）｜依<b>主類別</b>彙總（子類別歸主類別）</h3>
+        <div class="donut">
+          <svg viewBox="0 0 300 190" width="100%" height="190" role="img" aria-label="分類占比甜甜圈">
+            <!-- 扇區（stroke-dasharray 環狀；起點＝正上方，順時針） -->
+            <g transform="rotate(-90 150 95)" fill="none" stroke-width="20">
+              <circle cx="150" cy="95" r="50" stroke="#0B7A75" stroke-dasharray="144.5 314.16" stroke-dashoffset="0"/>
+              <circle cx="150" cy="95" r="50" stroke="#F5C86B" stroke-dasharray="81.7 314.16" stroke-dashoffset="-144.5"/>
+              <circle cx="150" cy="95" r="50" stroke="#6D4FC4" stroke-dasharray="50.3 314.16" stroke-dashoffset="-226.2"/>
+              <circle cx="150" cy="95" r="50" stroke="#D64545" stroke-dasharray="37.7 314.16" stroke-dashoffset="-276.5"/>
+            </g>
+            <!-- 引線（扇區中線 → 圈外 → 折線；百分比不壓在圈上） -->
+            <g fill="none" stroke-width="1.4">
+              <path d="M209.5 87.5 L219.4 86.2 L232 86.2" stroke="#0B7A75"/>
+              <path d="M112.5 154.1 L98.5 155 L68 154.1" stroke="#F5C86B"/>
+              <path d="M83.4 73.4 L75.6 73.4 L68 73.4" stroke="#6D4FC4"/>
+              <path d="M124.2 29.9 L92.5 29.9 L68 29.9" stroke="#D64545"/>
+            </g>
+            <g font-size="11" font-weight="700" fill="#1c2b2a" font-family="inherit">
+              <text x="236" y="90">46%</text>
+              <text x="64" y="158" text-anchor="end">26%</text>
+              <text x="64" y="77" text-anchor="end">16%</text>
+              <text x="64" y="34" text-anchor="end">12%</text>
+            </g>
+            <!-- 中心合計 -->
+            <text x="150" y="92" text-anchor="middle" font-size="10" fill="#98a5a4" font-family="inherit">合計</text>
+            <text x="150" y="110" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2b2a" font-family="inherit">12,340</text>
+          </svg>
+        </div>
         <div class="lg"><span class="dot" style="background:#0B7A75"></span><span class="n">🍜 餐飲食品</span><span class="p">46%</span><b>5,700</b></div>
         <div class="lg"><span class="dot" style="background:#F5C86B"></span><span class="n">🛒 購物</span><span class="p">26%</span><b>3,200</b></div>
         <div class="lg"><span class="dot" style="background:#6D4FC4"></span><span class="n">🚇 交通運輸</span><span class="p">16%</span><b>2,000</b></div>
@@ -74,8 +98,8 @@ body{background:#e8ecef;display:flex;gap:300px;padding:40px;align-items:flex-sta
     </div>
   </div>
 
-  <div class="note" style="top:60px"><b>FR-R2 · v1（PM 2026-10-24 新增原型）</b>①<b>月份列</b>：◀ 期間 ▾ ▶（切換月份；有資料月份清單）②<b>三卡</b>：支出（紅）／收入（綠）／<b>淨額</b>（收−支）③<b>分類占比</b>：甜甜圈＋<b>色點圖例</b>（名稱 % 金額；色板與甜甜圈一致）④<b>月趨勢</b>長條（有資料月份升冪）。</div>
-  <div class="note" style="top:330px"><b>可讀性規則</b>卡片式（白卡＋圓角＋陰影）；金額<b>千分位</b>；支出紅／收入綠；甜甜圈中心＝合計；圖例色點與扇區同色。</div>
+  <div class="note" style="top:60px"><b>FR-R2 · v2（PM 2026-10-26 修訂）</b>①<b>月份列</b>：◀／<b>2026/10</b>＋小字「期間（月份）」／▶——三者皆<b>白底圓角外框</b>（原底線輸入框風格不符）②<b>三卡</b>：支出（紅）／收入（綠）／<b>淨額</b>——<b>底色＋外框</b>③<b>分類占比</b>＝<b>依主類別彙總</b>：甜甜圈＋<b>百分比以引線標示於圈外</b>（不壓扇區）＋色點圖例（名稱 % 金額）④<b>月趨勢（支出）</b>亦為<b>白卡</b>。</div>
+  <div class="note" style="top:330px"><b>可讀性規則</b>卡片式（白卡＋圓角＋陰影）；金額<b>千分位</b>；支出紅／收入綠；甜甜圈中心＝合計；圖例色點與扇區同色（<b>索引一致</b>）；色板＝固定色 <code>#0B7A75/#F5C86B/#6D4FC4/#D64545</code>（不用主題衍生淡色）。<br><b>甜甜圈以 SVG 實作</b>（原 <code>conic-gradient</code> 於部分環境不顯示）。</div>
   <div class="note" style="top:520px"><b>桌面</b>：同內容寬版重排（三卡→橫列；甜甜圈＋圖例左右並置）——與 08 同殼。</div>
 </div>
 </body>

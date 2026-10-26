@@ -62,9 +62,20 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     });
   }
 
-  void _openQuickEntry() => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const QuickEntryPage()),
-      );
+  /// 右側快記面板顯示狀態（PM 2026-10-26：桌面＝**分割面板顯示/隱藏**，
+  /// 不再整頁切換到快記頁）。
+  bool _desktopQuickOpen = true;
+
+  /// 手機殼＝推入快記頁；桌面殼＝切換右側面板（PM 2026-10-26）。
+  void _openQuickEntry() {
+    if (MediaQuery.sizeOf(context).width >= 900) {
+      setState(() => _desktopQuickOpen = true);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const QuickEntryPage()),
+    );
+  }
 
   // 設定入口已移至總覽 AppBar（SettingsHubPage——M7 恢復，PM 2026-10-21）。
 
@@ -143,14 +154,17 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                         children: [
                           _DesktopToolbar(
                             onScan: _openScan,
-                            onQuick: _openQuickEntry,
+                            // PM 2026-10-26：切換右側快記面板顯示/隱藏。
+                            onQuick: () => setState(
+                                () => _desktopQuickOpen = !_desktopQuickOpen),
+                            quickOpen: _desktopQuickOpen,
                             onSearch: (_) => setState(() => _tab = 1),
                           ),
                           Expanded(child: body),
                         ],
                       ),
                     ),
-                    const _DesktopQuickPanel(),
+                    if (_desktopQuickOpen) const _DesktopQuickPanel(),
                   ],
                 ),
               );
@@ -281,11 +295,15 @@ class _DesktopToolbar extends StatelessWidget {
     required this.onScan,
     required this.onQuick,
     required this.onSearch,
+    this.quickOpen = true,
   });
 
   final VoidCallback onScan;
   final VoidCallback onQuick;
   final void Function(String) onSearch;
+
+  /// 右側快記面板目前是否顯示（決定鈕文案／圖示；PM 2026-10-26）。
+  final bool quickOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -327,8 +345,8 @@ class _DesktopToolbar extends StatelessWidget {
           FilledButton.icon(
             key: const Key('fab-quick-entry'), // harness 相依 key（桌面＝工具列快記鈕）
             onPressed: onQuick,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('快速記帳'),
+            icon: Icon(quickOpen ? Icons.close : Icons.add, size: 18),
+            label: Text(quickOpen ? '收合快速記帳' : '快速記帳'),
           ),
         ],
       ),
@@ -420,6 +438,14 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
     }
   }
 
+  /// 計算機輸入（PM 2026-10-26 修：原僅更新本地運算式 → **點選無效果**）：
+  /// 運算式 → 金額欄＋controller 同步（與手機同一契約）。
+  void _onKeypadExpr(String expr) {
+    setState(() => _expr = expr);
+    _amountCtrl.text = expr;
+    ref.read(quickEntryControllerProvider.notifier).setAmount(expr);
+  }
+
   /// 面板儲存（原大按鈕行為；PM 2026-10-25 改由鍵盤 OK 觸發）。
   void _saveFromPanel() {
     final controller = ref.read(quickEntryControllerProvider.notifier);
@@ -490,7 +516,7 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
                   .textTheme
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800)),
-          Text('Ctrl+N 聚焦 · 常駐面板', style: Theme.of(context).textTheme.labelSmall),
+          Text('Ctrl+N 開啟 · 工具列鈕可收合', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 8),
           // 模式列（PM 2026-10-24：僅 支出／收入／轉帳；三種模式類別各自獨立）。
           SegmentedButton<QuickEntryMode>(
@@ -649,7 +675,7 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
           // OK 跨兩格；原獨立大按鈕「OK 儲存（Enter）」已移除）。
           AmountKeypad(
             expr: _expr,
-            onExprChanged: (e) => setState(() => _expr = e),
+            onExprChanged: _onKeypadExpr,
             onOk: _saveFromPanel,
             okEnabled: quickEntrySaveEnabled(state),
           ),

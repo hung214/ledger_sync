@@ -31,6 +31,39 @@ class ReportService {
       ..sort((a, b) => b.amountMinor.compareTo(a.amountMinor));
     return ReportAggregate(year: year, month: month, totalMinor: total, shares: shares);
   }
+
+  /// 依**主類別**彙總（PM 2026-10-26；統計頁分類占比＝**主類別**，對齊 11-stats 雛型）：
+  /// 子類別金額**併入其所屬主類別**（子類別不再各自列出）；未分類＝「未分類」。
+  /// 其餘語意同 [aggregate]（僅 expense／墓標排除／0.1% 四捨五入／降冪）。
+  ReportAggregate aggregateByMain(int year, int month) {
+    final start = DateTime(year, month).millisecondsSinceEpoch;
+    final end = DateTime(year, month + 1).millisecondsSinceEpoch;
+    final byMain = <String?, int>{};
+    var total = 0;
+    for (final t in _db.transactionsBetween(start, end)) {
+      if (t.kind != 'expense') continue;
+      byMain[_mainIdOf(t.categoryId)] =
+          (byMain[_mainIdOf(t.categoryId)] ?? 0) + t.amountMinor;
+      total += t.amountMinor;
+    }
+    final shares = byMain.entries
+        .map((e) => CategoryShare(
+              name: e.key == null ? '未分類' : (_db.categoryName(e.key!) ?? '未分類'),
+              amountMinor: e.value,
+              percentText:
+                  total <= 0 ? '0.0' : (e.value * 100 / total).toStringAsFixed(1),
+            ))
+        .toList()
+      ..sort((a, b) => b.amountMinor.compareTo(a.amountMinor));
+    return ReportAggregate(year: year, month: month, totalMinor: total, shares: shares);
+  }
+
+  /// 分類 id → **主類別** id（主類別＝自身；子類別＝parent；未分類＝null）。
+  String? _mainIdOf(String? categoryId) {
+    if (categoryId == null) return null;
+    final row = _db.categoryById(categoryId);
+    return row?.parentId ?? categoryId;
+  }
 }
 
 /// 聚合結果（分類占比降冪＋總計）。

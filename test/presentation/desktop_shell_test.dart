@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/first_run_bootstrap.dart';
 import 'package:ledger_sync/application/providers.dart';
 import 'package:ledger_sync/presentation/screens/main_shell_page.dart';
+import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_page.dart';
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 
 import '../helpers/in_memory_cloud_adapter.dart';
@@ -90,6 +91,69 @@ void main() {
           reason: '桌面工具列不應出現在手機殼');
       expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
           reason: '右側面板不應出現在手機殼');
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  testWidgets('桌面殼：工具列鈕＝切換右側面板（非整頁）；面板鍵盤可輸入（DBG-014）',
+      (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
+    ]);
+    try {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const MainShellPage()),
+      ));
+      await tester.pumpAndSettle();
+
+      // 面板預設常駐。
+      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget);
+      // ①工具列鈕 → **收合**（不移除整頁；不推入 QuickEntryPage）。
+      await tester.tap(find.byKey(const Key('fab-quick-entry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
+          reason: 'PM 2026-10-26：桌面＝右側面板顯示/隱藏');
+      expect(find.byType(QuickEntryPage), findsNothing,
+          reason: '不應整頁切換到快記頁');
+      // 再點 → 展開。
+      await tester.tap(find.byKey(const Key('fab-quick-entry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget);
+
+      // ②面板計算機：點 1／2／3 → 金額欄顯示 123（原僅改本地運算式＝無效果）。
+      for (final k in ['keypad-1', 'keypad-2', 'keypad-3']) {
+        await tester.tap(find.byKey(Key(k)));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('desktop-quick-amount')))
+              .controller!
+              .text,
+          '123',
+          reason: '鍵盤輸入須寫回金額欄與 controller（DBG-014）');
+
+      // OK 儲存 → 入庫。
+      await tester.tap(find.byKey(const Key('quick-entry-save')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(db.allTransactions().length, 1, reason: '鍵盤 OK 儲存');
+      expect(db.allTransactions().first.amountMinor, 123);
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();

@@ -208,13 +208,32 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | Fix | **明細列顯示補齊＋PC 分類欄（PM 2026-10-24）**：`TxTile` 補分類圖示圓（子類別取主類別）＋標題退回分類名＋副標「時間 · 帳戶 · 分類 · 備註」；轉帳 🏦／儲值 📲／拆分 🔀；PC 快記面板分類欄與手機一致（`desktop-quick-category`）。同步 BDD F2／F02 acceptance S2.11／SDD §8.1／dsl v1.13／雛型 02/08 | ✅（隨快記 v3 一併發佈） |
 | Fix | **子類別無圖示（PM 2026-10-24）**：子類別不擁有 icon——顯示取主類別圖示；分類管理子列不顯 emoji／子類別表單無圖示選項（清空入庫）；快記分類欄「主 emoji＋子名」／彈窗右欄僅名稱／預算子格僅名稱；PC 面板高亮所屬主類別；UI_DEMO 展開態子列＋規則⑤；雛型 09 v4。同步 SPEC FR-B1／SDD §5.6／BDD F11／F11 acceptance S11.2-12／dsl v1.12 | ✅（隨快記 v3 一併發佈） |
 | Feature | **快記 v3（PM 2026-10-24 回饋）**：分類選擇**彈窗**（上常用／左主類別／右子類別；＋置欄頂即建即選）＋**備註**欄（手機／PC）＋**記住上次**（`QuickEntryMemory`：選子分類帶入上次金額/帳戶/商家，settings 本機記憶）；PC 面板補日期列/帳戶/商家/備註（保留三欄分類格）。同步 SPEC FR-Q4/Q5／SDD §5.1／BDD F1／F01 acceptance S1.12-13／dsl §4.6／雛型 03/10/08 | ✅（待 PM 預覽確認後發版） |
+| Fix | **DBG-014 PC 版兩缺陷（PM 2026-10-26）**：①工具列「快速記帳」鈕改為**右側面板顯示/隱藏**（原整頁切換）②PC 面板計算機**點選無效果**（`onExprChanged` 未寫回金額欄/controller）。回歸：`desktop_shell_test` 新增 1 情境 | ✅（fix 分支待 PM 驗收） |
+| Feature | **統計頁 v3 整頁重做（PM 2026-10-26）**：①月份列＝◀／`2026/10`＋「期間（月份）」／▶ 皆**白底外框**②三卡＝**底色＋外框**③分類占比**依主類別彙總**（`ReportService.aggregateByMain`；子類別歸主類別）④甜甜圈 `CategoryDonut`＝**百分比圈外引線**（不壓扇區）＋色點圖例（同索引同色）⑤月趨勢＝白卡⑥色板＝**固定色** `statsPalette`；**雛型 11 甜甜圈改 SVG**（原 conic-gradient 不顯示）＋DEMO 同步。新增 `stats_page_test` 3 情境 | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-012／DBG-013 快記第二輪回饋（PM 2026-10-25）**：①**三欄主類別格全面退役**（手機＋桌面；`MainCategoryGrid` 刪除——分類一律「分類」欄→彈窗）②**桌面面板常駐計算機鍵盤**（與手機共用 `AmountKeypad`；原大按鈕移除；`quickEntrySaveEnabled` 抽為共用）③分類彈窗**「⭐ 常用類別」**（左欄最上；右欄常用類別文字——主類別＝名稱／子類別＝主 emoji＋子名；原 chips 退役）④手機對齊 **03**（金額置中＋「帳戶：X（Sticky）」＋「本次已記 N 筆」；附件 📷 依 PM 決策先不做）⑤**分類圖示唯一來源** `category_display.dart`（子類別 `icon=''` 回退主類別；非庫內→🏷️；套用 6 處——修「快記與類別設定不同」）。新增 `category_display_test` 3＋更新 `quick_entry_layout_test`／`desktop_shell_test`／`quick_entry_ui_test` | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-010 最近刪除看不到明細刪除（PM 2026-10-25 實機）**：`tx_edit_sheet` 刪除/拆分後只 `invalidate(ledgerProvider)` → `recentDeletionsProvider` 回舊快取。修復：刪除/拆分、快記「復原上一筆」（軟刪除）、資料管理 `wipeScoped` 成功後一律失效 `recentDeletionsProvider`（資料管理另失效 ledger/分類/帳戶） | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-011 快記手機版版面不符雛型（PM 2026-10-25 實機）**：對齊 **03／10 雛型**——①移除手機頁三欄快捷格（分類不再平鋪；改「分類」欄→彈窗；三欄格僅**桌面面板** 08）②欄位順序回正（模式→金額→日期→帳戶/分類→商家→備註）③帳戶｜分類**同一列兩欄**（`IntrinsicHeight` 等高）④鍵盤第一排 OK **跨兩格**（4 格對齊）⑤金額**右對齊**＋「金額（TWD・整數元）」說明⑥欄位統一圓角方框；新增回歸護欄 `test/presentation/quick_entry_layout_test.dart`（4 情境）；同步 dsl §4.7 v1.19／debug.md | ✅（fix 分支待 PM 驗收） |
 | Feature | **「最近刪除」直接刪除（PM 2026-10-24 需求增補）**：①單筆 `recent-delete-purge-{id}`＋②清空全部 `recent-delete-purge-all`，皆**二次確認**（`recent-delete-purge-confirm`／`-cancel`）→ `PurgeTombstoneUseCase`（`AppDatabase.purgeTombstoneById`／`executeAll` 走同一 30 天清除路徑）＝**實體刪除、oplog 墓標保留**（同步安全）；未刪除者拋 StateError（防誤刪）、清除後回 0（冪等）③原型 `12-recent-deletions.html`＋DEMO「12 最近刪除」。TODOLIST：BE ✅／UC ✅／FE ✅／測試 ✅／雛型 ✅／DEMO ✅／文件 ✅／驗證 ✅ | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-009 分類設定變更不連動＋子分類無法編輯**（PM 實機回報）：`_refresh` 失效衍生快取（expense/income/ledger）＋新增 `incomeCategoriesProvider`；子列 `cat-edit-{name}`（改名/emoji/顏色）；emoji 庫 33；同步 SPEC FR-B1／SDD §5.6/§7.2／BDD F11／acceptance F11 S11.2／ui 09／debug.md | ✅（待 v0.4.21 發佈） |
 
-### 6.1 進行中工作清單（TODOLIST；PM 2026-10-25 回饋批）
+### 6.1 進行中工作清單（TODOLIST；PM 2026-10-26 統計頁批）
+
+> PM：**整頁重新調整**（統計頁），依 `specs/plan/ui/11-stats.html`。
+
+| # | TASK | 範圍 | 驗收 | 狀態 |
+|---|---|---|---|---|
+| S1 | **統計頁整頁重做**：①月份列＝◀／`2026/10`＋小字「期間（月份）」／▶ **皆白底圓角外框** ②三卡＝**底色＋外框** ③分類占比＝白卡＋甜甜圈＋色點圖例 ④月趨勢＝**白卡**（標題「月趨勢（支出）」＋長條＋月份標籤） | `stats_page.dart`；雛型 `11` | widget test：三卡有外框／月趨勢有白卡／月份列三元件 | ✅ |
+| S2 | **甜甜圈百分比移到圈外＋引線標註**（不可壓在扇區上） | 新 `category_donut.dart`（CustomPaint） | widget test：甜甜圈元件存在、扇區無 title；golden 目視 | ✅ |
+| S3 | **分類占比依「主類別」彙總**（子類別歸其所屬主類別；未分類＝未分類） | `report_service.dart` `aggregateByMain()`＋統計頁 | unit test：子類別金額併入主類別 | ✅ |
+| S4 | **配色回到雛型固定色板**（teal／amber／purple／red…；不再用 ColorScheme container 淡色） | `category_donut.dart` `statsPalette` | 甜甜圈與圖例色點同色（同一索引） | ✅ |
+| S5 | `11-stats.html`：**甜甜圈改用 SVG**（原 `conic-gradient` 顯示不出來）＋引線百分比；三卡加外框；註記更新 | 雛型 `11` | 瀏覽器開啟可見 | ✅ |
+| S6 | DEMO「11 統計」同步（共用 `CategoryDonut`） | `demo/stats_demo_page.dart` | — | ✅ |
+| S7 | 文件／測試：SDD §8、acceptance F10 S10.1/S10.4、tasks／session | 各文件 | 同步矩陣 §7.2 | ✅ |
+| P1 | **PC 版工具列「快速記帳」鈕＝右側面板顯示/隱藏**（不再整頁切換；⌘N＝開啟；鈕文案/圖示反映狀態） | `main_shell_page.dart` | `desktop_shell_test`：點鈕→面板收合且**不推入** `QuickEntryPage` | ✅ |
+| P2 | **PC 版面板計算機點選無效果**：`onExprChanged` 只更新本地運算式→補寫回**金額欄＋controller**（同手機契約） | `main_shell_page.dart` | `desktop_shell_test`：點 1/2/3→金額欄 123→OK 入庫 | ✅ |
+
+### 6.2 已完成清單（TODOLIST；PM 2026-10-25 快記批）
+
 
 > PM 指示：**動手前先列 TASK／TODOLIST**；狀態：⬜ 未開始／🟨 進行中／✅ 完成。
 

@@ -1,6 +1,7 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../../application/reports/report_service.dart';
+import '../stats/category_donut.dart';
 import 'demo_shared.dart';
 
 /// 統計 DEMO（PM 2026-10-24：**新增**——對齊 `specs/plan/ui/11-stats.html`）。
@@ -72,36 +73,18 @@ class StatsDemoContent extends StatelessWidget {
           DemoCard(
             title: '分類占比（本月）',
             child: Column(children: [
-              SizedBox(
-                height: 150,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    PieChart(PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 44,
-                      sections: [
-                        for (final d in _data)
-                          PieChartSectionData(
-                            value: d.$2,
-                            color: d.$4,
-                            radius: 24,
-                            showTitle: false,
-                          ),
-                      ],
-                    )),
-                    Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text('合計',
-                          style:
-                              TextStyle(fontSize: 10, color: t.faint)),
-                      Text('12,340',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: t.text)),
-                    ]),
-                  ],
-                ),
+              // PM 2026-10-26：共用甜甜圈（百分比**圈外引線**；固定色板）。
+              CategoryDonut(
+                height: 200,
+                totalMinor: 12340,
+                shares: [
+                  for (final d in _data)
+                    CategoryShare(
+                        name: d.$1,
+                        amountMinor:
+                            int.parse(d.$3.replaceAll(',', '')),
+                        percentText: d.$2.toStringAsFixed(0)),
+                ],
               ),
               const SizedBox(height: 8),
               for (final (name, pct, amount, color) in _data)
@@ -112,7 +95,9 @@ class StatsDemoContent extends StatelessWidget {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                            color: color,
+                            color: statsPalette[
+                                _data.indexWhere((d) => d.$4 == color) %
+                                    statsPalette.length],
                             borderRadius: BorderRadius.circular(4))),
                     const SizedBox(width: 8),
                     Expanded(
@@ -209,8 +194,10 @@ class _Sum extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
       decoration: BoxDecoration(
-        color: DemoThemeScope.of(context).card,
+        // 底色＋外框（PM 2026-10-26：原僅白底無框，風格不符）。
+        color: DemoThemeScope.of(context).track,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: DemoThemeScope.of(context).line),
       ),
       child: Column(children: [
         Text(label,

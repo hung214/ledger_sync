@@ -312,6 +312,12 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.first['name'] as String;
   }
 
+  /// 單一分類（PM 2026-10-26：主類別彙總需查 `parent_id`；不存在回 null）。
+  CategoryRow? categoryById(String id) {
+    final rows = _db.select('SELECT * FROM categories WHERE id = ?', [id]);
+    return rows.isEmpty ? null : CategoryRow.fromRow(rows.first);
+  }
+
   // ── 預算／收入目標（FR-B，schema v2；budgets/income_goals 屬 sync_entity） ──
 
   void insertBudget(BudgetRow b) => _db.execute(

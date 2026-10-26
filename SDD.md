@@ -664,6 +664,15 @@ abstract interface class CloudStorageAdapter {
   `updateTransactionWithOplog` 整列快照，同一 DB transaction）；**拆分**（支出、
   無 split_group）＝2 子項（分類＋金額）→ `executeSplit` ＋原交易軟刪除。
   快記不再提供刪除/拆分入口。
+- **統計頁 v3（PM 2026-10-26 整頁重做；雛型 `11-stats.html`）**：
+  ①**月份列**＝`◀`／`2026/10`＋小字「期間（月份）」／`▶`——三者皆**白底圓角外框**
+  ②**三卡**（支出紅／收入綠／淨額）＝**底色 `AppTokens.track` ＋外框**
+  ③**分類占比（本月）＝依「主類別」彙總**（`ReportService.aggregateByMain`：子類別金額
+  併入其所屬主類別；未分類＝未分類）＋甜甜圈 `CategoryDonut`——**百分比以引線標於圈外**
+  （不壓扇區；同側標籤自動推開）＋色點圖例（`{名稱} {pct}%`＋金額；色點與扇區**同索引同色**）
+  ④**月趨勢（支出）**＝白卡（長條＋`{m}月 {總計}` 列）
+  ⑤色板＝**固定色** `statsPalette`（`#0B7A75/#F5C86B/#6D4FC4/#D64545/…`），
+  不用 ColorScheme 衍生淡色。既有數值文字契約不變（`合計`／`{名稱} {pct}%`／`{m}月 {總計}`）。
 - **最近刪除（PM 2026-10-24 增補）**：明細 AppBar 入口 → `recent_deletions_page.dart`；
   雛型 `specs/plan/ui/12-recent-deletions.html`。30 天內（**曆日**）可**還原**
   （`RestoreTransactionUseCase`）；並可**永久刪除**——單筆 `recent-delete-purge-{id}`／
