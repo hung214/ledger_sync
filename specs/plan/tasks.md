@@ -248,6 +248,18 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | T7 | 雛型／DEMO 同步（03／08／10＋畫廊）；dsl keys 更新 | `specs/plan/ui/*`、`demo/*`、`dsl.md` | 瀏覽器對照 | ✅ |
 | T8 | 文件：SPEC／SDD／BDD／acceptance／tasks／session／`debug.md`（DBG-012 圖示不一致、DBG-013 面板項目） | 各文件 | 同步矩陣 §7.2 | ✅ |
 
+### 6.3 發行說明（CHANGELOG）規則（PM 2026-10-26）
+
+> **每次發行版都必須標註本次修改了什麼**；未填不得發版。
+
+| 項目 | 內容 |
+|---|---|
+| 檔 | repo 根目錄 **`CHANGELOG.md`**（唯一來源） |
+| 區段 | `## [x.y.z] - YYYY-MM-DD`＋`新增 Added`／`變更 Changed`／`修正 Fixed`／`移除 Removed`／`文件同步 Sync` |
+| 時機 | **發版前**與 `pubspec.yaml` 版本號一起改；不可先 tag 後補 |
+| 自動化 | `tag-on-main.yml`（主徑）／`release.yml`（後備）：`body_path: release_notes.md`（awk 擷取該版區段）→ GitHub Release 說明；**找不到 → `::warning::`＋佔位說明**（仍發佈，需事後補） |
+| 發版四步 | ①改版本 ②填 CHANGELOG ③PM 預覽＋親口確認（session.md 原則⓪） ④merge `main`＋push（自動 tag／四平台發佈） |
+
 - 狀態更新規則：🔴/🟢 由 CI 與 PR 自動可推導；🔵 與 ✅ 由開發者於 PR 描述更新；每 Sprint 結束回寫本表（對應 research §2.2 出口條件）。
 
 ---

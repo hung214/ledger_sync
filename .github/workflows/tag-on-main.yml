@@ -182,9 +182,29 @@ jobs:
         with:
           merge-multiple: true
           path: dist
-      - name: 發佈 GitHub Release（四平台產物，檔名含版本號）
+      - uses: actions/checkout@v4
+      - name: 取出本版發行說明（CHANGELOG.md；PM 2026-10-26 規則）
+        id: notes
+        run: |
+          VER="${{ needs.tag.outputs.version }}"
+          NOTES=""
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk -v v="$VER" '$0 ~ ("^## \\[" v "\\]") {f=1; next} f && /^## \\[/ {exit} f {print}' CHANGELOG.md)
+          fi
+          if [ -n "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            printf '%s\n' "$NOTES" > release_notes.md
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CHANGELOG.md 找不到 v$VER 的版本區段——本版發行說明為空，請補登後修正 Release。"
+            printf '%s\n' "> ⚠️ 本版未於 CHANGELOG.md 找到版本說明（v${VER}）——請補登後編輯本 Release 說明。" > release_notes.md
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 發佈 GitHub Release（四平台產物＋本版發行說明）
         uses: softprops/action-gh-release@v2
         with:
+          # PM 2026-10-26：發行說明取自 CHANGELOG.md 本版區段（找不到→警示＋佔位）。
+          body_path: release_notes.md
+          generate_release_notes: false
           tag_name: v${{ needs.tag.outputs.version }}
           files: |
             dist/LedgerSync-android-*.apk
@@ -192,6 +212,5 @@ jobs:
             dist/LedgerSync-windows-x64-*.zip
             dist/LedgerSync-macos-*.dmg
             dist/LedgerSync-ios-*.ipa
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
