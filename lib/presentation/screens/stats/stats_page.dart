@@ -1,24 +1,27 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../application/providers.dart';
 import '../../../application/reports/report_service.dart';
 import '../../theme/app_theme.dart';
 import 'category_donut.dart';
 
-/// 統計頁（FR-R2 呈現面；**v3 整頁重做——PM 2026-10-26 對齊 11-stats 雛型**）。
+/// 統計指標（PM 2026-10-27：三卡＝**可點選切換**，圓餅與月趨勢連動）。
+enum StatsMetric { expense, income, net }
+
+/// 統計頁（FR-R2 呈現面；v4——PM 2026-10-26 整頁重做、PM 2026-10-27 可切換指標）。
 ///
-/// - **月份列**：`◀`／`2026/10`＋小字「期間（月份）」／`▶`——三者皆**白底圓角外框**
-///   （原為底線輸入框，風格不符）。
-/// - **三卡**：支出（紅）／收入（綠）／淨額（收−支）——**底色＋外框**。
-/// - **分類占比（本月）**：白卡＋甜甜圈（`CategoryDonut`：百分比**圈外引線**，不壓扇區）
-///   ＋**色點圖例**（`{名稱} {pct}%`＋金額；色點與扇區同索引同色）。
-///   **依「主類別」彙總**（子類別歸其所屬主類別；PM 2026-10-26）。
-/// - **月趨勢（支出）**：白卡＋長條圖（觸摸顯示金額）＋`{m}月 {總計}` 明細列。
-/// - 訂閱 ledgerProvider 即時刷新（AC-02）；既有數值文字契約不變
-///   （`合計`／`{名稱} {pct}%`／`{m}月 {總計}`）。
+/// - **月份列**：`◀`／`2026/10`＋小字「期間（月份）」／`▶`（皆白底圓角外框）。
+/// - **三卡**：支出／收入／淨額——**底色＋外框**，**可點選**（選中＝primary 強調）；
+///   選擇後**分類占比與月趨勢一併切換**。
+/// - **分類占比**（支出／收入）＝**依主類別彙總**＋甜甜圈（百分比**圈外引線**）＋色點圖例；
+///   **淨額**＝「收支組成」（收入／支出兩塊；圓心＝淨額）。
+/// - **月趨勢**＝白卡＋長條；淨額可為負（負值紅、0 基準線）。
+/// - 既有數值文字契約不變（`合計`／`{名稱} {pct}%`／`{m}月 {總計}`）。
 class StatsPage extends ConsumerStatefulWidget {
   const StatsPage({super.key});
 
@@ -28,6 +31,7 @@ class StatsPage extends ConsumerStatefulWidget {
 
 class _StatsPageState extends ConsumerState<StatsPage> {
   (int, int)? _selected; // (year, month)；null = 最新有資料月份
+  StatsMetric _metric = StatsMetric.expense;
 
   /// 月份位移（◀▶；跨年）。
   void _shiftMonth(int delta) {
@@ -53,62 +57,102 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     return months.isEmpty ? null : months.first;
   }
 
+  String get _metricLabel => switch (_metric) {
+        StatsMetric.expense => '支出',
+        StatsMetric.income => '收入',
+        StatsMetric.net => '淨額',
+      };
+
   @override
   Widget build(BuildContext context) {
     ref.watch(ledgerProvider); // 交易變化即時刷新
     final db = ref.watch(dbProvider);
-    final expenseTxs = db
-        .allTransactions()
-        .where((t) => t.deletedAt == null && t.kind == 'expense')
-        .toList();
-    final incomeTxs = db
-        .allTransactions()
-        .where((t) => t.deletedAt == null && t.kind == 'income')
-        .toList();
-    final months = expenseTxs
-        .map((t) {
-          final d = DateTime.fromMillisecondsSinceEpoch(t.occurredAt);
-          return (d.year, d.month);
-        })
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.$1.compareTo(a.$1) != 0
-          ? b.$1.compareTo(a.$1)
-          : b.$2.compareTo(b.$2));
-    final selected = _selected ?? (months.isEmpty ? null : months.first);
     final fmt = NumberFormat('#,###');
     final tokens = AppTokens.of(context);
 
-    // 月趨勢（僅列出有資料月份，升冪）。
-    final trend = <(int, int), int>{};
-    for (final t in expenseTxs) {
-      final d = DateTime.fromMillisecondsSinceEpoch(t.occurredAt);
-      trend[(d.year, d.month)] = (trend[(d.year, d.month)] ?? 0) + t.amountMinor;
+    // 期間選單／趨勢的月份來源＝**所有未刪除交易**（含收入；PM 2026-10-27）。
+    final allTxs =
+        db.allTransactions().where((t) => t.deletedAt == null).toList();
+    (int, int) keyOf(int ms) {
+      final d = DateTime.fromMillisecondsSinceEpoch(ms);
+      return (d.year, d.month);
     }
-    final trendKeys = trend.keys.toList()
+
+    // 月份清單（新→舊）——DBG-015：原比較子誤寫 `b.$2.compareTo(b.$2)`（自我比較
+    // 恆 0）→ 清單未排序 → **預設月份可能不是最新月**。
+    final months = allTxs.map((t) => keyOf(t.occurredAt)).toSet().toList()
+      ..sort((a, b) => b.$1.compareTo(a.$1) != 0
+          ? b.$1.compareTo(a.$1)
+          : b.$2.compareTo(a.$2));
+    final selected = _selected ?? (months.isEmpty ? null : months.first);
+
+    final expenseTrend = <(int, int), int>{};
+    final incomeTrend = <(int, int), int>{};
+    for (final t in allTxs) {
+      final k = keyOf(t.occurredAt);
+      if (t.kind == 'expense') {
+        expenseTrend[k] = (expenseTrend[k] ?? 0) + t.amountMinor;
+      } else if (t.kind == 'income') {
+        incomeTrend[k] = (incomeTrend[k] ?? 0) + t.amountMinor;
+      }
+    }
+    final trendKeys = {...expenseTrend.keys, ...incomeTrend.keys}.toList()
       ..sort((a, b) => a.$1.compareTo(b.$1) != 0
           ? a.$1.compareTo(b.$1)
           : a.$2.compareTo(b.$2));
+    final netTrend = {
+      for (final k in trendKeys) k: (incomeTrend[k] ?? 0) - (expenseTrend[k] ?? 0)
+    };
+    final trend = switch (_metric) {
+      StatsMetric.expense => expenseTrend,
+      StatsMetric.income => incomeTrend,
+      StatsMetric.net => netTrend,
+    };
 
-    // 分類占比＝**依主類別彙總**（PM 2026-10-26）。
-    final report = selected == null
-        ? null
-        : ReportService(db).aggregateByMain(selected.$1, selected.$2);
+    final expenseTotal = selected == null ? 0 : (expenseTrend[selected] ?? 0);
+    final incomeTotal = selected == null ? 0 : (incomeTrend[selected] ?? 0);
+    final net = incomeTotal - expenseTotal;
 
-    // 收入合計／淨額（選定月份）。
-    int incomeTotal = 0;
+    // 占比資料：支出／收入＝該 kind 之主類別彙總；淨額＝收支組成（兩塊）。
+    final svc = ReportService(db);
+    List<CategoryShare> shares = const [];
+    var sharesTotal = 0;
     if (selected != null) {
-      for (final t in incomeTxs) {
-        final d = DateTime.fromMillisecondsSinceEpoch(t.occurredAt);
-        if (d.year == selected.$1 && d.month == selected.$2) {
-          incomeTotal += t.amountMinor;
-        }
+      if (_metric == StatsMetric.net) {
+        final sum = incomeTotal.abs() + expenseTotal.abs();
+        String pct(int v) =>
+            sum <= 0 ? '0.0' : (v.abs() * 100 / sum).toStringAsFixed(1);
+        shares = [
+          if (incomeTotal != 0)
+            CategoryShare(
+                name: '收入',
+                amountMinor: incomeTotal.abs(),
+                percentText: pct(incomeTotal)),
+          if (expenseTotal != 0)
+            CategoryShare(
+                name: '支出',
+                amountMinor: expenseTotal.abs(),
+                percentText: pct(expenseTotal)),
+        ]..sort((a, b) => b.amountMinor.compareTo(a.amountMinor));
+        sharesTotal = sum;
+      } else {
+        final r = svc.aggregateByMain(selected.$1, selected.$2,
+            kind: _metric == StatsMetric.income ? 'income' : 'expense');
+        shares = r.shares.where((s) => s.amountMinor > 0).toList();
+        sharesTotal = r.totalMinor;
       }
     }
-    final expenseTotal = report?.totalMinor ?? 0;
-    final net = incomeTotal - expenseTotal;
-    final shares =
-        report?.shares.where((s) => s.amountMinor > 0).toList() ?? const [];
+
+    // 扇區／圖例**同一來源**（淨額檢視＝收入綠／支出紅；其餘＝statsPalette）。
+    final donutColors = _metric == StatsMetric.net
+        ? [
+            for (final sh in shares)
+              sh.name == '收入' ? tokens.success : tokens.danger,
+          ]
+        : null;
+    Color colorAt(int i) => donutColors != null && i < donutColors.length
+        ? donutColors[i]
+        : statsPalette[i % statsPalette.length];
 
     return Scaffold(
       appBar: AppBar(title: const Text('統計')),
@@ -158,23 +202,32 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             ),
           ]),
           const SizedBox(height: 12),
-          if (report != null && selected != null) ...[
-            // 三卡：支出／收入／淨額——**底色＋外框**（PM 2026-10-26）。
+          if (selected != null) ...[
+            // 三卡：支出／收入／淨額——**可點選切換**（PM 2026-10-27；選中＝primary 強調）。
             Row(children: [
               _SummaryCard(
+                  key: const Key('stats-metric-支出'),
                   label: '支出',
                   value: '-${fmt.format(expenseTotal)}',
-                  color: tokens.danger),
+                  color: tokens.danger,
+                  selected: _metric == StatsMetric.expense,
+                  onTap: () => setState(() => _metric = StatsMetric.expense)),
               const SizedBox(width: 8),
               _SummaryCard(
+                  key: const Key('stats-metric-收入'),
                   label: '收入',
                   value: '+${fmt.format(incomeTotal)}',
-                  color: tokens.success),
+                  color: tokens.success,
+                  selected: _metric == StatsMetric.income,
+                  onTap: () => setState(() => _metric = StatsMetric.income)),
               const SizedBox(width: 8),
               _SummaryCard(
+                  key: const Key('stats-metric-淨額'),
                   label: '淨額',
                   value: '${net < 0 ? '-' : ''}${fmt.format(net.abs())}',
-                  color: net < 0 ? tokens.danger : tokens.success),
+                  color: net < 0 ? tokens.danger : tokens.success,
+                  selected: _metric == StatsMetric.net,
+                  onTap: () => setState(() => _metric = StatsMetric.net)),
             ]),
             const SizedBox(height: 12),
             if (shares.isNotEmpty)
@@ -182,12 +235,25 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('分類占比（本月）',
+                    Text(
+                        _metric == StatsMetric.net
+                            ? '收支組成（本月）'
+                            : '分類占比（本月）',
                         style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 6),
-                    // 甜甜圈：百分比以**引線**標於圈外（不壓扇區）。
+                    // 甜甜圈：百分比以**引線**標於圈外（不壓扇區）；
+                    // 淨額檢視＝圓心顯示「淨額」與其值。
                     CategoryDonut(
-                        shares: shares, totalMinor: report.totalMinor),
+                      shares: shares,
+                      totalMinor: sharesTotal,
+                      centerLabel:
+                          _metric == StatsMetric.net ? '淨額' : '合計',
+                      centerText: _metric == StatsMetric.net
+                          ? '${net < 0 ? '-' : '+'}${fmt.format(net.abs())}'
+                          : null,
+                      // 淨額檢視＝兩塊：語意色（收入綠／支出紅）；與圖例同來源。
+                      colors: donutColors,
+                    ),
                     const SizedBox(height: 6),
                     // 色點圖例（名稱 % 金額）——色點與扇區同色（同一索引）。
                     for (final (i, share) in shares.indexed)
@@ -198,7 +264,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                             width: 12,
                             height: 12,
                             decoration: BoxDecoration(
-                                color: statsPalette[i % statsPalette.length],
+                                color: colorAt(i),
                                 borderRadius: BorderRadius.circular(3)),
                           ),
                           const SizedBox(width: 8),
@@ -214,6 +280,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   ],
                 ),
               )
+            else
+              _Card(
+                child: Text('本月無$_metricLabel資料',
+                    style: Theme.of(context).textTheme.labelLarge),
+              )
           ] else
             // 空狀態（M7 UI 統整——無資料月份引導）。
             Padding(
@@ -228,29 +299,31 @@ class _StatsPageState extends ConsumerState<StatsPage> {
               ),
             ),
           const SizedBox(height: 12),
-          // 月趨勢（支出）——**白卡**（PM 2026-10-26；原為裸標題）。
+          // 月趨勢——**跟隨所選指標**（支出／收入／淨額；PM 2026-10-27）。
           _Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('月趨勢（支出）',
+                Text('月趨勢（$_metricLabel）',
                     style: Theme.of(context).textTheme.labelLarge),
                 if (trendKeys.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   SizedBox(
                     height: 150,
-                    child:
-                        _TrendBarChart(trendKeys: trendKeys, trend: trend),
+                    child: _TrendBarChart(
+                        trendKeys: trendKeys,
+                        trend: trend,
+                        signed: _metric == StatsMetric.net),
                   ),
                 ],
                 for (final k in trendKeys)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
-                      Icon(Icons.bar_chart,
-                          size: 16, color: AppTokens.of(context).subText),
+                      Icon(Icons.bar_chart, size: 16, color: tokens.subText),
                       const SizedBox(width: 8),
-                      Text('${k.$2}月 ${fmt.format(trend[k]!)}',
+                      Text(
+                          '${k.$2}月 ${_signed(trend[k] ?? 0, _metric == StatsMetric.net, fmt)}',
                           style: const TextStyle(fontSize: 12)),
                     ]),
                   ),
@@ -261,6 +334,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
       ),
     );
   }
+
+  /// 趨勢列數值：淨額帶正負號（支出／收入為原值）。
+  static String _signed(int v, bool signed, NumberFormat fmt) => signed
+      ? '${v < 0 ? '-' : ''}${fmt.format(v.abs())}'
+      : fmt.format(v);
 }
 
 /// 月份列左右鈕（11 雛型 `.mk`：白底圓角外框）。
@@ -286,7 +364,8 @@ class _MonthNavButton extends StatelessWidget {
           width: 36,
           height: 44,
           child: _BorderedBox(
-            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+            child: Icon(icon,
+                size: 18, color: Theme.of(context).colorScheme.primary),
           ),
         ),
       ),
@@ -342,80 +421,117 @@ class _Card extends StatelessWidget {
   }
 }
 
-/// 三卡之一（支出／收入／淨額）——**底色＋外框**（PM 2026-10-26：原僅淡底、無框）。
+/// 三卡之一（支出／收入／淨額）——**底色＋外框**、**可點選切換**（PM 2026-10-27）。
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard(
-      {required this.label, required this.value, required this.color});
+  const _SummaryCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
   final String label;
   final String value;
   final Color color;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = AppTokens.of(context);
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppTokens.of(context).track,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: scheme.outlineVariant),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : tokens.track,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: selected ? scheme.primary : scheme.outlineVariant,
+                width: selected ? 1.6 : 1),
+          ),
+          child: Column(children: [
+            Text(label,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(
+                        color: selected ? scheme.primary : scheme.outline,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.normal)),
+            const SizedBox(height: 4),
+            FittedBox(
+                child: Text(value,
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: color))),
+          ]),
         ),
-        child: Column(children: [
-          Text(label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: scheme.outline)),
-          const SizedBox(height: 4),
-          FittedBox(
-              child: Text(value,
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: color))),
-        ]),
       ),
     );
   }
 }
 
 /// 月趨勢長條圖（fl_chart BarChart；觸摸顯示金額 tooltip）。
+///
+/// [signed]＝淨額檢視：可為**負值**（負值紅、設 0 基準線）。
 class _TrendBarChart extends StatelessWidget {
-  const _TrendBarChart({required this.trendKeys, required this.trend});
+  const _TrendBarChart(
+      {required this.trendKeys, required this.trend, this.signed = false});
 
   final List<(int, int)> trendKeys;
   final Map<(int, int), int> trend;
+  final bool signed;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final values = [for (final k in trendKeys) (trend[k] ?? 0)];
+    final maxV = values.isEmpty ? 0 : values.reduce(math.max);
+    final minV = values.isEmpty ? 0 : values.reduce(math.min);
     return BarChart(
       BarChartData(
+        maxY: maxV <= 0 ? 0 : maxV * 1.15,
+        minY: minV < 0 ? minV * 1.15 : 0,
         gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (v) => FlLine(
-                color: scheme.outlineVariant.withValues(alpha: 0.4),
-                strokeWidth: 1)),
+                // 0 基準線（淨額可負）加粗。
+                color: (signed && v == 0)
+                    ? scheme.outline
+                    : scheme.outlineVariant.withValues(alpha: 0.4),
+                strokeWidth: (signed && v == 0) ? 1.4 : 1)),
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                BarTooltipItem(fmtTrend(rod.toY), TextStyle(color: scheme.onSurface)),
+                BarTooltipItem(fmtTrend(rod.toY),
+                    TextStyle(color: scheme.onSurface)),
           ),
         ),
         titlesData: FlTitlesData(
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 24,
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
-                if (i < 0 || i >= trendKeys.length) return const SizedBox.shrink();
+                if (i < 0 || i >= trendKeys.length) {
+                  return const SizedBox.shrink();
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text('${trendKeys[i].$2}月',
@@ -431,8 +547,10 @@ class _TrendBarChart extends StatelessWidget {
               x: i,
               barRods: [
                 BarChartRodData(
-                  toY: trend[k]!.toDouble(),
-                  color: statsPalette.first,
+                  toY: (trend[k] ?? 0).toDouble(),
+                  color: (signed && (trend[k] ?? 0) < 0)
+                      ? AppTokens.of(context).danger
+                      : statsPalette.first,
                   width: 18,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(4)),

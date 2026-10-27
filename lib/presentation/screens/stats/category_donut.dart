@@ -32,12 +32,23 @@ class CategoryDonut extends StatelessWidget {
     required this.shares,
     required this.totalMinor,
     this.height = 210,
+    this.centerLabel = '合計',
+    this.centerText,
+    this.colors,
   });
 
   /// 占比資料（**已降冪、僅 >0**）；索引對應 [statsPalette]。
   final List<CategoryShare> shares;
   final int totalMinor;
   final double height;
+
+  /// 圓心標籤／數值（PM 2026-10-27：淨額檢視＝中心顯示「淨額」與其值）。
+  final String centerLabel;
+  final String? centerText;
+
+  /// 扇區色覆寫（未提供＝[statsPalette] 依索引；PM 2026-10-27：淨額檢視傳
+  /// 收入綠／支出紅，語意清楚且易辨）。
+  final List<Color>? colors;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +65,7 @@ class CategoryDonut extends StatelessWidget {
             painter: _DonutPainter(
               shares: shares,
               totalMinor: totalMinor,
+              colors: colors,
               labelStyle: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -66,8 +78,9 @@ class CategoryDonut extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('合計', style: Theme.of(context).textTheme.labelSmall),
-              Text(NumberFormat('#,###').format(totalMinor),
+              Text(centerLabel,
+                  style: Theme.of(context).textTheme.labelSmall),
+              Text(centerText ?? NumberFormat('#,###').format(totalMinor),
                   style: Theme.of(context).textTheme.titleMedium),
             ],
           ),
@@ -83,12 +96,19 @@ class _DonutPainter extends CustomPainter {
     required this.totalMinor,
     required this.labelStyle,
     required this.lineColor,
+    this.colors,
   });
 
   final List<CategoryShare> shares;
   final int totalMinor;
   final TextStyle labelStyle;
   final Color lineColor;
+  final List<Color>? colors;
+
+  Color _colorAt(int i) =>
+      colors != null && i < colors!.length
+          ? colors![i]
+          : statsPalette[i % statsPalette.length];
 
   /// 起始角＝正上方（-90°），順時針。
   static const double _startDeg = -90;
@@ -118,7 +138,7 @@ class _DonutPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = thickness
-          ..color = statsPalette[i % statsPalette.length],
+          ..color = _colorAt(i),
       );
       start += sweep;
     }
@@ -156,7 +176,7 @@ class _DonutPainter extends CustomPainter {
           : center.dx + outerR + 22;
       final p3 = Offset(elbowX, labelY);
       final paint = Paint()
-        ..color = statsPalette[i % statsPalette.length]
+        ..color = _colorAt(i)
         ..strokeWidth = 1.4
         ..style = PaintingStyle.stroke;
       canvas.drawLine(p1, p2, paint);
@@ -190,6 +210,7 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DonutPainter old) =>
+      old.colors != colors ||
       old.shares != shares ||
       old.totalMinor != totalMinor ||
       old.labelStyle != labelStyle ||

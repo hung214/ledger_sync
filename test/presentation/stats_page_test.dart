@@ -12,6 +12,7 @@ import '../helpers/db_fixture.dart';
 /// ①**分類占比依「主類別」彙總**（子類別金額併入主類別，不同列）
 /// ②三卡＝**底色＋外框**；甜甜圈＝`CategoryDonut`（百分比圈外引線）
 /// ③月趨勢＝**白卡**；月份列＝三個外框元件。
+/// ④**三卡可點選切換**（PM 2026-10-27）：支出／收入／淨額 → 圓餅與月趨勢**連動**。
 void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final db = DbFixture.create();
@@ -40,9 +41,10 @@ void main() {
     await DbFixture.seedTx(db,
         id: 't-4', kind: 'expense', amountMinor: 200, accountId: 'a-0',
         category: 'c-transport', occurredAt: at);
+    await DbFixture.seedCategory(db, id: 'c-salary', kind: 'income', name: '薪資');
     await DbFixture.seedTx(db,
         id: 't-5', kind: 'income', amountMinor: 5000, accountId: 'a-0',
-        occurredAt: at);
+        category: 'c-salary', occurredAt: at);
 
     final container = ProviderContainer(overrides: [
       dbProvider.overrideWithValue(db),
@@ -103,6 +105,76 @@ void main() {
     expect(find.text('月趨勢（支出）'), findsOneWidget);
     expect(find.text('10月 1,200'), findsOneWidget);
     expect(find.text('分類占比（本月）'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('④ 三卡可切換：收入／淨額 → 圓餅與月趨勢連動（PM 2026-10-27）', (tester) async {
+    await pump(tester);
+
+    // 預設＝支出（分類占比依主類別；月趨勢（支出））。
+    expect(find.text('分類占比（本月）'), findsOneWidget);
+    expect(find.text('月趨勢（支出）'), findsOneWidget);
+
+    // 切「收入」→ 圓餅改列收入主類別；月趨勢改收入。
+    await tester.tap(find.byKey(const Key('stats-metric-收入')));
+    await tester.pumpAndSettle();
+    expect(find.text('薪資 100.0%'), findsOneWidget, reason: '收入主類別占比');
+    expect(find.text('餐飲食品 83.3%'), findsNothing, reason: '切換後不應再見支出分類');
+    expect(find.text('月趨勢（收入）'), findsOneWidget);
+    expect(find.text('10月 5,000'), findsOneWidget, reason: '月趨勢＝收入 5,000');
+
+    // 切「淨額」→ 收支組成（收入／支出兩塊）＋圓心＝淨額；月趨勢＝淨額（可負）。
+    await tester.tap(find.byKey(const Key('stats-metric-淨額')));
+    await tester.pumpAndSettle();
+    expect(find.text('收支組成（本月）'), findsOneWidget);
+    expect(find.text('淨額'), findsWidgets, reason: '圓心標籤＝淨額');
+    expect(find.text('+3,800'), findsWidgets, reason: '淨額＝5,000−1,200');
+    expect(find.text('收入 80.6%'), findsOneWidget);
+    expect(find.text('支出 19.4%'), findsOneWidget);
+    expect(find.text('月趨勢（淨額）'), findsOneWidget);
+    expect(find.text('10月 3,800'), findsOneWidget);
+
+    // 切回「支出」→ 還原。
+    await tester.tap(find.byKey(const Key('stats-metric-支出')));
+    await tester.pumpAndSettle();
+    expect(find.text('餐飲食品 83.3%'), findsOneWidget);
+    expect(find.text('月趨勢（支出）'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('⑤ 預設月份＝**最新有資料月份**（DBG-015：多月份時須排序）', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedCategory(db, id: 'c-food', kind: 'expense', name: '餐飲食品');
+    await DbFixture.seedCategory(db, id: 'c-shop', kind: 'expense', name: '購物');
+    // 先種「較新」再種「較舊」（測排序，而非插入順序）。
+    await DbFixture.seedTx(db,
+        id: 'new', kind: 'expense', amountMinor: 700, accountId: 'a-0',
+        category: 'c-food',
+        occurredAt: DateTime(2026, 10, 20, 12).millisecondsSinceEpoch);
+    await DbFixture.seedTx(db,
+        id: 'old', kind: 'expense', amountMinor: 300, accountId: 'a-0',
+        category: 'c-shop',
+        occurredAt: DateTime(2026, 9, 20, 12).millisecondsSinceEpoch);
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+    ]);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+          theme: buildAppTheme(Brightness.light), home: const StatsPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026/10'), findsOneWidget, reason: '預設＝最新月（非插入順序）');
+    expect(find.text('餐飲食品 100.0%'), findsOneWidget, reason: '10 月資料（700）');
+    expect(find.text('購物 100.0%'), findsNothing, reason: '不應顯示 9 月資料');
+    expect(find.text('10月 700'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

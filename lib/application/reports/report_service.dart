@@ -34,14 +34,16 @@ class ReportService {
 
   /// 依**主類別**彙總（PM 2026-10-26；統計頁分類占比＝**主類別**，對齊 11-stats 雛型）：
   /// 子類別金額**併入其所屬主類別**（子類別不再各自列出）；未分類＝「未分類」。
-  /// 其餘語意同 [aggregate]（僅 expense／墓標排除／0.1% 四捨五入／降冪）。
-  ReportAggregate aggregateByMain(int year, int month) {
+  /// [kind] 預設 `expense`（PM 2026-10-27：統計頁可切換支出／收入）。
+  /// 其餘語意同 [aggregate]（墓標排除／0.1% 四捨五入／降冪）。
+  ReportAggregate aggregateByMain(int year, int month,
+      {String kind = 'expense'}) {
     final start = DateTime(year, month).millisecondsSinceEpoch;
     final end = DateTime(year, month + 1).millisecondsSinceEpoch;
     final byMain = <String?, int>{};
     var total = 0;
     for (final t in _db.transactionsBetween(start, end)) {
-      if (t.kind != 'expense') continue;
+      if (t.kind != kind) continue;
       byMain[_mainIdOf(t.categoryId)] =
           (byMain[_mainIdOf(t.categoryId)] ?? 0) + t.amountMinor;
       total += t.amountMinor;
