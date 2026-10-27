@@ -177,4 +177,94 @@ void main() {
     expect(find.text('10月 700'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('⑥ 累計結餘：**2 個月以上才出現**、值＝累計收支結餘', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedCategory(db, id: 'c-food', kind: 'expense', name: '餐飲食品');
+    await DbFixture.seedCategory(db, id: 'c-salary', kind: 'income', name: '薪資');
+
+    Future<void> pumpPage(WidgetTester t) async {
+      final c = ProviderContainer(overrides: [
+        dbProvider.overrideWithValue(db),
+      ]);
+      addTearDown(c.dispose);
+      t.view.physicalSize = const Size(900, 1600);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(UncontrolledProviderScope(
+        container: c,
+        child: MaterialApp(
+            theme: buildAppTheme(Brightness.light), home: const StatsPage()),
+      ));
+      await t.pumpAndSettle();
+    }
+
+    // 單月：**不應**出現累計結餘選項。
+    await DbFixture.seedTx(db,
+        id: 'oct', kind: 'expense', amountMinor: 200, accountId: 'a-0',
+        category: 'c-food',
+        occurredAt: DateTime(2026, 10, 10, 12).millisecondsSinceEpoch);
+    await pumpPage(tester);
+    expect(find.byKey(const Key('stats-metric-累計結餘')), findsNothing,
+        reason: '只有 1 個月→不提供累計結餘（PM 2026-10-27）');
+
+    // 加上第 2 個月：9 月 -300 → 累計 -300；10 月 +800 → 累計 +500。
+    await DbFixture.seedTx(db,
+        id: 'sep-e', kind: 'expense', amountMinor: 300, accountId: 'a-0',
+        category: 'c-food',
+        occurredAt: DateTime(2026, 9, 10, 12).millisecondsSinceEpoch);
+    await DbFixture.seedTx(db,
+        id: 'oct-i', kind: 'income', amountMinor: 1000, accountId: 'a-0',
+        category: 'c-salary',
+        occurredAt: DateTime(2026, 10, 10, 12).millisecondsSinceEpoch);
+    await pumpPage(tester);
+    expect(find.byKey(const Key('stats-metric-累計結餘')), findsOneWidget,
+        reason: '2 個月以上→出現累計結餘');
+
+    await tester.tap(find.byKey(const Key('stats-metric-累計結餘')));
+    await tester.pumpAndSettle();
+    expect(find.text('+500'), findsWidgets, reason: '累計結餘＝−300＋800');
+    expect(find.text('收支組成（累計）'), findsOneWidget);
+    expect(find.text('累計結餘'), findsWidgets, reason: '圓心標籤');
+    expect(find.text('月趨勢（累計結餘）'), findsOneWidget);
+    expect(find.text('9月 -300'), findsOneWidget, reason: '累計（9 月）');
+    expect(find.text('10月 500'), findsOneWidget, reason: '累計（10 月）');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('⑦ 月趨勢**最多顯示最近 12 個月**（並提示總月數）', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedCategory(db, id: 'c-food', kind: 'expense', name: '餐飲食品');
+    // 13 個月：2025/10~2026/10；金額 100,200,…,1,300（最早月＝100，可辨識）。
+    for (var i = 0; i < 13; i++) {
+      await DbFixture.seedTx(db,
+          id: 'm$i', kind: 'expense', amountMinor: 100 * (13 - i),
+          accountId: 'a-0', category: 'c-food',
+          occurredAt: DateTime(2026, 10 - i, 10, 12).millisecondsSinceEpoch);
+    }
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+    ]);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(900, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+          theme: buildAppTheme(Brightness.light), home: const StatsPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('僅顯示最近 12 個月（共 13 個月）'), findsOneWidget);
+    expect(find.textContaining('月 ').evaluate().length, 12,
+        reason: '明細列只列最近 12 個月');
+    expect(find.text('10月 100'), findsNothing, reason: '最早月（2025/10）已排除');
+    expect(find.text('10月 1,300'), findsOneWidget, reason: '最新月在列內');
+    expect(tester.takeException(), isNull);
+  });
 }

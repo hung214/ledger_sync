@@ -11,7 +11,13 @@ import '../../theme/app_theme.dart';
 import 'category_donut.dart';
 
 /// 統計指標（PM 2026-10-27：三卡＝**可點選切換**，圓餅與月趨勢連動）。
-enum StatsMetric { expense, income, net }
+///
+/// [cumulative]＝**累計結餘**（到選定月份為止的累計收支結餘）——PM 2026-10-27：
+/// **資料有 2 個月以上**才提供此選項。
+enum StatsMetric { expense, income, net, cumulative }
+
+/// 月趨勢顯示上限（PM 2026-10-27：**最多最近 12 個月**）。
+const int statsTrendMonths = 12;
 
 /// 統計頁（FR-R2 呈現面；v4——PM 2026-10-26 整頁重做、PM 2026-10-27 可切換指標）。
 ///
@@ -61,6 +67,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         StatsMetric.expense => '支出',
         StatsMetric.income => '收入',
         StatsMetric.net => '淨額',
+        StatsMetric.cumulative => '累計結餘',
       };
 
   @override
@@ -103,11 +110,37 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final netTrend = {
       for (final k in trendKeys) k: (incomeTrend[k] ?? 0) - (expenseTrend[k] ?? 0)
     };
+    // 累計結餘（升冪累加；月份清單本身只含「有資料的月份」）。
+    final cumulativeTrend = <(int, int), int>{};
+    var running = 0;
+    for (final k in trendKeys) {
+      running += netTrend[k] ?? 0;
+      cumulativeTrend[k] = running;
+    }
+    // 累計結餘選項：**資料 2 個月以上**才提供（PM 2026-10-27）。
+    final showCumulative = trendKeys.length >= 2;
+    if (_metric == StatsMetric.cumulative && !showCumulative) {
+      _metric = StatsMetric.expense;
+    }
     final trend = switch (_metric) {
       StatsMetric.expense => expenseTrend,
       StatsMetric.income => incomeTrend,
       StatsMetric.net => netTrend,
+      StatsMetric.cumulative => cumulativeTrend,
     };
+    // 顯示視窗＝**最近 12 個月**（PM 2026-10-27）；下方明細列同步。
+    final windowKeys = trendKeys.length <= statsTrendMonths
+        ? trendKeys
+        : trendKeys.sublist(trendKeys.length - statsTrendMonths);
+    // 選定月份的**累計**收支（累計結餘檢視的占比＝期間至該月為止）。
+    var cumIncome = 0;
+    var cumExpense = 0;
+    for (final k in trendKeys) {
+      cumIncome += incomeTrend[k] ?? 0;
+      cumExpense += expenseTrend[k] ?? 0;
+      if (selected != null && k == selected) break;
+    }
+    final cumulativeBalance = cumIncome - cumExpense;
 
     final expenseTotal = selected == null ? 0 : (expenseTrend[selected] ?? 0);
     final incomeTotal = selected == null ? 0 : (incomeTrend[selected] ?? 0);
@@ -118,21 +151,24 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     List<CategoryShare> shares = const [];
     var sharesTotal = 0;
     if (selected != null) {
-      if (_metric == StatsMetric.net) {
-        final sum = incomeTotal.abs() + expenseTotal.abs();
+      if (_metric == StatsMetric.net || _metric == StatsMetric.cumulative) {
+        // 淨額＝**當月**收支組成；累計結餘＝**至選定月為止**的收支組成。
+        final inc = _metric == StatsMetric.cumulative ? cumIncome : incomeTotal;
+        final exp = _metric == StatsMetric.cumulative ? cumExpense : expenseTotal;
+        final sum = inc.abs() + exp.abs();
         String pct(int v) =>
             sum <= 0 ? '0.0' : (v.abs() * 100 / sum).toStringAsFixed(1);
         shares = [
-          if (incomeTotal != 0)
+          if (inc != 0)
             CategoryShare(
                 name: '收入',
-                amountMinor: incomeTotal.abs(),
-                percentText: pct(incomeTotal)),
-          if (expenseTotal != 0)
+                amountMinor: inc.abs(),
+                percentText: pct(inc)),
+          if (exp != 0)
             CategoryShare(
                 name: '支出',
-                amountMinor: expenseTotal.abs(),
-                percentText: pct(expenseTotal)),
+                amountMinor: exp.abs(),
+                percentText: pct(exp)),
         ]..sort((a, b) => b.amountMinor.compareTo(a.amountMinor));
         sharesTotal = sum;
       } else {
@@ -144,7 +180,9 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     }
 
     // 扇區／圖例**同一來源**（淨額檢視＝收入綠／支出紅；其餘＝statsPalette）。
-    final donutColors = _metric == StatsMetric.net
+    final composition =
+        _metric == StatsMetric.net || _metric == StatsMetric.cumulative;
+    final donutColors = composition
         ? [
             for (final sh in shares)
               sh.name == '收入' ? tokens.success : tokens.danger,
@@ -228,6 +266,21 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   color: net < 0 ? tokens.danger : tokens.success,
                   selected: _metric == StatsMetric.net,
                   onTap: () => setState(() => _metric = StatsMetric.net)),
+              // 累計結餘（PM 2026-10-27：**2 個月以上**才出現）。
+              if (showCumulative) ...[
+                const SizedBox(width: 8),
+                _SummaryCard(
+                    key: const Key('stats-metric-累計結餘'),
+                    label: '累計結餘',
+                    value:
+                        '${cumulativeBalance < 0 ? '-' : ''}${fmt.format(cumulativeBalance.abs())}',
+                    color: cumulativeBalance < 0
+                        ? tokens.danger
+                        : tokens.success,
+                    selected: _metric == StatsMetric.cumulative,
+                    onTap: () =>
+                        setState(() => _metric = StatsMetric.cumulative)),
+              ],
             ]),
             const SizedBox(height: 12),
             if (shares.isNotEmpty)
@@ -236,9 +289,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        _metric == StatsMetric.net
-                            ? '收支組成（本月）'
-                            : '分類占比（本月）',
+                        switch (_metric) {
+                          StatsMetric.net => '收支組成（本月）',
+                          StatsMetric.cumulative => '收支組成（累計）',
+                          _ => '分類占比（本月）',
+                        },
                         style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 6),
                     // 甜甜圈：百分比以**引線**標於圈外（不壓扇區）；
@@ -246,11 +301,18 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     CategoryDonut(
                       shares: shares,
                       totalMinor: sharesTotal,
-                      centerLabel:
-                          _metric == StatsMetric.net ? '淨額' : '合計',
-                      centerText: _metric == StatsMetric.net
-                          ? '${net < 0 ? '-' : '+'}${fmt.format(net.abs())}'
-                          : null,
+                      centerLabel: switch (_metric) {
+                        StatsMetric.net => '淨額',
+                        StatsMetric.cumulative => '累計結餘',
+                        _ => '合計',
+                      },
+                      centerText: switch (_metric) {
+                        StatsMetric.net =>
+                          '${net < 0 ? '-' : '+'}${fmt.format(net.abs())}',
+                        StatsMetric.cumulative =>
+                          '${cumulativeBalance < 0 ? '-' : '+'}${fmt.format(cumulativeBalance.abs())}',
+                        _ => null,
+                      },
                       // 淨額檢視＝兩塊：語意色（收入綠／支出紅）；與圖例同來源。
                       colors: donutColors,
                     ),
@@ -306,17 +368,20 @@ class _StatsPageState extends ConsumerState<StatsPage> {
               children: [
                 Text('月趨勢（$_metricLabel）',
                     style: Theme.of(context).textTheme.labelLarge),
-                if (trendKeys.isNotEmpty) ...[
+                if (trendKeys.length > statsTrendMonths)
+                  Text('僅顯示最近 $statsTrendMonths 個月（共 ${trendKeys.length} 個月）',
+                      style: TextStyle(fontSize: 10, color: tokens.subText)),
+                if (windowKeys.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   SizedBox(
                     height: 150,
                     child: _TrendBarChart(
-                        trendKeys: trendKeys,
+                        trendKeys: windowKeys,
                         trend: trend,
-                        signed: _metric == StatsMetric.net),
+                        signed: composition),
                   ),
                 ],
-                for (final k in trendKeys)
+                for (final k in windowKeys)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
@@ -530,6 +595,13 @@ class _TrendBarChart extends StatelessWidget {
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
                 if (i < 0 || i >= trendKeys.length) {
+                  return const SizedBox.shrink();
+                }
+                // 標籤稀疏化（PM 2026-10-27）：月數多時每隔 step 個月標一次，
+                // 避免 12 個月標籤擠成一團（其餘月份仍可由下方明細列辨識）。
+                final step = (trendKeys.length / 8).ceil();
+                if (step > 1 && i % step != 0 &&
+                    i != trendKeys.length - 1) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
