@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/first_run_bootstrap.dart';
@@ -154,6 +155,51 @@ void main() {
       expect(db.allTransactions().length, 1, reason: '鍵盤 OK 儲存');
       expect(db.allTransactions().first.amountMinor, 123);
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  /// 注入 Ctrl+N（桌面快捷鍵；語意同 integration_test `pressShortcut`）。
+  Future<void> pressCtrlN(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('桌面殼：⌘N／Ctrl+N ＝面板**切換**（開↔收；PM 2026-10-29）',
+      (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
+    ]);
+    try {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const MainShellPage()),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget,
+          reason: '桌面面板預設常駐');
+
+      await pressCtrlN(tester);
+      expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
+          reason: '快捷鍵按一次→**收合**（原本只會開不會收）');
+      await pressCtrlN(tester);
+      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget,
+          reason: '再按→展開（具切換效果）');
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();

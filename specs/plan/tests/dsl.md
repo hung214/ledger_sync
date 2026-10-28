@@ -573,7 +573,8 @@
 | 分類彈窗新增 | `picker-add-main`／`picker-add-sub` → `quick-add-category-name`／`quick-add-category-save`（兩平台皆建立並選取） |
 | 刪除範圍 | `wipe-start` → `wipe-scope-全部`／`wipe-scope-{label}`／`wipe-scope-factory` → `wipe-scope-next` |
 
-| 桌面面板 | `desktop-quick-*`（模式／金額／日期／帳戶／目標／分類／商家／備註）；**常駐鍵盤**＝共用 `quick-entry-save`（OK 跨兩格）；工具列鈕 `fab-quick-entry`＝**面板顯示/隱藏切換**（PM 2026-10-26；**非**整頁切換——FE harness 需同步） |
+| 桌面面板 | `desktop-quick-*`（模式／金額／日期／帳戶／目標／分類／商家／備註）；**常駐鍵盤**＝共用 `quick-entry-save`（OK 跨兩格）；工具列鈕 `fab-quick-entry`＝**面板顯示/隱藏切換**（PM 2026-10-26）；桌面 **⌘N／Ctrl+N 亦為切換**（PM 2026-10-29；原僅開啟）——**非**整頁切換（FE harness 需同步） |
+| 全 App 快捷鍵 | 僅 2 組：`⌘N`/`Ctrl+N`＝快記（桌面＝面板切換）；`⌘⇧S`/`Ctrl+⇧S`＝掃描 |
 | 統計頁（v3） | `stats-month-prev`／`stats-month`／`stats-month-next`（文字契約不變）；甜甜圈 `stats-donut`（`CategoryDonut`） |
 | 分類圖示 | `category_display.dart`（`categoryEmojiOf`／`categoryLabelOf`）——**唯一來源**；子類別圖示跟隨主類別、非庫內→🏷️ |
 

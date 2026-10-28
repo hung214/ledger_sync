@@ -66,16 +66,27 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   /// 不再整頁切換到快記頁）。
   bool _desktopQuickOpen = true;
 
-  /// 手機殼＝推入快記頁；桌面殼＝切換右側面板（PM 2026-10-26）。
+  /// 手機殼＝推入快記頁（⌘N／工具列鈕）；桌面殼＝**切換**右側面板。
+  ///
+  /// PM 2026-10-29：⌘N／Ctrl+N 原本只會「開啟」→ 面板已開時毫無反應（無切換感）
+  /// → 改為**開／收切換**（與工具列鈕同一行為）；開啟時一併**聚焦金額欄**。
   void _openQuickEntry() {
     if (MediaQuery.sizeOf(context).width >= 900) {
-      setState(() => _desktopQuickOpen = true);
+      setState(() => _desktopQuickOpen = !_desktopQuickOpen);
+      if (_desktopQuickOpen) {
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _quickPanelKey.currentState?.focusAmount());
+      }
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const QuickEntryPage()),
     );
   }
+
+  /// 右側快記面板（供 ⌘N 開啟後聚焦金額欄）。
+  final GlobalKey<_DesktopQuickPanelState> _quickPanelKey =
+      GlobalKey<_DesktopQuickPanelState>();
 
   // 設定入口已移至總覽 AppBar（SettingsHubPage——M7 恢復，PM 2026-10-21）。
 
@@ -164,7 +175,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                         ],
                       ),
                     ),
-                    if (_desktopQuickOpen) const _DesktopQuickPanel(),
+                    if (_desktopQuickOpen)
+                      _DesktopQuickPanel(key: _quickPanelKey),
                   ],
                 ),
               );
@@ -356,7 +368,7 @@ class _DesktopToolbar extends StatelessWidget {
 
 /// 桌面右側快記常駐面板（08：金額＋分類格＋meta＋儲存；320px）。
 class _DesktopQuickPanel extends ConsumerStatefulWidget {
-  const _DesktopQuickPanel();
+  const _DesktopQuickPanel({super.key});
 
   @override
   ConsumerState<_DesktopQuickPanel> createState() => _DesktopQuickPanelState();
@@ -367,6 +379,12 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
 
   /// 計算機運算式（PM 2026-10-25：桌面面板亦常駐鍵盤——與手機共用元件）。
   String _expr = '';
+
+  /// 金額欄焦點（⌘N 開啟面板後聚焦；PM 2026-10-29）。
+  final _amountFocus = FocusNode();
+
+  /// 由 [MainShellPage] 於快捷鍵開啟面板後呼叫。
+  void focusAmount() => _amountFocus.requestFocus();
 
   /// 備註欄（PM 2026-10-24：PC 面板亦有）。
   final _noteCtrl = TextEditingController();
@@ -465,6 +483,7 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
 
   @override
   void dispose() {
+    _amountFocus.dispose();
     _amountCtrl.dispose();
     _noteCtrl.dispose();
     _merchantCtrl.dispose();
@@ -516,7 +535,8 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
                   .textTheme
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800)),
-          Text('Ctrl+N 開啟 · 工具列鈕可收合', style: Theme.of(context).textTheme.labelSmall),
+          Text('Ctrl+N 顯示／隱藏 · 工具列鈕同步',
+              style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 8),
           // 模式列（PM 2026-10-24：僅 支出／收入／轉帳；三種模式類別各自獨立）。
           SegmentedButton<QuickEntryMode>(
@@ -536,8 +556,16 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
           TextField(
             key: const Key('desktop-quick-amount'),
             controller: _amountCtrl,
+            focusNode: _amountFocus,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
+            // Enter＝儲存（PM 2026-10-29：復原原按鈕「OK 儲存（Enter）」承諾；
+            // 現由常駐鍵盤 OK／此處 Enter 觸發）。
+            onSubmitted: (_) {
+              if (quickEntrySaveEnabled(ref.read(quickEntryControllerProvider))) {
+                _saveFromPanel();
+              }
+            },
             style: Theme.of(context)
                 .textTheme
                 .headlineMedium
