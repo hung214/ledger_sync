@@ -50,6 +50,6 @@ Feature: 發票掃描 UI（前端自動化）
   Scenario: 桌面無相機導向匯入
     Given 使用者位於 Windows 版（無相機裝置）
     When 按下 Ctrl+Shift+S
-    Then 導向「相簿/檔案匯入」
-    When 從相簿匯入 fixture 1
+    Then 導向「匯入圖片」
+    When 選擇圖片 fixture 1
     Then 顯示「確認清單（1 張）」

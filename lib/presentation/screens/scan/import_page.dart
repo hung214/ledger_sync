@@ -13,20 +13,20 @@ class ImportPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('相簿/檔案匯入')),
+      appBar: AppBar(title: const Text('匯入圖片')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.photo_library_outlined, size: 56),
             const SizedBox(height: 12),
-            const Text('從相簿匯入收據照片——OCR 辨識後逐張確認入帳'),
+            const Text('選擇發票／收據圖片——自動辨識 QR 後逐張確認入帳'),
             const SizedBox(height: 16),
             FilledButton.icon(
               key: const Key('import-pick'),
               onPressed: () => _pickAndReview(context, ref),
               icon: const Icon(Icons.upload_file),
-              label: const Text('從相簿匯入'),
+              label: const Text('選擇圖片檔'),
             ),
           ],
         ),

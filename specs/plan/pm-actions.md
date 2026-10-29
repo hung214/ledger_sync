@@ -159,6 +159,12 @@
 
 > **規則：任何版本發佈（push tag）之前，必須先讓 PM 在本地預覽並親口確認。**
 >
+> **2026-10-29 PM 簽核（桌面掃描）**：PC 無相機 → 採「**檔案匯入＋圖片 QR 解碼**」，
+> 新增套件 **`file_selector` 1.1.0**（官方，檔案對話框；macOS 沙箱加
+> `com.apple.security.files.user-selected.read-only`）＋ **`zxing2` 0.2.4**
+> （純 Dart QR 解碼，無原生相依；搭配既有 `image`）。已回寫 `specs/truth/techstack.md`
+> v0.3.8。
+>
 > **2026-10-26 追加：每次發行版都必須標註本次修改了什麼**——發版前於 `CHANGELOG.md`
 > 新增該版區段（`## [x.y.z] - YYYY-MM-DD`＋新增／變更／修正／移除／文件同步），
 > 發佈流水線會自動把它寫進 GitHub Release 說明；未填不得發版。

@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v1.20（PM 2026-10-25：①**三欄主類別格全面退役**——兩平台皆不平鋪（`MainCategoryGrid` 刪除）②分類彈窗**「⭐ 常用類別」**＝左欄最上、右欄常用類別文字（`picker-freq`／`picker-freq-{name}`；原 `picker-recent-*` 退役）③**桌面面板常駐鍵盤**（共用 `quick-entry-save`；原大按鈕移除）④手機對齊 03（金額置中＋帳戶 Sticky 小字／本次已記 N 筆）⑤**圖示唯一來源** `category_display.dart`（子類別空字串回退主類別；非庫內→🏷️）。v1.19（快記**手機版版面契約**回正：分類不再平鋪（三欄格僅桌面面板）／帳戶｜分類同列／鍵盤第一排 OK **跨兩格**／金額右對齊——§4.7；回歸護欄 `quick_entry_layout_test`（DBG-011）；另補「最近刪除」永久刪除之刪除後失效（DBG-010）。v1.18（「最近刪除」**永久刪除**：單筆 `recent-delete-purge-{id}`／清空全部 `recent-delete-purge-all`／二次確認 `recent-delete-purge-confirm`·`-cancel`——§4.9；原型 12-recent-deletions。v1.17（統計頁 v2：月份列/三卡/色點圖例（keys stats-month-*）＋原型 11-stats＋DEMO。v1.16（明細：交易編輯視窗（tx-edit-*）＋月份制（month-*）＋tx-delete 退役。v1.15（快記：模式列僅 3 項（類別依模式獨立）／兩平台同版面／鍵盤 C·⌫·OK＋無＝＋0 跨兩格／＋新增分類可用；資料管理範圍勾選。v1.14（明細：手機分日＋小計／桌面表格／金額千分位與顏色／語意標籤；平台對照（BDD §2.1）。v1.13（明細交易列顯示 分類/帳戶/商家/備註＋PC 分類欄同手機；子類別無圖示。v1.12（子類別**無圖示**——圖示跟隨主類別：功能頁/UI_DEMO/雛型/harness/dsl 同步。v1.11（快記 v3：分類選擇**彈窗**／備註欄／記住上次——keys 見 §4.6；綁定更新見 §4.5。v1.10 f11 harness 對齊 UI-P4。v1.9（F09-FE：§3 Given 1＋When 1＋Then 2 句型登記——`App 未設定 PIN`／`點「下一步」`／`顯示「確認文字輸入框」（不經 PIN 關卡）`／`不顯示 PIN 輸入框`（DBG-008）；§4.5 F11-FE 2 句型——子分類編輯＋快記連動（DBG-009）。v1.8 F08-BE：§2 Given 1＋Then 1 句型登記——`未設定 PIN 的裝置`／`hasPin 判定`；DBG-008 清空資料免 PIN 前置。v1.7 分類體系 v2：常用類別區/同層重名；v1.6 F11：帳戶/分類 CRUD 句型。v1.5 F09-FE：§3 Given 4＋When 3＋Then 6 句型登記——資料管理三重防護/加驗身分/已清空；v1.4 F09-BE：Given 3＋When 3＋Then 9 句型登記——WipeService 清空/雲端刪除/不復活；v1.3 F08-FE：§3 Given 3＋When 8＋Then 8 句型登記——鎖定畫面/Face ID seam/PIN 重設/隱私遮蔽；v1.2 F08-BE：§2 Given 6＋When 6＋Then 8 句型登記——AppLockController 門檻邊界/生物辨識退場/PIN 重設授權與拒絕路徑；v1.1 F06-FE：§3 Given 2＋When 3＋Then 4 句型登記——待確認 badge/清單/下期提醒/暫停標示；v1.0 F06-BE：Given 3＋When 4＋Then 12 句型登記——RecurringService 提醒確認制；v0.9 F07-FE：§3 Given 6＋When 6＋Then 12 句型登記；「同步中…」回饋斷言法（tap 後 pump 未 settle）；v0.8 F07-BE：§2.1 Given 8＋§2.2 When 7＋§2.3 Then 14 句型登記——SyncCoordinator/BundleApplier/BackupService；Outline 匯入結果分列綁定） |
+| 文件版本 | v1.21（PM 2026-10-29：①桌面掃描＝**檔案匯入＋圖片 QR 解碼**（v1.21 更名：「相簿/檔案匯入」→「**匯入圖片**」、「從相簿匯入」→「**選擇圖片**」）；②關閉 App 前**確認對話框**（`app-exit-dialog`）；③⌘N／Ctrl+N＝快記面板**開／收切換**、⌘⇧S／Ctrl+⇧S＝掃描（全 App 僅此 2 組）；新增 keys：`app-exit-dialog`／`import-pick`）。v1.20（PM 2026-10-25：①**三欄主類別格全面退役**——兩平台皆不平鋪（`MainCategoryGrid` 刪除）②分類彈窗**「⭐ 常用類別」**＝左欄最上、右欄常用類別文字（`picker-freq`／`picker-freq-{name}`；原 `picker-recent-*` 退役）③**桌面面板常駐鍵盤**（共用 `quick-entry-save`；原大按鈕移除）④手機對齊 03（金額置中＋帳戶 Sticky 小字／本次已記 N 筆）⑤**圖示唯一來源** `category_display.dart`（子類別空字串回退主類別；非庫內→🏷️）。v1.19（快記**手機版版面契約**回正：分類不再平鋪（三欄格僅桌面面板）／帳戶｜分類同列／鍵盤第一排 OK **跨兩格**／金額右對齊——§4.7；回歸護欄 `quick_entry_layout_test`（DBG-011）；另補「最近刪除」永久刪除之刪除後失效（DBG-010）。v1.18（「最近刪除」**永久刪除**：單筆 `recent-delete-purge-{id}`／清空全部 `recent-delete-purge-all`／二次確認 `recent-delete-purge-confirm`·`-cancel`——§4.9；原型 12-recent-deletions。v1.17（統計頁 v2：月份列/三卡/色點圖例（keys stats-month-*）＋原型 11-stats＋DEMO。v1.16（明細：交易編輯視窗（tx-edit-*）＋月份制（month-*）＋tx-delete 退役。v1.15（快記：模式列僅 3 項（類別依模式獨立）／兩平台同版面／鍵盤 C·⌫·OK＋無＝＋0 跨兩格／＋新增分類可用；資料管理範圍勾選。v1.14（明細：手機分日＋小計／桌面表格／金額千分位與顏色／語意標籤；平台對照（BDD §2.1）。v1.13（明細交易列顯示 分類/帳戶/商家/備註＋PC 分類欄同手機；子類別無圖示。v1.12（子類別**無圖示**——圖示跟隨主類別：功能頁/UI_DEMO/雛型/harness/dsl 同步。v1.11（快記 v3：分類選擇**彈窗**／備註欄／記住上次——keys 見 §4.6；綁定更新見 §4.5。v1.10 f11 harness 對齊 UI-P4。v1.9（F09-FE：§3 Given 1＋When 1＋Then 2 句型登記——`App 未設定 PIN`／`點「下一步」`／`顯示「確認文字輸入框」（不經 PIN 關卡）`／`不顯示 PIN 輸入框`（DBG-008）；§4.5 F11-FE 2 句型——子分類編輯＋快記連動（DBG-009）。v1.8 F08-BE：§2 Given 1＋Then 1 句型登記——`未設定 PIN 的裝置`／`hasPin 判定`；DBG-008 清空資料免 PIN 前置。v1.7 分類體系 v2：常用類別區/同層重名；v1.6 F11：帳戶/分類 CRUD 句型。v1.5 F09-FE：§3 Given 4＋When 3＋Then 6 句型登記——資料管理三重防護/加驗身分/已清空；v1.4 F09-BE：Given 3＋When 3＋Then 9 句型登記——WipeService 清空/雲端刪除/不復活；v1.3 F08-FE：§3 Given 3＋When 8＋Then 8 句型登記——鎖定畫面/Face ID seam/PIN 重設/隱私遮蔽；v1.2 F08-BE：§2 Given 6＋When 6＋Then 8 句型登記——AppLockController 門檻邊界/生物辨識退場/PIN 重設授權與拒絕路徑；v1.1 F06-FE：§3 Given 2＋When 3＋Then 4 句型登記——待確認 badge/清單/下期提醒/暫停標示；v1.0 F06-BE：Given 3＋When 4＋Then 12 句型登記——RecurringService 提醒確認制；v0.9 F07-FE：§3 Given 6＋When 6＋Then 12 句型登記；「同步中…」回饋斷言法（tap 後 pump 未 settle）；v0.8 F07-BE：§2.1 Given 8＋§2.2 When 7＋§2.3 Then 14 句型登記——SyncCoordinator/BundleApplier/BackupService；Outline 匯入結果分列綁定） |
 | 用途 | 前端／後端 `.feature` 檔的**步驟句型唯一登記處**。新步驟必須先登記於本檔再實作綁定；未登記句型視為違規 |
 | 綁定 | 前端：自製 Gherkin runner + integration_test（TR-9 過渡；同 T-H7）｜後端：自製 Gherkin runner + flutter_test |
 
@@ -344,7 +344,7 @@
 | `When 拍攝紙本收據（fixture {n}）` | OCR 影像回放 |
 | `When App 切至背景 {n} 秒後返回` | lifecycle 模擬 |
 | `When 關閉並重新啟動 App` | 重啟（驗證啟動同步） |
-| `When 從相簿匯入 fixture {n}` | 桌面/無相機路徑 |
+| `When 選擇圖片 fixture {n}` | 桌面/無相機路徑（PM 2026-10-29：v1.21 由「從相簿匯入」更名——PC 為檔案匯入＋解 QR） |
 | `When 開啟總覽頁並按下「掃描」` | 導航至總覽＋點擊掃描入口（key scan-entry；F03-FE S2） |
 | `When 拒絕權限` | fake 權限對話框按「拒絕」（F03-FE S2） |
 | `When 進入確認卡` | 確認清單首張卡聚焦（F03-FE S4） |
@@ -399,7 +399,7 @@
 | `Then 顯示「請先確認高亮欄位」且不建立交易` | 未處理擋下＋交易零新增（FR-S5；F03-FE S4） |
 | `Then 顯示「已掃 {n} 張」` | 掃描計數文字（FR-S7；F03-FE S5） |
 | `And 顯示 {n} 個縮圖` | 掃描縮圖列計數（F03-FE S5） |
-| `Then 導向「相簿/檔案匯入」` | 無相機匯入頁呈現（F03-FE S6 @desktop） |
+| `Then 導向「匯入圖片」` | 無相機匯入頁呈現（F03-FE S6 @desktop；v1.21 更名） |
 | `Then 顯示「Google 登入」（模擬）` | OAuth seam 登入畫面（F07-FE S1） |
 | `Then 顯示「連結成功」` | 授權完成回饋（FR-Y7；F07-FE S1） |
 | `And 顯示「建議為此帳號開啟兩步驟驗證」` | 帳號安全教育文案（SDD §7.1；F07-FE S1） |

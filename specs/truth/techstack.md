@@ -2,8 +2,8 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v0.3.7（附件壓縮定案：image＋crypto——FR-S4 純 Dart 壓縮與 sha256 內容定址） |
-| 日期 | 2026-10-18 |
+| 文件版本 | v0.3.8（**桌面掃描定案：file_selector＋zxing2**——PC 無相機 → 檔案匯入＋**純 Dart 圖片 QR 解碼**；PM 簽核 2026-10-29） |
+| 日期 | 2026-10-29 |
 | 性質 | **原始碼技術棧的唯一事實來源**。SDD §3 為設計說明；本檔記錄「將寫進程式碼」的定案（含版本）。兩者不一致時以本檔為準並回修 SDD |
 | 變更規則 | 僅能經 PR 變更；新增/升級依賴需通過授權審查（research.md D14）+ 全測試綠燈；每次變更記錄於 §8 變更記錄 |
 | 來源 | 定案依據見 `specs/plan/research.md` §3（D1~D14）；未定案項（🔬）以「暫定」標示，Spike 後回填 |
@@ -53,6 +53,8 @@
 | domain | uuid | 4.6.0 | UUIDv7（交易/實體 ID） | SDD §4.2 |
 | domain | image | 4.12.0 | 附件壓縮：原圖縮至最長邊 1600px＋JPEG q70（FR-S4，SDD §5.4 附件儲存）。**選純 Dart 之關鍵**：跨平台 JPEG 位元組一致 → 同張照片各裝置壓縮後 sha256 相同 → 雲端 blobs/ 內容定址去重成立（§5.5.6）；平台 codec 各產位元組不同會破壞去重。PM 簽核 2026-10-21 | SDD §5.4/§5.5.6 |
 | domain | crypto | 3.0.7 | sha256 內容定址（blobs/{sha256} 檔名；附件中繼資 attachments.sha256 同源）——Dart 官方維護、零傳遞依賴。PM 簽核 2026-10-21 | SDD §5.5.6 |
+| platform | **file_selector** | 1.1.0 | **桌面掃描匯入**：使用者選取發票／收據圖片（`openFile`＋型別過濾）。沙箱需 `com.apple.security.files.user-selected.read-only`。**PM 簽核 2026-10-29** | FR-S6／SDD §5.4 |
+| platform | **zxing2** | 0.2.4 | **桌面掃描解碼**：純 Dart QR 解碼（無原生相依、跨平台）——與既有 `image` 搭配（影像→像素→QR）。多碼以「整張＋左右半＋上下半＋四象限」區域掃描取得（雙 QR 發票）。**PM 簽核 2026-10-29** | FR-S6／SDD §5.4 |
 | data | sqlite3 | 2.9.4 | **T-S1 過渡**：本地 DB 直連（lib/data/sqlite/，schema 對齊 data-spec.dbml） | SDD §4.2 |
 | data | drift / drift_dev | 2.35.2（⚠ TR-7 暫緩：與 Dart 3.13.5 工具鏈不相容，M1 前於 CI 重試回歸；屆時 sqlite 直連層 API 不變僅換底層） | SQLite ORM + Reactive Streams + migration（D2） | SDD §4.2 |
 | core | flutter_secure_storage | ⚠ TR-8 暫緩（移出 pubspec 至 M2：Windows 建置需 VS C++ ATL 元件 atlstr.h；M2 前安裝元件或改 DPAPI 直呼） | DB 金鑰/OAuth token | SDD §7.1 |
@@ -68,7 +70,7 @@
 | 能力 | 套件/技術 | 平台 | 版本/狀態 | 對應 |
 |---|---|---|---|---|
 | QR 掃描 | mobile_scanner | iOS/Android | 5.x ✅ | SDD §5.4 |
-| QR 掃描（桌面） | 相機取幀 channel + ZXing（暫定 zxing FFI 綁定） | Windows/macOS | 🔬 SP-2b；fallback＝相簿匯入 | FR-S6 |
+| QR 掃描（桌面） | **檔案匯入＋zxing2（純 Dart）**——影像解 QR（無相機路徑已落地 2026-10-29） | Windows/macOS | ✅（相機取幀 SP-2b 仍暫緩，非阻塞） | FR-S6 |
 | OCR | google_mlkit_text_recognition（中文模型） | iOS/Android | 最新 stable ✅ | SDD §5.4 |
 | OCR | Apple Vision（VNRecognizeTextRequest，platform channel） | macOS | 自寫 channel ✅ | SDD §5.4 |
 | OCR | Windows.Media.OCR（platform channel） | Windows | 自寫 channel 🔬 SP-3 | SDD §5.4 |

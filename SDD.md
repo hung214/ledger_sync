@@ -394,6 +394,13 @@ projection      = usage / 已過天數 × 總天數
 - 超支與警示同時反映在總覽橫幅（Stream 驅動）。
 
 ### 5.4 發票掃描管線（FR-S）
+**桌面（無相機）掃描＝檔案匯入（PM 2026-10-29 落地）**：`file_selector.openFile`
+（限圖片）→ `ImageQrScanner`（`lib/platform/scan/image_qr_scan.dart`）——以 `image`
+解碼影像、`zxing2` 於**整張／左右半／上下半／四象限**逐區找碼（雙 QR 發票）→
+`InvoiceQrParser.parse`（左碼 77 碼＋右碼明細；僅左碼亦可）→ `ScannedItem`
+（附原圖）→ `ReviewPage` 逐張確認。**找不到可辨識 QR** → `TransactionDraft.blank`
+（FR-S2／S3.6 空白確認卡）。生產接線＝`importPipelineProvider`（`main.dart`）。
+
 
 ```mermaid
 flowchart LR

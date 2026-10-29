@@ -12,5 +12,8 @@
 	<!-- 雲端同步（FR-Y7）：連外至 Google Drive／OAuth 端點——沙箱必要。 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- PC 掃描（PM 2026-10-29）：讀取使用者以檔案對話框選取的發票圖片（沙箱必要）。 -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>
