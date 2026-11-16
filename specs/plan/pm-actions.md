@@ -264,7 +264,7 @@ sudo xcodebuild -runFirstLaunch
 > 附註：Spike 產物已在專用分支 `feature/ios-pwa`（不影響現有 Android／macOS／Windows；
 > 剛驗證過 162 測試全綠＋macOS 建置成功）。您說一聲 A 或 B 即可。
 
-## 13. GitHub 推送憑證需更新（2026-11-16；阻塞：`feature/ios-pwa` 分支推不上遠端）
+## 13. GitHub 推送憑證需更新（2026-11-16）——✅ 已解決（同日）：改用 SSH（`git@github.com:hung214/ledger_sync.git`），`feature/ios-pwa` 已推送成功
 
 push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH 金鑰未在 GitHub 註冊）。
 **二擇一（約 3 分鐘）**：
