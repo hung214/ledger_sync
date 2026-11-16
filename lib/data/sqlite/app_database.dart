@@ -1,40 +1,43 @@
 import 'dart:convert';
-import 'dart:ffi';
-import 'dart:io';
 
-import 'package:sqlite3/open.dart';
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../core/clock.dart';
 import '../../core/text_index.dart';
+import 'db_opener.dart';
 import 'schema.dart';
-
-/// Windows 測試環境：系統內建 winsqlite3.dll（App 執行時由 sqlite3_flutter_libs
-/// 提供 bundled sqlite3）。須在任何開庫動作前呼叫一次。
-void ensureSqliteOpenable() {
-  if (Platform.isWindows) {
-    open.overrideFor(OperatingSystem.windows, () => DynamicLibrary.open('winsqlite3.dll'));
-  }
-}
 
 /// App 資料庫（Schema v1 = M1 核心記帳，逐句對齊 specs/truth/data-spec.dbml）。
 ///
 /// T-S1 過渡實作：sqlite3 直連（drift 暫緩，research TR-7——工具鏈與 Dart 3.13.5
 /// 相容問題，M1 前於 CI 重試回歸 drift；屆時本層 API 維持不變，僅換底層）。
+///
+/// **平台中立**（P3 資料層 Web adapter；PM 2026-11-16 決策 A）：連線一律以
+/// [CommonDatabase] 持有，開庫動作交由 `db_opener.dart` 條件匯出分流——
+/// native＝FFI＋檔案路徑（行為不變）；web＝`sqlite3.wasm`＋IndexedDB VFS（Spike SP-8）。
 class AppDatabase {
   AppDatabase.inMemory() {
-    ensureSqliteOpenable();
-    _db = sqlite3.openInMemory();
+    _db = openNative();
     _migrate();
   }
 
   AppDatabase.open(String path) {
-    ensureSqliteOpenable();
-    _db = sqlite3.open(path, mode: OpenMode.readWriteCreate);
+    _db = openNative(path: path);
     _migrate();
   }
 
-  late final Database _db;
+  AppDatabase._withDb(CommonDatabase db) {
+    _db = db;
+  }
+
+  /// Web（PWA）開庫：wasm＋IndexedDB 持久化，並執行同一套遷移。
+  static Future<AppDatabase> openWeb() async {
+    final app = AppDatabase._withDb(await openAppDatabaseWeb());
+    app._migrate();
+    return app;
+  }
+
+  late final CommonDatabase _db;
   bool _closed = false;
 
   int get schemaVersion => SchemaV6.version;

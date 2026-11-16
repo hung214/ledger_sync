@@ -247,7 +247,7 @@ sudo xcodebuild -runFirstLaunch
 
   （已用此法驗證：`dart analyze` 0 issues、**121 unit 全綠**。）
 
-## 12. iOS 發佈：PWA Spike 完成，待您決策（2026-11-16）
+## 12. iOS 發佈：PWA Spike 完成，待您決策（2026-11-16）——✅ 已決策：**A（採用 PWA）**，開發中（分支 `feature/ios-pwa`；資料層 Web adapter 已完成並實測通過，進度見 `tasks.md` §6.0b）
 
 **結論先講：技術可行 ✅。** 在真實 Chrome 實測：我們的資料庫（SQLite→Web 版）能建立完整 schema、
 寫入交易、關閉後重開資料還在。PWA 的做法＝把 App 放上一個**免費靜態網站**

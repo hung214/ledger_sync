@@ -243,8 +243,15 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | # | TASK | 範圍 | 驗收 | 狀態 |
 |---|---|---|---|---|
 | P1 | **PWA Spike**（sqlite3.wasm＋IndexedDB 持久化實測） | `lib/main_web_spike.dart` | headless Chrome `RESULT:OK` | ✅ 2026-11-16 |
-| P2 | **PM 決策：採用 PWA 完整化？**（工時：資料層 adapter＋附件層＋同步 OAuth＋部署；報告見 pm-actions §12） | —（PM） | PM 親口確認 | ⏳ 待 PM |
-| P3 | 資料層 Web adapter：`AppDatabase` 開檔改**平台分流**（native=`path_provider`；web=`WasmSqlite3`＋IndexedDB），schema/DAO 不動 | `lib/data/sqlite/` | unit＋web 實測 CRUD | ⬜ |
+| P2 | **PM 決策：採用 PWA 完整化？** | —（PM） | PM 親口確認 | ✅ 2026-11-16 PM：「開始處理」＝採 A |
+| P3 | 資料層 Web adapter：`AppDatabase` 開檔改**平台分流**（native=`path_provider`＋FFI；web=`WasmSqlite3`＋IndexedDB），schema/DAO 不動 | `lib/data/sqlite/` | unit＋web 實測 CRUD | ✅ 2026-11-16 |
+| P3.1 | └ opener 條件匯出三檔（`db_opener.dart` facade／native／web／stub） | 同上 | 檔案齊 | ✅ |
+| P3.2 | └ `app_database.dart` 平台中立：`CommonDatabase` 持有連線；`openNative()`/`openWeb()` 分流；遷移／DAO 零改動 | 同上 | analyze 通過 | ✅ |
+| P3.3 | └ **實驗發現**：本工具鏈（Dart 3.13.5）下 `dart analyze`/`flutter analyze` **恆選 base 檔**（`dart.library.*` 條件分析期皆 false；編譯期 CFE 才正確分流）→ stub 必須型別正確（回傳 `CommonDatabase`，勿 `Never`） | 同上 | analyze 無 dead code | ✅ |
+| P3.4 | └ 驗證：`dart analyze` 0＋`flutter test` 162 全綠（＝VM 編譯期選到 native 分支的證明） | — | 全綠 | ✅ |
+| P3.5 | └ Web 入口 `lib/main_web.dart`：正式 `AppDatabase.openWeb()`（遷移 v1→v6）＋播種＋CRUD 往返＋結果回報（沿 Spike 模式） | `lib/main_web.dart` | headless Chrome 通過 | ✅（遷移 v6／播種 72 分類／寫入讀回皆通） |
+| P3.6 | └ headless Chrome 實測×2 次（同 profile）：第 2 次讀回第 1 次寫入的資料＝**跨載入持久化** | — | 兩次皆 `RESULT:OK` | ✅（`4-reload-detected`＋`ours=1`＋遷移冪等） |
+| P3.7 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
 | P4 | 附件層 Web adapter：`blobs/` 檔案 → IndexedDB（sha256 內容定址不變） | `lib/data/attachments/` | web 存取附件往返 | ⬜ |
 | P5 | 雲端同步 Web 流程：Google Drive OAuth（GIS）＋`googleapis` 於 Web 的檔案讀寫 | `lib/cloud/` | 雙裝置互通（web↔macOS） | ⬜ |
 | P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨（UI 隱藏或替代） | presentation | 走查清單 | ⬜ |
