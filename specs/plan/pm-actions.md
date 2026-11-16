@@ -290,3 +290,17 @@ push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH �
 拿到後我以 `--dart-define=GOOGLE_OAUTH_WEB_CLIENT_ID=...` 建置 → 用您的瀏覽器登入一次
 → 完成 web↔Drive 真實往返驗證（vault／opbundle／blob 上傳下載）。
 正式部署時再加正式網址 origin 即可（同一組 client id）。
+
+## 15. PWA 已部署到 GitHub Pages——需您開啟設定（2026-11-16；約 2 分鐘）
+
+我已把 PWA 建置推到 repo 的 `gh-pages` 分支（含離線快取＋App 圖示）。**剩一步只有您能做**：
+
+1. 開瀏覽器 → `https://github.com/hung214/ledger_sync/settings/pages`
+2. **Build and deployment → Source**：選 **Deploy from a branch**
+3. Branch：**gh-pages** ／ 資料夾：**/ (root)** → Save
+
+約 1–2 分鐘後網址生效：**`https://hung214.github.io/ledger_sync/`**
+（iPhone 開此網址 → 分享 → **加到主畫面** → 就是 App ✓；離線也可啟動）
+
+> 附註：①repo 已是公開（Pages 免費方案必要）②OAuth 正式 origin（`https://hung214.github.io`）
+> 等您做 §14 項目 2 時一起加上即可（先手動同步、之後雲端功能才會在 PWA 上可用）。

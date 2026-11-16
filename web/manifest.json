@@ -1,11 +1,11 @@
 {
-    "name": "ledger_sync",
-    "short_name": "ledger_sync",
+    "name": "LedgerSync 記帳本",
+    "short_name": "LedgerSync",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F7F8",
+    "theme_color": "#0B7A75",
+    "description": "本地優先記帳 App——離線可用、雲端同步、發票掃描。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

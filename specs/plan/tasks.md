@@ -286,7 +286,12 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | 資料管理（Wipe） | 刪檔案目錄 | 清 IndexedDB store（P6 ✅） | BlobStore.deleteAll |
 | 發票 QR zlib | （原 dart:io zlib） | archive 純 Dart（P6 ✅ 位元組一致） | 單一實作 |
 | 桌面快捷鍵／關閉確認 | ✓ | N/A（瀏覽器分頁；AppLifecycleListener 不觸發，無害） | 無需分流 |
-| P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |
+| P7 | 部署：GitHub Pages（repo 已公開 ✓）＋HTTPS＋offline-first＋品牌化 manifest/圖示 | 託管 | 手機加到主畫面可離線啟動 | 🔄 已推 `gh-pages`；待 PM 開 Pages 設定（pm-actions §15） |
+| P7.1 | └ 調查：repo 公開（API 200 ✓）；App 圖示取自 macOS AppIcon（512/256→192 縮製） | — | 條件成立 | ✅ |
+| P7.2 | └ 品牌化：manifest（名稱/主題色 #0B7A75/圖示）＋index.html（title/description/theme-color/apple-touch） | `web/` | 檔案就緒 | ✅ |
+| P7.3 | └ 建置＋部署：`--base-href=/ledger_sync/ --pwa-strategy=offline-first`（service worker ✓）→ **`gh-pages` 分支**（orphan push＋.nojekyll） | 託管 | push 成功 | ✅ |
+| P7.4 | └ PM 開啟 Pages 設定＋OAuth 正式 origin（與 §14 一起做） | —（PM） | 網址生效 | ⏳ 待 PM |
+| P7.5 | └ 上線驗證：URL 200／manifest/service worker 可達／手機加到主畫面 | — | 實機 | ⏳ 待 P7.4 |
 | P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ✅ 2026-11-16 |
 | P8.1 | └ 調查：殼層佈局＝**寬度式**（`width >= 900` 分欄——MediaQuery/LayoutBuilder）→ Web 自動適配（寬視窗=三欄、窄視窗=行動殼），零改動 | `main_shell_page.dart` | 確認 | ✅ |
 | P8.2 | └ Web 分流修正：`cameraAvailableProvider` 加 `!kIsWeb`——Web＋行動 UA 不再誤入相機頁，一律檔案匯入（file_selector web ✓） | `scan_state.dart` | 168 綠 | ✅ |
