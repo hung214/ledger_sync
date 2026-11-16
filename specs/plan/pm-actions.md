@@ -263,3 +263,15 @@ sudo xcodebuild -runFirstLaunch
 
 > 附註：Spike 產物已在專用分支 `feature/ios-pwa`（不影響現有 Android／macOS／Windows；
 > 剛驗證過 162 測試全綠＋macOS 建置成功）。您說一聲 A 或 B 即可。
+
+## 13. GitHub 推送憑證需更新（2026-11-16；阻塞：`feature/ios-pwa` 分支推不上遠端）
+
+push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH 金鑰未在 GitHub 註冊）。
+**二擇一（約 3 分鐘）**：
+
+| 方式 | 步驟 |
+|---|---|
+| **A. SSH（建議，一次設定長期可用）** | ①複製本機公鑰：終端機執行 `pbcopy < ~/.ssh/id_ed25519.pub` ②GitHub 網頁 → Settings → SSH and GPG keys → New SSH key → 貼上 ③回報我，我把遠端改為 SSH 並推送 |
+| B. HTTPS Token | ①GitHub → Settings → Developer settings → Personal access tokens → 產生新 token（勾 `repo`）②回報我，我用它更新鑰匙圈後推送 |
+
+> 分支與 2 筆提交**已在本地安全保存**，僅差推上遠端備份／預覽。
