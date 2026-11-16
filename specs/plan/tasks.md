@@ -259,7 +259,13 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | P4.4 | └ `AttachmentStore` 平台中立（去 dart:io、`save()` 改 async、加 `read()`；建構改 `(db, BlobStore, {deviceId})`）＋接線（main override／review_page await／f03·f07 改 async） | 多檔 | `flutter test` 162 綠 | ✅（analyze 0＋162 全綠） |
 | P4.5 | └ Web 入口驗證：compress（純 Dart image 於 Web）→write→read（sha 一致）→delete→read=null | `lib/main_web.dart` | headless Chrome 通過 | ✅（×2 次：`6-blob-roundtrip ok bytes=615`＋`7-blob-delete ok`） |
 | P4.6 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
-| P5 | 雲端同步 Web 流程：Google Drive OAuth（GIS）＋`googleapis` 於 Web 的檔案讀寫 | `lib/cloud/` | 雙裝置互通（web↔macOS） | ⬜ |
+| P5 | 雲端同步 Web 流程：Google Drive OAuth（GIS）＋Drive REST 於 Web | `lib/platform/cloud/`＋auth | 雙裝置互通（web↔macOS） | 🔄 程式完成；E2E 待憑證 |
+| P5.1 | └ 現況調查：雲端層已是乾淨 seam（`DriveApi` 介面＝「上線前換實作」設計）；耦合點僅 `SyncCoordinator._pushBlobs`（dart:io File） | — | 邊界清楚 | ✅ |
+| P5.2 | └ Web OAuth：GIS token client（JS interop，web 專用檔 `google_oauth_web.dart`）＋`GisBearerClient`（AuthorizedClient：Bearer 附授權／靜默續取／401 失效） | `lib/platform/auth/` | 編譯＋smoke | ✅（E2E 待憑證） |
+| P5.3 | └ Drive REST v3 直呼 `GoogleApisDriveApi`（純 `http`；resumable 上傳無 5MB 上限；**不引 googleapis**——seam 初衷）＋**6 個 seam 測試**（fake client 驗請求形狀/解析/404/403） | `lib/platform/cloud/drive/` | analyze＋test | ✅（168 綠） |
+| P5.4 | └ `SyncCoordinator` 附件源改 `BlobStore`（native=檔案、web=IndexedDB）；f07/f09/main 接線 | 多檔 | 162+6 綠 | ✅ |
+| P5.5 | └ 端到端（web↔Drive）：**待 PM 憑證**——Web OAuth client id＋`http://localhost` origin（開發）／正式網址 origin（部署後） | pm-actions §14 | 真實 token 往返 | ⏳ 待 PM |
+| P5.6 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
 | P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨（UI 隱藏或替代） | presentation | 走查清單 | ⬜ |
 | P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |
 | P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ⬜ |

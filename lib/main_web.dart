@@ -10,6 +10,9 @@ import 'application/first_run_bootstrap.dart';
 import 'application/scan/attachment_store.dart';
 import 'application/scan/blob_store_factory.dart';
 import 'data/sqlite/app_database.dart';
+import 'platform/auth/google_oauth_web.dart';
+import 'platform/cloud/drive/google_drive_adapter.dart';
+import 'platform/cloud/drive/google_apis_drive_api.dart';
 
 /// **Web（PWA）入口**（P3.5；PM 2026-11-16 決策 A：採用 PWA）。
 ///
@@ -23,6 +26,8 @@ import 'data/sqlite/app_database.dart';
 ///
 /// 建置：`flutter build web --release -t lib/main_web.dart`
 /// （正式 App UI 接線屬 P6/P8——本入口先驗證資料層全通。）
+const String _kWebClientId = String.fromEnvironment('GOOGLE_OAUTH_WEB_CLIENT_ID');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final log = <String>[];
@@ -97,6 +102,22 @@ Future<void> main() async {
     final gone = await blobs.read(digest);
     step('7-blob-delete ${gone == null ? 'ok' : 'STILL-THERE'}');
     if (gone != null) ok = false;
+
+    // ── P5：雲端層 smoke（GIS 載入＋授權狀態；無 client id＝未設定非失敗）──
+    if (_kWebClientId.isEmpty) {
+      step('8-cloud skipped(需 GOOGLE_OAUTH_WEB_CLIENT_ID——pm-actions §1.1)');
+    } else {
+      try {
+        await loadGoogleIdentityServices();
+        final cloud = GoogleDriveAdapter(
+            GoogleApisDriveApi(GisBearerClient(_kWebClientId)));
+        final authed = await cloud.isConfigured();
+        step('8-cloud gis-ready authorized=$authed');
+      } catch (e) {
+        step('8-cloud FAIL $e');
+        ok = false;
+      }
+    }
 
     step(ok ? 'RESULT:OK' : 'RESULT:FAIL(see steps)');
   } catch (e) {

@@ -347,7 +347,7 @@ Future<void> _ensureApp(_World w) async {
     cloudAdapterProvider.overrideWithValue(w.scopedCloud),
     oauthProvider.overrideWithValue(() async => w.oauthEmail),
     syncCoordinatorProvider.overrideWithValue(
-      SyncCoordinator(db, w.scopedCloud, deviceId: 'd-A', blobsDir: null,
+      SyncCoordinator(db, w.scopedCloud, deviceId: 'd-A', blobs: null,
           onConflictEvent: (_) {
         w.container?.read(syncEventsProvider.notifier).refresh();
       }),

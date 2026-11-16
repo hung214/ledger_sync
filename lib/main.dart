@@ -59,7 +59,7 @@ Future<void> main() async {
         cloudAdapterProvider.overrideWithValue(cloud),
         oauthProvider.overrideWithValue(googleOAuthSignIn(cloud)),
         syncCoordinatorProvider.overrideWithValue(SyncCoordinator(db, cloud,
-            deviceId: deviceId, blobsDir: blobsDir)),
+            deviceId: deviceId, blobs: newBlobStore(dirPath: blobsDir.path))),
         // PC／桌面掃描（PM 2026-10-29）：檔案對話框選圖 → 圖片解 QR → 確認頁；
         // 找不到可辨識 QR → 空白確認卡（FR-S2）。行動版仍走相機（ScanPage）。
         importPipelineProvider.overrideWithValue(const ImageQrScanner().pickAndScan),

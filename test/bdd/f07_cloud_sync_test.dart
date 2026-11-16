@@ -56,7 +56,7 @@ class _Device {
     blobsDir = Directory.systemTemp.createTempSync('ledger_blobs_f07');
     coordinator = SyncCoordinator(db, cloud,
         deviceId: id,
-        blobsDir: blobsDir,
+        blobs: newBlobStore(dirPath: blobsDir.path),
         onConflictEvent: (e) {
           // 事件列由 BundleApplier 落 sync_events——此鉤子僅通知（N-8）。
           spy.notify(const NotificationCall(

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/sync/backup_service.dart';
+import 'package:ledger_sync/application/scan/blob_store_factory.dart';
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 import 'package:ledger_sync/application/wipe/wipe_service.dart';
 import 'package:ledger_sync/core/hlc.dart';
@@ -47,7 +48,7 @@ void main() {
     final db = DbFixture.create();
     final cloud = InMemoryCloudAdapter();
     final blobs = Directory.systemTemp.createTempSync('ledger_blobs_f09_regress');
-    final coordinator = SyncCoordinator(db, cloud, deviceId: 'd-A', blobsDir: blobs);
+    final coordinator = SyncCoordinator(db, cloud, deviceId: 'd-A', blobs: newBlobStore(dirPath: blobs.path));
     try {
       DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金', opening: 1000);
       await DbFixture.seedTx(db,
@@ -78,7 +79,7 @@ void main() {
     final db = DbFixture.create();
     final cloud = InMemoryCloudAdapter();
     final blobs = Directory.systemTemp.createTempSync('ledger_blobs_f09_first');
-    final coordinator = SyncCoordinator(db, cloud, deviceId: 'd-new', blobsDir: blobs);
+    final coordinator = SyncCoordinator(db, cloud, deviceId: 'd-new', blobs: newBlobStore(dirPath: blobs.path));
     try {
       await coordinator.sync(); // 無旗標 → vault 建置，不拋
       expect(await cloud.download('vault.json'), isNotNull);
@@ -168,7 +169,7 @@ void _bind(GherkinRunner runner, _World w) {
     w.db.setSetting('sync.account', 'ming@example.com');
     w.blobsDir = Directory.systemTemp.createTempSync('ledger_blobs_f09');
     w.tempDirs.add(w.blobsDir);
-    w.coordinatorA = SyncCoordinator(w.db, w.cloud, deviceId: 'd-A', blobsDir: w.blobsDir);
+    w.coordinatorA = SyncCoordinator(w.db, w.cloud, deviceId: 'd-A', blobs: newBlobStore(dirPath: w.blobsDir.path));
   });
 
   // ── Given（長句型先登記——lazy 前綴碰撞） ─────────────────
@@ -189,7 +190,7 @@ void _bind(GherkinRunner runner, _World w) {
         id: 't-b1', kind: 'expense', amountMinor: 300, accountId: 'a-b', occurredAt: 1700000099999);
     w.blobsDirB = Directory.systemTemp.createTempSync('ledger_blobs_f09_b');
     w.tempDirs.add(w.blobsDirB!);
-    w.coordinatorB = SyncCoordinator(dbB, w.cloud, deviceId: 'd-B', blobsDir: w.blobsDirB);
+    w.coordinatorB = SyncCoordinator(dbB, w.cloud, deviceId: 'd-B', blobs: newBlobStore(dirPath: w.blobsDirB!.path));
     await w.coordinatorB!.sync(); // B 完成一次同步（push ops＋manifest；旗標武裝）
     expect(await w.cloud.list(''), isNotEmpty, reason: '前置：裝置B 應已上傳');
   });

@@ -275,3 +275,18 @@ push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH �
 | B. HTTPS Token | ①GitHub → Settings → Developer settings → Personal access tokens → 產生新 token（勾 `repo`）②回報我，我用它更新鑰匙圈後推送 |
 
 > 分支與 2 筆提交**已在本地安全保存**，僅差推上遠端備份／預覽。
+
+
+## 14. P5 雲端同步（Web）：需要您的 Google 憑證（2026-11-16）
+
+程式層已完成並測試通過（168 測試綠；Drive REST seam 6 測試）。**真實雲端往返（E2E）**需要：
+
+| # | 您要做的事 | 約時 |
+|---|---|---|
+| 1 | Google Cloud Console → APIs & Services → **OAuth 同意畫面**：確認 test user 含您自己 | 2 分 |
+| 2 | **Credentials → Web 用戶端**（類型「Web application」那一組）：Authorized JavaScript origins 加入 `http://localhost:8899`（開發測試用） | 2 分 |
+| 3 | 回報**該組 client id**（格式 `xxxx.apps.googleusercontent.com`；不用 secret） | 1 分 |
+
+拿到後我以 `--dart-define=GOOGLE_OAUTH_WEB_CLIENT_ID=...` 建置 → 用您的瀏覽器登入一次
+→ 完成 web↔Drive 真實往返驗證（vault／opbundle／blob 上傳下載）。
+正式部署時再加正式網址 origin 即可（同一組 client id）。

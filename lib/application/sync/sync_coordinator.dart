@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../../core/hlc.dart';
 import '../../data/sqlite/app_database.dart';
 import '../../platform/cloud/cloud_storage_adapter.dart';
+import '../scan/blob_store.dart';
 import '../wipe/wipe_service.dart' show CloudWipedException;
 import 'bundle_applier.dart';
 import 'backup_service.dart';
@@ -24,7 +24,7 @@ class SyncCoordinator {
     this._db,
     this._cloud, {
     required this.deviceId,
-    this.blobsDir,
+    this.blobs,
     this.onConflictEvent,
   });
 
@@ -32,8 +32,9 @@ class SyncCoordinator {
   final CloudStorageAdapter _cloud;
   final String deviceId;
 
-  /// 本地 blob 目錄（附件上傳源；同 AttachmentStore 目錄——null＝跳過附件段）。
-  final Directory? blobsDir;
+  /// 附件 blob 源（P5 起以 [BlobStore] 平台分流——native=檔案、web=IndexedDB；
+  /// null＝跳過附件段）。
+  final BlobStore? blobs;
 
   /// 衝突通知鉤子（N-8；測試 spy／正式通知）。
   final void Function(SyncEventRow event)? onConflictEvent;
@@ -154,17 +155,17 @@ class SyncCoordinator {
 
   /// 附件 blob 上傳（§5.5.6 內容定址去重＋FR-Y11 Wi-Fi 分流）。
   Future<void> _pushBlobs() async {
-    final dir = blobsDir;
-    if (dir == null || !dir.existsSync()) return;
+    final store = blobs;
+    if (store == null) return;
     final wifiOnly =
         _db.getSetting('backup.attachments_wifi_only') == 'true';
     if (wifiOnly && networkType != 'wifi') return; // 行動網路暫緩
     for (final a in _db.allAttachments()) {
       final path = 'blobs/${a.sha256}';
       if (await _cloud.download(path) != null) continue; // 內容定址去重
-      final file = File('${dir.path}/${a.sha256}');
-      if (file.existsSync()) {
-        await _cloud.upload(path, file.readAsBytesSync());
+      final bytes = await store.read(a.sha256);
+      if (bytes != null) {
+        await _cloud.upload(path, bytes);
       }
     }
   }
