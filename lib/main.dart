@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import 'application/first_run_bootstrap.dart';
 import 'application/providers.dart';
+import 'application/scan/blob_store_factory.dart';
 import 'application/scan/scan_state.dart';
 import 'application/sync/sync_coordinator.dart';
 import 'application/sync/sync_fe_state.dart';
@@ -54,6 +55,7 @@ Future<void> main() async {
       overrides: [
         dbProvider.overrideWithValue(db),
         blobsDirProvider.overrideWithValue(blobsDir),
+        blobStoreProvider.overrideWithValue(newBlobStore(dirPath: blobsDir.path)),
         cloudAdapterProvider.overrideWithValue(cloud),
         oauthProvider.overrideWithValue(googleOAuthSignIn(cloud)),
         syncCoordinatorProvider.overrideWithValue(SyncCoordinator(db, cloud,

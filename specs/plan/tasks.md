@@ -252,7 +252,13 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | P3.5 | └ Web 入口 `lib/main_web.dart`：正式 `AppDatabase.openWeb()`（遷移 v1→v6）＋播種＋CRUD 往返＋結果回報（沿 Spike 模式） | `lib/main_web.dart` | headless Chrome 通過 | ✅（遷移 v6／播種 72 分類／寫入讀回皆通） |
 | P3.6 | └ headless Chrome 實測×2 次（同 profile）：第 2 次讀回第 1 次寫入的資料＝**跨載入持久化** | — | 兩次皆 `RESULT:OK` | ✅（`4-reload-detected`＋`ours=1`＋遷移冪等） |
 | P3.7 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
-| P4 | 附件層 Web adapter：`blobs/` 檔案 → IndexedDB（sha256 內容定址不變） | `lib/data/attachments/` | web 存取附件往返 | ⬜ |
+| P4 | 附件層 Web adapter：`blobs/` 檔案 → IndexedDB（sha256 內容定址不變） | `lib/application/scan/` | web 存取附件往返 | ✅ 2026-11-16 |
+| P4.1 | └ 現況調查：`AttachmentStore.save()` 同步＋`File.writeAsBytesSync`；呼叫點＝scan_state provider／review_page／f03／f07；sync_coordinator／wipe 另有 File 用法（屬 P5/P6 範圍，本批不動） | — | 邊界清楚 | ✅ |
+| P4.2 | └ `BlobStore` 介面（write/read/delete；內容定址語意不變）＋條件匯出工廠 `newBlobStore({dirPath})`（stub 型別正確——P3.3 教訓） | `lib/application/scan/blob_store*.dart` | analyze 通過 | ✅ |
+| P4.3 | └ native=`FileBlobStore`（行為同 v0.4.x）；web=`IdbBlobStore`（IndexedDB key=sha256） | 同上 | 各自編譯 | ✅ |
+| P4.4 | └ `AttachmentStore` 平台中立（去 dart:io、`save()` 改 async、加 `read()`；建構改 `(db, BlobStore, {deviceId})`）＋接線（main override／review_page await／f03·f07 改 async） | 多檔 | `flutter test` 162 綠 | ✅（analyze 0＋162 全綠） |
+| P4.5 | └ Web 入口驗證：compress（純 Dart image 於 Web）→write→read（sha 一致）→delete→read=null | `lib/main_web.dart` | headless Chrome 通過 | ✅（×2 次：`6-blob-roundtrip ok bytes=615`＋`7-blob-delete ok`） |
+| P4.6 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
 | P5 | 雲端同步 Web 流程：Google Drive OAuth（GIS）＋`googleapis` 於 Web 的檔案讀寫 | `lib/cloud/` | 雙裝置互通（web↔macOS） | ⬜ |
 | P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨（UI 隱藏或替代） | presentation | 走查清單 | ⬜ |
 | P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |

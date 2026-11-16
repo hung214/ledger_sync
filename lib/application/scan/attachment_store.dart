@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -9,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/clock.dart';
 import '../../core/hlc.dart';
 import '../../data/sqlite/app_database.dart';
+import 'blob_store.dart';
 
 /// 附件儲存服務（SDD §5.4 附件儲存——FR-S4）：
 /// 原圖縮至最長邊 1600px → JPEG q70 → sha256 → 存 `blobs/{sha256}` →
@@ -17,13 +17,18 @@ import '../../data/sqlite/app_database.dart';
 ///
 /// 純 Dart `image` 套件壓縮：**跨平台位元組一致** → 同張照片各裝置壓縮後
 /// sha256 相同 → 雲端 blobs/ 內容定址去重成立（SDD §5.5.6；techstack v0.3.7）。
+///
+/// **平台中立**（P4 附件層 Web adapter；PM 2026-11-16 決策 A）：落盤經
+/// [BlobStore] 抽象（native=檔案系統；web=IndexedDB），DB 邏輯零改動。
+/// `save()` 於 P4 起為 **async**（web 無同步檔案 I/O）。
 class AttachmentStore {
-  AttachmentStore(this._db, this._blobsDir, {this.deviceId = 'device-local'});
+  /// [_blobs]＝平台分流之 BlobStore（native=檔案系統；web=IndexedDB）。
+  AttachmentStore(this._db, this._blobs, {this.deviceId = 'device-local'});
 
   final AppDatabase _db;
 
-  /// blobs 目錄（app 支援目錄下；測試注入暫存目錄）。
-  final Directory _blobsDir;
+  /// Blob 儲存（平台分流；測試注入暫存目錄之 FileBlobStore）。
+  final BlobStore _blobs;
 
   /// HLC 裝置 id（M4 本地單機；F07 多裝置時由裝置註冊提供）。
   final String deviceId;
@@ -34,18 +39,20 @@ class AttachmentStore {
   /// JPEG 品質（SDD §5.4）。
   static const int jpegQuality = 70;
 
+  /// 讀取附件內容（呈現／同步用；不存在回 null）。
+  Future<Uint8List?> read(String sha256) => _blobs.read(sha256);
+
   /// 儲存附件：壓縮→定址→落盤→DB 列（含 oplog，同一 DB transaction）。回傳落地資訊。
-  StoredAttachment save({
+  Future<StoredAttachment> save({
     required List<int> imageBytes,
     required String transactionId,
     String? mime,
-  }) {
+  }) async {
     final jpeg = compress(imageBytes);
     final digest = sha256.convert(jpeg).toString();
 
     // 落盤（冪等：內容定址——同名必同內容，重複儲存為覆寫 no-op）。
-    if (!_blobsDir.existsSync()) _blobsDir.createSync(recursive: true);
-    File('${_blobsDir.path}/$digest').writeAsBytesSync(jpeg);
+    await _blobs.write(digest, jpeg);
 
     // attachments 列＋oplog（attachments 屬 sync_entity；SDD §5.1 儲存事務）。
     final nowMs = Clock.now().millisecondsSinceEpoch;

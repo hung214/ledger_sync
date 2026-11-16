@@ -1,9 +1,14 @@
 import 'dart:js_interop';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:web/web.dart' as web;
 
 import 'application/first_run_bootstrap.dart';
+import 'application/scan/attachment_store.dart';
+import 'application/scan/blob_store_factory.dart';
 import 'data/sqlite/app_database.dart';
 
 /// **Web（PWA）入口**（P3.5；PM 2026-11-16 決策 A：採用 PWA）。
@@ -30,6 +35,8 @@ Future<void> main() async {
       web.window.fetch('/spike-result'.toJS, req).toDart.ignore();
     } catch (_) {}
   }
+
+  var ok = true;
 
   try {
     step('1-open-web-db');
@@ -74,12 +81,36 @@ Future<void> main() async {
     final ours = accounts.where((a) => a.id == 'a-web-p3').length;
     db.close();
     step('5-verify accounts=${accounts.length} ours=$ours');
-    step('RESULT:OK');
+    if (ours != 1) ok = false;
+
+    // ── P4：附件 BlobStore（web=IndexedDB）寫入→讀回→刪除往返 ──
+    final blobs = newBlobStore(); // web 分支 → IdbBlobStore
+    final jpeg = AttachmentStore.compress(_synthJpeg());
+    final digest = sha256.convert(jpeg).toString();
+    await blobs.write(digest, jpeg);
+    final back = await blobs.read(digest);
+    final same = back != null && sha256.convert(back).toString() == digest;
+    step('6-blob-roundtrip ${same ? 'ok' : 'MISMATCH'} bytes=${back?.length}');
+    if (!same) ok = false;
+
+    await blobs.delete(digest);
+    final gone = await blobs.read(digest);
+    step('7-blob-delete ${gone == null ? 'ok' : 'STILL-THERE'}');
+    if (gone != null) ok = false;
+
+    step(ok ? 'RESULT:OK' : 'RESULT:FAIL(see steps)');
   } catch (e) {
     step('RESULT:FAIL $e');
   }
 
   runApp(_WebProbeApp(log: log));
+}
+
+/// 合成 8x8 純色 JPEG（純 Dart image 套件；P4.5 往返用——不依賴檔案）。
+Uint8List _synthJpeg() {
+  final image = img.Image(width: 8, height: 8);
+  img.fill(image, color: img.ColorRgb8(200, 30, 30));
+  return img.encodeJpg(image, quality: 70);
 }
 
 class _WebProbeApp extends StatelessWidget {

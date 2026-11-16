@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/transaction_draft.dart';
 import '../providers.dart';
 import 'attachment_store.dart';
+import 'blob_store.dart';
 
 /// 掃描管線狀態（F03-FE；SDD §5.4 ReceiptPipeline 呈現面）。
 ///
@@ -90,13 +91,21 @@ class AttachmentTxIdsNotifier extends Notifier<Set<String>> {
 
 /// blobs 目錄（附件落盤位置；生產由 main() 以應用支援目錄 override——
 /// 同 dbProvider 注入約定；測試注入暫存目錄）。
+/// ⚠ native 概念（dart:io Directory）——web（PWA）不用本 provider，
+/// 以 [blobStoreProvider] 注入 IndexedDB 實作。
 final blobsDirProvider = Provider<Directory>((ref) {
   throw UnimplementedError('blobsDirProvider 須於 main() 或測試 override 注入');
 });
 
+/// 附件 Blob 儲存（P4 平台分流）：native＝main() 以
+/// `newBlobStore(dirPath: blobs 目錄)` override；web＝`newBlobStore()`（IndexedDB）。
+final blobStoreProvider = Provider<BlobStore>((ref) {
+  throw UnimplementedError('blobStoreProvider 須於 main() 或測試 override 注入');
+});
+
 /// 附件儲存服務（FR-S4；BE S5 已驗壓縮/定址契約——FE 為接線）。
 final attachmentStoreProvider = Provider(
-    (ref) => AttachmentStore(ref.watch(dbProvider), ref.watch(blobsDirProvider)));
+    (ref) => AttachmentStore(ref.watch(dbProvider), ref.watch(blobStoreProvider)));
 
 /// 相簿/檔案匯入管線 seam（FR-S6 桌面路徑）：生產＝檔案選擇器＋OCR 引擎
 /// （平台層）；測試 override 回放 T-H6 fixture。回 null＝使用者取消。

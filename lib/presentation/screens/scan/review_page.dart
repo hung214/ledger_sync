@@ -91,7 +91,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final photo = widget.items[_index].photoBytes;
     if (photo != null) {
       // 附件落地（FR-S4；BE S5 契約：壓縮→sha256→blobs→attachments＋oplog）。
-      ref.read(attachmentStoreProvider).save(
+      // P4 起為 async——await 確保附件列＋blob 皆落地後再刷新（web 為 IndexedDB）。
+      await ref.read(attachmentStoreProvider).save(
             imageBytes: photo,
             transactionId: result.transactionId,
           );

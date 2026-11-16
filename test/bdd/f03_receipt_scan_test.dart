@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:ledger_sync/application/quick_entry/save_transaction_use_case.dart';
 import 'package:ledger_sync/application/scan/attachment_store.dart';
+import 'package:ledger_sync/application/scan/blob_store_factory.dart';
 import 'package:ledger_sync/core/clock.dart';
 import 'package:ledger_sync/data/sqlite/app_database.dart';
 import 'package:ledger_sync/domain/entities/transaction_draft.dart';
@@ -157,7 +158,7 @@ void _bind(GherkinRunner runner, _World w) {
 
   // S5：附件儲存流程＝確認卡儲存（SDD §5.4：SaveTransactionUseCase source=scan
   // ＋附件存檔——交易與附件關聯於此建立）。
-  runner.on(r'執行附件儲存流程$', (p) {
+  runner.on(r'執行附件儲存流程$', (p) async {
     final saved = w.save.execute(
       accountId: w.accounts['現金']!,
       amountMinor: 195,
@@ -165,8 +166,8 @@ void _bind(GherkinRunner runner, _World w) {
       source: 'scan',
     );
     w.lastTxId = saved.transactionId;
-    final store = AttachmentStore(w.db, w.blobsDir);
-    w.stored = store.save(
+    final store = AttachmentStore(w.db, newBlobStore(dirPath: w.blobsDir.path));
+    w.stored = await store.save(
       imageBytes: w.originalBytes,
       transactionId: saved.transactionId,
       mime: 'image/jpeg',
@@ -249,10 +250,12 @@ void _bind(GherkinRunner runner, _World w) {
   });
 
   // ── Then：附件（FR-S4） ──────────────────────────────────
-  runner.on(r'附件縮至最長邊 1600px、JPEG q70$', (p) {
+  runner.on(r'附件縮至最長邊 1600px、JPEG q70$', (p) async {
     final stored = w.stored;
     expect(stored, isNotNull);
-    final bytes = File('${w.blobsDir.path}/${stored!.sha256}').readAsBytesSync();
+    // P4：經 BlobStore 讀回（native=檔案；語意同）。JPEG 魔數＋尺寸驗證不變。
+    final store = AttachmentStore(w.db, newBlobStore(dirPath: w.blobsDir.path));
+    final bytes = (await store.read(stored!.sha256))!;
     // JPEG 魔數（SOI FFD8）＋最長邊 1600（image 套件解碼驗尺寸）。
     expect(bytes[0], 0xFF);
     expect(bytes[1], 0xD8, reason: 'JPEG SOI');
@@ -263,14 +266,14 @@ void _bind(GherkinRunner runner, _World w) {
     expect(AttachmentStore.jpegQuality, 70);
   });
 
-  runner.on(r'檔名 = blobs/{name}（內容定址）$', (p) {
+  runner.on(r'檔名 = blobs/{name}（內容定址）$', (p) async {
     final stored = w.stored;
     expect(stored, isNotNull);
-    final file = File('${w.blobsDir.path}/${stored!.sha256}');
-    expect(file.existsSync(), isTrue, reason: 'blob 檔以 sha256 為名（SDD §5.4）');
-    final bytes = file.readAsBytesSync();
-    expect(sha256.convert(bytes).toString(), stored.sha256,
-        reason: '內容定址：檔名=壓縮後內容之 sha256');
+    final store = AttachmentStore(w.db, newBlobStore(dirPath: w.blobsDir.path));
+    final bytes = await store.read(stored!.sha256);
+    expect(bytes, isNotNull, reason: 'blob 以 sha256 為鍵（SDD §5.4）');
+    expect(sha256.convert(bytes!).toString(), stored.sha256,
+        reason: '內容定址：鍵=壓縮後內容之 sha256');
   });
 
   runner.on(r'attachments 資料列建立且關聯交易$', (p) {

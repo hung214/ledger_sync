@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:ledger_sync/application/quick_entry/save_transaction_use_case.dart';
 import 'package:ledger_sync/application/scan/attachment_store.dart';
+import 'package:ledger_sync/application/scan/blob_store_factory.dart';
 import 'package:ledger_sync/application/sync/auto_sync_service.dart';
 import 'package:ledger_sync/application/sync/backup_service.dart';
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
@@ -62,7 +63,7 @@ class _Device {
               id: 8, title: '衝突', body: '雲端變更已採用較新版本'));
         });
     save = SaveTransactionUseCase(db, deviceId: id, afterSave: () {});
-    store = AttachmentStore(db, blobsDir);
+    store = AttachmentStore(db, newBlobStore(dirPath: blobsDir.path));
   }
 
   /// 本地 blob 目錄（AttachmentStore 與 SyncCoordinator 共用）。
@@ -265,7 +266,7 @@ void _bind(GherkinRunner runner, _World w) {
       occurredAt: Clock.now(),
       source: 'scan',
     );
-    d.store.save(imageBytes: _smallJpeg(), transactionId: result.transactionId);
+    await d.store.save(imageBytes: _smallJpeg(), transactionId: result.transactionId);
     d.coordinator.networkType = _normalizeNetwork(w.networkType);
     await d.coordinator.sync();
   });
