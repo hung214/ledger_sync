@@ -157,6 +157,18 @@
 - **預算與收入目標**（週期、預警分級、預扣、達標率）— F05。
 - **報表與搜尋**（占比、月趨勢、複合篩選、CSV 匯出）— F10。
 
+### 新增 Added（PWA 批——分支 `feature/ios-pwa`；2026-11-16）
+
+- **Web（PWA）平台**（PM 決策 A：iOS 免付費發佈）：**正式 App 可在瀏覽器執行**——
+  本地 DB＝`sqlite3.wasm`＋IndexedDB（**同一套遷移 v1→v6**；實測跨重新載入持久化）、
+  附件＝IndexedDB（內容定址不變）、雲端＝GIS OAuth＋Drive REST（resumable）。
+- **安裝方式**：開網址「加到主畫面」即 App（**免簽章、永久有效、更新不用重裝**；
+  GitHub Pages `gh-pages` 已部署、離線快取 offline-first）。
+- **平台分流基礎建設**：`BlobStore`（write/read/delete/deleteAll）、`AppDatabase.openWeb()`、
+  `SyncCoordinator`/`WipeService` 附件源統一 BlobStore、發票 zlib 改純 Dart（跨平台位元組一致）。
+- 測試 +6（Drive REST seam）→ **168 全綠**；headless Chrome 驗證（雙視窗 0 異常）。
+- 技術債登記：techstack v0.3.11（web/http/archive）；SDD §13／BDD §2.1 Web 對照。
+
 ### 修正 Fixed
 
 - 空帳本開啟快記灰屏 — `DBG-003`。

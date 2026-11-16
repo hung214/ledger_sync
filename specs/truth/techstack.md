@@ -57,7 +57,7 @@
 | platform | **zxing2** | 0.2.4 | **桌面掃描解碼**：純 Dart QR 解碼（無原生相依、跨平台）——與既有 `image` 搭配（影像→像素→QR）。多碼以「整張＋左右半＋上下半＋四象限」區域掃描取得（雙 QR 發票）。**PM 簽核 2026-10-29** | FR-S6／SDD §5.4 |
 | domain | archive | 4.7.1 | **發票 QR 明細 raw deflate**（P6 Web）：純 Dart Deflate/Inflate 核心（跨平台位元組一致）取代 dart:io zlib——`image` 之傳遞依賴晉升直接（v4 公開 API 未暴露 raw → 取 src 核心，註解已載明）。**PM 簽核待補** | §6.0b P6 |
 | platform | http | 1.6.0 | **Drive REST 直呼**（P5 Web 同步；`GoogleApisDriveApi`——純 Dart → Web 可編譯；resumable 上傳無 5MB 上限）。不引 googleapis（僅需 appDataFolder 最小面——seam 設計初衷） | §6.0b P5.3 |
-| platform | web | 1.1.2 | **PWA Spike 用**（Dart 官方）：Spike 入口以 `document.title`/`fetch` 回報驗證結果。Spike 結案若不採 PWA 即移除；採 PWA 則為正式 Web 平台依賴 | §6 PWA Spike |
+| platform | web | 1.1.2 | **Web 平台（PWA 正式化）**（Dart 官方）：`main_web_app.dart` 啟動報告（document.title/fetch）；PM 已決策採用（2026-11-16 A 案） | §6.0b P6 |
 | data | sqlite3 | 2.9.4 | **T-S1 過渡**：本地 DB 直連（lib/data/sqlite/，schema 對齊 data-spec.dbml） | SDD §4.2 |
 | data | drift / drift_dev | 2.35.2（⚠ TR-7 暫緩：與 Dart 3.13.5 工具鏈不相容，M1 前於 CI 重試回歸；屆時 sqlite 直連層 API 不變僅換底層） | SQLite ORM + Reactive Streams + migration（D2） | SDD §4.2 |
 | core | flutter_secure_storage | ⚠ TR-8 暫緩（移出 pubspec 至 M2：Windows 建置需 VS C++ ATL 元件 atlstr.h；M2 前安裝元件或改 DPAPI 直呼） | DB 金鑰/OAuth token | SDD §7.1 |

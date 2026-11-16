@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v0.3（與 SPEC v0.3 / SDD v0.3 對應） |
+| 文件版本 | v0.4（§2.1 補 **Web（PWA）** 平台對照；PM 2026-11-16 決策 A） |
 | 日期 | 2026-10-18 |
 | 語法 | 標準 Gherkin **英文關鍵字**（Feature / Background / Scenario / Scenario Outline / Examples / Given / When / Then / And / But）；情境敘述為繁體中文，可直接被 Cucumber / flutter_gherkin 等工具鏈解析 |
 | 用途 | ①自動化驗收測試（step definitions）②QA 驗收走查清單 ③需求—測試追溯 |
@@ -862,6 +862,8 @@ Feature: 設定—帳戶管理、分類管理與外觀
 | 設定／同步 | `07-settings-sync.html` | 同 | — |
 
 切換依據：視窗寬度 **≥900px ＝ 桌面**（`MediaQuery`），單一程式碼庫（RWD）。
+
+**Web（PWA）平臺（2026-11-16 新增）**：同一寬度式佈局（寬視窗=桌面殼、窄=行動殼，零改動）；**掃描一律「匯入圖片」**（瀏覽器無行動相機外掛路徑——`cameraAvailableProvider` 恆 false）；通知＝應內呈現（SnackBar/Dialog）；App 鎖＝僅 PIN；DB/附件/同步走瀏覽器儲存（IndexedDB——見 SDD §13）。安裝＝開網址「加到主畫面」（免簽章、離線可啟動）。
 
 ---
 

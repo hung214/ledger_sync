@@ -2,8 +2,8 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v0.3（草案） |
-| 日期 | 2026-10-18 |
+| 文件版本 | v0.4（**§13 Web 平台（PWA）**新增；PM 2026-11-16 決策 A） |
+| 日期 | 2026-11-16 |
 | 對應需求文件 | `SPEC.md`（功能需求 ID 以 FR-xx 對應） |
 | 技術決策 | Flutter 跨平台 / 台灣發票全套（QR+OCR）/ 雲端檔案同步（帳號授權式，無自建後端、無同步密碼） |
 
@@ -748,3 +748,27 @@ abstract interface class CloudStorageAdapter {
 3. **AI 自動分類**：本機 on-device 模型（依商家→分類歷史），仍維持無雲端原則。
 4. **Web 版**：Flutter Web + WASM SQLite（同步協議相容，僅需瀏覽器版 Drive OAuth）。
 5. **多帳本 / 匯入銀行 CSV / 報表自訂**。
+
+---
+
+## 13. Web 平台（PWA；PM 2026-11-16 決策 A：iOS 免付費發佈）
+
+**定位**：第 5 個平台目標（Android／iOS native／macOS／Windows／Web-PWA），**同一程式碼庫**——
+領域層純 Dart 不變；平台差異收在**三個 adapter**（條件匯出；分析期恆選 base 檔，編譯期 CFE 分流——
+見 `lib/data/sqlite/db_opener_stub.dart` 註解）。
+
+| 資源 | native | Web（PWA） |
+|---|---|---|
+| 本地 DB | sqlite3 FFI＋檔案（`AppDatabase.open(path)`） | **sqlite3.wasm**（與套件同版本）＋IndexedDB VFS（`AppDatabase.openWeb()`；遷移 v1→v6 同一套；實測跨重新載入持久化） |
+| 附件 blobs | `blobs/{sha256}` 檔案 | IndexedDB（key=sha256；`BlobStore`：write/read/delete/deleteAll） |
+| 雲端同步 | loopback OAuth（憑證未就緒） | **GIS token client**（`GisBearerClient`）＋`GoogleApisDriveApi`（Drive REST v3 純 `http` 直呼；resumable 上傳無 5MB 上限） |
+| 掃描（QR） | file_selector 檔案 | file_selector web（`cameraAvailableProvider` 加 `!kIsWeb`——Web 一律檔案匯入） |
+| 發票 QR zlib | （原 dart:io） | archive 純 Dart 核心（**raw deflate 跨平台位元組一致**） |
+| 通知／App 鎖 | flutter_local_notifications（M2/M3）／local_auth（TR-8） | 應內呈現／**僅 PIN**（瀏覽器無生物辨識 API） |
+
+**佈局**：寬度式（≥900px 桌面殼）——Web 自動適配（寬視窗=三欄、窄=行動殼），零改動（§8.1 同）。
+**入口**：`lib/main_web.dart`（資料層驗證）／`lib/main_web_app.dart`（正式 AppShell；同一 provider 注入約定）。
+**部署**：GitHub Pages（`gh-pages` 分支；`--base-href=/ledger_sync/ --pwa-strategy=offline-first`；
+HTTPS ✓ 離線快取 ✓；手機「加到主畫面」即安裝）。**OAuth origin**：開發 `http://localhost`、
+正式 `https://hung214.github.io`（登記於 Google Web 用戶端——pm-actions §14）。
+**驗證**：headless Chrome 逐步回報（`/spike-result` 同源 POST）——168 測試綠＋雙視窗 0 異常。
