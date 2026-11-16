@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
+import '../../core/clock.dart';
 import '../../core/hlc.dart';
 import '../../data/sqlite/app_database.dart';
 import 'csv_import_parser.dart';
@@ -187,6 +188,7 @@ class ImportService {
     // 落地列＝stats.rows（已去重：檔內＋對當下 DB——冪等保證）。
     var inserted = 0;
     var transfers = 0;
+    final insertedIds = <String>[];
 
     for (final row in stats.rows) {
       ensureAccount(row.account);
@@ -235,8 +237,10 @@ class ImportService {
         ),
       );
       inserted++;
+      insertedIds.add(tx.id);
       if (row.kind == ImportKind.transfer) transfers++;
     }
+    if (insertedIds.isNotEmpty) recordBatch(insertedIds); // I5：可回溯
 
     return ImportReport(
       inserted: inserted,
@@ -274,4 +278,56 @@ class ImportService {
   }
 
   static String _norm(String s) => s.trim().toLowerCase();
+
+  // ── I5：批次可回溯（settings 記錄批次 id；取消＝軟刪除＋墓標 oplog——同步安全）──
+
+  static const String _batchKey = 'import.batch.last';
+
+  /// 記錄最近一批匯入的交易 id（apply 後由 UI 呼叫）。
+  void recordBatch(List<String> ids) {
+    _db.setSetting(
+        _batchKey,
+        jsonEncode({
+          'ids': ids,
+          'at': Clock.now().millisecondsSinceEpoch,
+        }));
+  }
+
+  /// 是否有可取消之批次。
+  bool get hasUndoableBatch {
+    final raw = _db.getSetting(_batchKey);
+    if (raw == null) return false;
+    final ids = ((jsonDecode(raw) as Map<String, Object?>)['ids'] as List?) ?? const [];
+    return ids.isNotEmpty;
+  }
+
+  /// **取消本批匯入**：軟刪除該批全部交易＋oplog 墓標（NULL payload；
+  /// SDD §5.5.4——其他裝置 pull 後同步刪除）。回傳取消筆數（冪等：重複呼叫 0）。
+  int undoLastBatch() {
+    final raw = _db.getSetting(_batchKey);
+    if (raw == null) return 0;
+    final ids =
+        ((jsonDecode(raw) as Map<String, Object?>)['ids'] as List?)?.cast<String>() ??
+            const [];
+    if (ids.isEmpty) return 0;
+    final now = Clock.now().millisecondsSinceEpoch;
+    var n = 0;
+    for (final id in ids) {
+      final h = Hlc.now(deviceId).toString();
+      _db.softDeleteTransactionWithOplog(
+        id,
+        OplogRow(
+            entity: 'transactions',
+            entityId: id,
+            hlc: h,
+            payload: null, // 墓標
+            packedSeq: null),
+        deletedAt: now,
+        hlc: h,
+      );
+      n++;
+    }
+    _db.setSetting(_batchKey, jsonEncode({'ids': <String>[], 'undone': true}));
+    return n;
+  }
 }

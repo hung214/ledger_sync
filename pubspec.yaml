@@ -36,6 +36,7 @@ dev_dependencies:
   mocktail: ^1.0.5                # BE 測試 stub（T-H 掛鉤）
   integration_test:
     sdk: flutter
+  file_selector_platform_interface: ^2.7.0
 
 # 工具鏈註記（research TR-7，S0 實測）：drift/build_runner codegen 與 Dart 3.13.5
 # （Flutter 3.47.7）相容性問題——analyzer 7.x 無法序列化 SDK dot-shorthand、

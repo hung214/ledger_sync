@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/providers.dart';
 import '../../../application/sync/backup_service.dart';
 import '../../../application/wipe/wipe_service.dart';
+import 'import_data_page.dart';
 import '../../../application/scan/blob_store.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../application/sync/sync_fe_state.dart';
@@ -185,6 +186,37 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('從其他 App 匯入',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text('把 AndroMoney 等其他 App 匯出的 CSV 帶進本帳本'
+                    '（先預覽、匯入前自動備份、可取消本批）。'),
+                const SizedBox(height: 12),
+                FilledButton.tonal(
+                  key: const Key('import-entry'),
+                  onPressed: () async {
+                    await Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const ImportDataPage()));
+                    if (mounted) {
+                      // 匯入／取消後衍生快取一律失效（PM 2026-10-25 慣例）。
+                      ref.invalidate(ledgerProvider);
+                      ref.invalidate(expenseCategoriesProvider);
+                      ref.invalidate(incomeCategoriesProvider);
+                      ref.invalidate(activeAccountsProvider);
+                    }
+                  },
+                  child: const Text('選擇 CSV 檔案'),
+                ),
+              ],
+            ),
+          ),
+        ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
