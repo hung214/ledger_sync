@@ -25,6 +25,7 @@ dependencies:
   crypto: ^3.0.7
   file_selector: ^1.1.0
   zxing2: ^0.2.4
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:
@@ -47,3 +48,6 @@ flutter:
   # File 相對路徑失效；以 rootBundle 資產載入，tool/sync_features.ps1 同步後入包）。
   assets:
     - integration_test/features/
+    # PWA Spike（PM 2026-11-16）：sqlite3 wasm（與 sqlite3 套件同版本；
+    # Web 執行時另由 web/sqlite3.wasm 以 URL 載入，此處供測試以 asset 讀取）。
+    - web/sqlite3.wasm

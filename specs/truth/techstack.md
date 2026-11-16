@@ -2,8 +2,8 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v0.3.8（**桌面掃描定案：file_selector＋zxing2**——PC 無相機 → 檔案匯入＋**純 Dart 圖片 QR 解碼**；PM 簽核 2026-10-29） |
-| 日期 | 2026-10-29 |
+| 文件版本 | v0.3.9（**PWA 可行性 Spike**（PM 決策 2026-11-16）：新增 `web` 1.1.2＋`web/sqlite3.wasm` 2.9.4；僅供 Spike 入口 `lib/main_web_spike.dart`，未影響既有四平台） |
+| 日期 | 2026-11-16 |
 | 性質 | **原始碼技術棧的唯一事實來源**。SDD §3 為設計說明；本檔記錄「將寫進程式碼」的定案（含版本）。兩者不一致時以本檔為準並回修 SDD |
 | 變更規則 | 僅能經 PR 變更；新增/升級依賴需通過授權審查（research.md D14）+ 全測試綠燈；每次變更記錄於 §8 變更記錄 |
 | 來源 | 定案依據見 `specs/plan/research.md` §3（D1~D14）；未定案項（🔬）以「暫定」標示，Spike 後回填 |
@@ -55,6 +55,7 @@
 | domain | crypto | 3.0.7 | sha256 內容定址（blobs/{sha256} 檔名；附件中繼資 attachments.sha256 同源）——Dart 官方維護、零傳遞依賴。PM 簽核 2026-10-21 | SDD §5.5.6 |
 | platform | **file_selector** | 1.1.0 | **桌面掃描匯入**：使用者選取發票／收據圖片（`openFile`＋型別過濾）。沙箱需 `com.apple.security.files.user-selected.read-only`。**PM 簽核 2026-10-29** | FR-S6／SDD §5.4 |
 | platform | **zxing2** | 0.2.4 | **桌面掃描解碼**：純 Dart QR 解碼（無原生相依、跨平台）——與既有 `image` 搭配（影像→像素→QR）。多碼以「整張＋左右半＋上下半＋四象限」區域掃描取得（雙 QR 發票）。**PM 簽核 2026-10-29** | FR-S6／SDD §5.4 |
+| platform | web | 1.1.2 | **PWA Spike 用**（Dart 官方）：Spike 入口以 `document.title`/`fetch` 回報驗證結果。Spike 結案若不採 PWA 即移除；採 PWA 則為正式 Web 平台依賴 | §6 PWA Spike |
 | data | sqlite3 | 2.9.4 | **T-S1 過渡**：本地 DB 直連（lib/data/sqlite/，schema 對齊 data-spec.dbml） | SDD §4.2 |
 | data | drift / drift_dev | 2.35.2（⚠ TR-7 暫緩：與 Dart 3.13.5 工具鏈不相容，M1 前於 CI 重試回歸；屆時 sqlite 直連層 API 不變僅換底層） | SQLite ORM + Reactive Streams + migration（D2） | SDD §4.2 |
 | core | flutter_secure_storage | ⚠ TR-8 暫緩（移出 pubspec 至 M2：Windows 建置需 VS C++ ATL 元件 atlstr.h；M2 前安裝元件或改 DPAPI 直呼） | DB 金鑰/OAuth token | SDD §7.1 |
@@ -140,6 +141,7 @@
 | 5 | FTS5 中文 bigram 細節 | SP-1 | §2.3 |
 | 6 | Argon2：cryptography 純 Dart vs FFI libargon2 | SP-4 附測 | §2.2 |
 | 7 | SQLCipher 四平台整合（sqlcipher_flutter_libs 0.7.0+eol 已標 EOL） | SP-1（強化） | §2.3 |
+| 8 | **PWA（iOS 免付費發佈）**：sqlite3.wasm＋IndexedDB 在 Web 可行性——**Spike 已過（2026-11-16，真實 Chrome 實測）**：wasm 載入→`SchemaV1` 全表建立→寫入→重開資料仍在（`RESULT:OK`，rows=1/tables=7）。完整化待估：附件改 IndexedDB、`path_provider`/本機通知無 Web、Drive OAuth 流程不同；採用與否待 PM 決策 | SP-8（PWA Spike，入口 `lib/main_web_spike.dart`） | §2.2（web） |
 
 ## 7. 版本升級流程
 1. 於分支升級依賴 → 全測試 + 四平台 build → acceptance 抽測 P0 情境。
@@ -158,3 +160,5 @@
 | 2026-10-19 | v0.3.5 | path_provider 2.1.6 定案（PM 簽核）：production main() 以文件目錄開檔案 DB；M1 過渡期 DB 為明文 SQLite（加密屬 SP-1） | — |
 | 2026-10-19 | v0.3.6 | 發佈格式定案（PM）：產物檔名含版本號；Windows 改 Inno Setup per-user exe 安裝檔（撤回 MSIX——自簽側載需管理員匯入憑證，摩擦過大；Store 屬 M7）；macOS 改 DMG；iOS 未簽名 IPA（Apple Developer 簽名屬 M7）；軟體內版本以 --dart-define=APP_VERSION 注入（視窗標題＋總覽頁尾，零依賴） | — |
 | 2026-10-21 | v0.3.7 | 附件壓縮定案（PM 簽核 2026-10-21）：新增 image 4.x（縮圖最長邊 1600px＋JPEG q70——純 Dart 跨平台位元組一致，內容定址去重前提）＋crypto 3.0.0（sha256）——F03-BE S5（FR-S4）前置 | feature/F03-receipt-scan |
+| 2026-10-29 | v0.3.8 | 桌面掃描定案（PM 簽核 2026-10-29）：file_selector 1.1.0（檔案匯入）＋zxing2 0.2.4（純 Dart QR 解碼）；PC 無相機 → 檔案匯入路徑 | fix/quick-entry-v3-ledger-display |
+| 2026-11-16 | v0.3.9 | **PWA 可行性 Spike**（PM 決策 2026-11-16，iOS 免付費發佈評估）：新增 `web` 1.1.2＋`web/sqlite3.wasm`（2.9.4，714K，與 sqlite3 套件同版本）；Spike 入口 `lib/main_web_spike.dart`（不影響既有四平台；實測結果見 §6）。若 PM 決定不採 PWA → 移除 web/、wasm、web 依賴 | fix/quick-entry-v3-ledger-display |
