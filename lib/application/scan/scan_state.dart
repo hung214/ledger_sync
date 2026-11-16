@@ -57,14 +57,17 @@ class CameraPermissionNotifier extends Notifier<CameraPermissionState> {
 
 /// 相機可用性（FR-S6：無相機裝置 → 掃描導向相簿/檔案匯入）。
 /// M4：桌面（macOS/Windows）無相機整合＝false；行動＝true。
+/// P8（Web/PWA）：**恆 false**——web 不走行動相機外掛路徑（mobile_scanner；
+/// SP-2b），一律檔案匯入（file_selector web ✓）。
 final cameraAvailableProvider =
     NotifierProvider<CameraAvailableNotifier, bool>(CameraAvailableNotifier.new);
 
 class CameraAvailableNotifier extends Notifier<bool> {
   @override
   bool build() =>
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
 
   void set(bool available) => state = available;
 }

@@ -287,7 +287,11 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | 發票 QR zlib | （原 dart:io zlib） | archive 純 Dart（P6 ✅ 位元組一致） | 單一實作 |
 | 桌面快捷鍵／關閉確認 | ✓ | N/A（瀏覽器分頁；AppLifecycleListener 不觸發，無害） | 無需分流 |
 | P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |
-| P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ⬜ |
+| P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ✅ 2026-11-16 |
+| P8.1 | └ 調查：殼層佈局＝**寬度式**（`width >= 900` 分欄——MediaQuery/LayoutBuilder）→ Web 自動適配（寬視窗=三欄、窄視窗=行動殼），零改動 | `main_shell_page.dart` | 確認 | ✅ |
+| P8.2 | └ Web 分流修正：`cameraAvailableProvider` 加 `!kIsWeb`——Web＋行動 UA 不再誤入相機頁，一律檔案匯入（file_selector web ✓） | `scan_state.dart` | 168 綠 | ✅ |
+| P8.3 | └ headless 雙視窗 smoke：**390×844**（手機直向）／**1600×1000**（桌面寬）皆 `app-started`＋**0 個 Flutter 異常**（stderr 掃描） | — | 兩者通過 | ✅ |
+| P8.4 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
 | P9 | 文件同步：SDD（Web 平台章）／BDD 平台對照／techstack（web 正式化）／CHANGELOG／session | 各文件 | 同步矩陣 §7.2 | ⬜ |
 
 ### 6.1 進行中工作清單（TODOLIST；PM 2026-10-26 統計頁批）
