@@ -71,6 +71,39 @@ void main() {
     expect(find.byType(ScanPage), findsOneWidget, reason: '有相機 → QR 掃描頁');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('手機殼（窄視窗）：**掃描 FAB 可見且開啟匯入頁**（PM 2026-11-16：'
+      '窄窗原本無掃描入口）', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await FirstRunBootstrap.seedIfNeeded(db);
+    tester.view.physicalSize = const Size(390, 844); // 手機直向寬
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
+      cameraAvailableProvider.overrideWith(() => _Cam(false)),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+          theme: buildAppTheme(Brightness.light), home: const MainShellPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('fab-scan')), findsOneWidget,
+        reason: '窄視窗應有掃描 FAB');
+    await tester.ensureVisible(find.byKey(const Key('fab-scan')));
+    await tester.tap(find.byKey(const Key('fab-scan')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ImportPage), findsOneWidget,
+        reason: '無相機（web/桌面）→ 匯入圖片頁');
+    expect(tester.takeException(), isNull);
+  });
 }
 
 /// 相機可用性測試替身。

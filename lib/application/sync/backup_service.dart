@@ -74,6 +74,16 @@ class BackupService {
   }) async {
     final bytes = await _cloud.download(cloudPath);
     if (bytes == null) throw StateError('備份不存在：$cloudPath');
+    await restoreFromBytes(target, bytes, password: password);
+  }
+
+  /// 從**備份檔內容**還原（I5+/本機備份：資料管理「從檔案還原」；
+  /// 與雲端 importInto 同一落地路徑——冪等全量覆蓋＋單一 DB transaction）。
+  Future<void> restoreFromBytes(
+    AppDatabase target,
+    Uint8List bytes, {
+    String? password,
+  }) async {
     final snap = await decode(bytes, password: password);
     final tables = [
       'statement_items', 'refund_links', 'statement_items', 'attachments',

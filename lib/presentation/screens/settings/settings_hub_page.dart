@@ -30,8 +30,8 @@ class SettingsHubPage extends ConsumerWidget {
           ListTile(
             key: const Key('settings-sync'),
             leading: const Icon(Icons.cloud_sync_outlined),
-            title: const Text('雲端同步'),
-            subtitle: const Text('連結 Google Drive、立即同步、衝突檢視'),
+            title: const Text('雲端備份'),
+            subtitle: const Text('備份到 Google Drive、跨裝置同步、衝突檢視'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const SettingsSyncPage())),

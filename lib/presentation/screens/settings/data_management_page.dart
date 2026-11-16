@@ -1,9 +1,17 @@
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/providers.dart';
+import 'package:file_selector/file_selector.dart';
+
+import '../../../core/file_saver.dart';
+
 import '../../../application/sync/backup_service.dart';
+import '../../../platform/cloud/cloud_storage_adapter.dart';
+import '../../../platform/cloud/unconfigured_cloud_adapter.dart';
 import '../../../application/wipe/wipe_service.dart';
 import 'import_data_page.dart';
 import '../../../application/scan/blob_store.dart';
@@ -35,6 +43,114 @@ enum _WipeStep { idle, scope, warning, pin, confirm, oauth, done }
 class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   _WipeStep _step = _WipeStep.idle;
   bool _busy = false;
+  String? _dmMessage;
+
+  /// 備份到檔案（I5+/本機備份；不需要雲端——macOS=存檔對話框、web=下載）。
+  Future<void> _backupToFile() async {
+    setState(() {
+      _busy = true;
+      _dmMessage = null;
+    });
+    try {
+      final db = ref.read(dbProvider);
+      final svc =
+          BackupService(db, _cloudOrUnconfigured(), deviceId: _deviceIdOf());
+      final bytes = Uint8List.fromList(await svc.encode(svc.snapshot()));
+      final now = DateTime.now();
+      final name = 'ledger_backup_'
+          '${now.year.toString().padLeft(4, '0')}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}'
+          '_${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}.db';
+      final location = await getSaveLocation(suggestedName: name);
+      if (location == null) {
+        setState(() => _busy = false); // 取消
+        return;
+      }
+      await saveBytesToPath(location.path, bytes);
+      setState(() {
+        _dmMessage = '已備份：${location.path == '' ? name : location.path}';
+        _busy = false;
+      });
+    } catch (e) {
+      setState(() {
+        _dmMessage = '備份失敗：$e';
+        _busy = false;
+      });
+    }
+  }
+
+  /// 從檔案還原（**二次確認**——會覆蓋目前全部資料；單一 DB transaction 冪等）。
+  Future<void> _restoreFromFile() async {
+    try {
+      final file = await openFile(acceptedTypeGroups: [
+        const XTypeGroup(label: '備份檔', extensions: ['db', 'json']),
+      ]);
+      if (file == null) return; // 取消
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('從檔案還原'),
+          content: const Text('還原會以備份檔**覆蓋目前全部資料**（交易／帳戶／分類／預算／設定），'
+              '且無法復原。確定要還原嗎？'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消')),
+            FilledButton(
+                key: const Key('dm-restore-confirm'),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('確定還原')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      setState(() {
+        _busy = true;
+        _dmMessage = null;
+      });
+      final bytes = await readBytesFromPath(file.path);
+      final db = ref.read(dbProvider);
+      await BackupService(db, _cloudOrUnconfigured(), deviceId: _deviceIdOf())
+          .restoreFromBytes(db, bytes);
+      if (!mounted) return;
+      // 還原後衍生快取全部失效。
+      ref.invalidate(ledgerProvider);
+      ref.invalidate(recentDeletionsProvider);
+      ref.invalidate(expenseCategoriesProvider);
+      ref.invalidate(incomeCategoriesProvider);
+      ref.invalidate(activeAccountsProvider);
+      setState(() {
+        _dmMessage = '已從檔案還原 ✓';
+        _busy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _dmMessage = '還原失敗：$e';
+        _busy = false;
+      });
+    }
+  }
+
+  CloudStorageAdapter _cloudOrUnconfigured() {
+    try {
+      return ref.read(cloudAdapterProvider);
+    } catch (_) {
+      return const UnconfiguredCloudAdapter();
+    }
+  }
+
+  String _deviceIdOf() {
+    try {
+      return ref.read(syncCoordinatorProvider).deviceId;
+    } catch (_) {
+      return 'device-local';
+    }
+  }
+
   bool _pinError = false;
   bool _confirmError = false;
   bool _oauthError = false;
@@ -186,6 +302,40 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('備份與還原',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text('把全部資料（交易／帳戶／分類／預算…）備份成一個檔案，'
+                    '或從備份檔還原（**會覆蓋目前資料**）。換機／分享給朋友也靠這個。'
+                    '已連結雲端者另有自動雲端備份（見「雲端備份」）。'),
+                const SizedBox(height: 12),
+                Row(children: [
+                  FilledButton.tonal(
+                    key: const Key('dm-backup-file'),
+                    onPressed: _busy ? null : _backupToFile,
+                    child: const Text('備份到檔案'),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.tonal(
+                    key: const Key('dm-restore-file'),
+                    onPressed: _busy ? null : _restoreFromFile,
+                    child: const Text('從檔案還原'),
+                  ),
+                ]),
+                if (_dmMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_dmMessage!, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ],
+            ),
+          ),
+        ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),

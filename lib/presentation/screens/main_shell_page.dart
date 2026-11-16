@@ -126,14 +126,29 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                 children: [for (final (page, _, _, _) in tabs) page],
               );
               if (!wide) {
-                // 手機殼：底部 NavigationBar。
+                // 手機殼：底部 NavigationBar＋雙 FAB（快記＋掃描發票——PM 2026-11-16：
+                // 窄視窗原本無掃描入口，僅桌面工具列/快捷鍵可及）。
                 return Scaffold(
                   body: body,
-                  floatingActionButton: FloatingActionButton(
-                    key: const Key('fab-quick-entry'),
-                    tooltip: '快記',
-                    onPressed: _openQuickEntry,
-                    child: const Icon(Icons.add),
+                  floatingActionButton: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton.small(
+                        key: const Key('fab-scan'),
+                        heroTag: 'fab-scan',
+                        tooltip: '掃描發票',
+                        onPressed: _openScan,
+                        child: const Icon(Icons.document_scanner_outlined),
+                      ),
+                      const SizedBox(height: 12),
+                      FloatingActionButton(
+                        key: const Key('fab-quick-entry'),
+                        heroTag: 'fab-quick-entry',
+                        tooltip: '快記',
+                        onPressed: _openQuickEntry,
+                        child: const Icon(Icons.add),
+                      ),
+                    ],
                   ),
                   bottomNavigationBar: NavigationBar(
                     selectedIndex: _tab,

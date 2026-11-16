@@ -121,7 +121,7 @@ class _SettingsSyncPageState extends ConsumerState<SettingsSyncPage> {
     // 憑證未就緒（UnconfiguredCloudAdapter）——開頁即說明（不用點了才知道）。
     final configured = ref.watch(cloudConfiguredProvider).valueOrNull ?? true;
     return Scaffold(
-      appBar: AppBar(title: const Text('雲端與同步')),
+      appBar: AppBar(title: const Text('雲端備份與同步')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -181,7 +181,7 @@ class _SettingsSyncPageState extends ConsumerState<SettingsSyncPage> {
                   // 憑證未就緒：停用（說明卡已解釋原因——避免死路）。
                   onPressed: configured ? _beginLink : null,
                   icon: const Icon(Icons.link),
-                  label: const Text('連結 Google Drive'),
+                  label: const Text('登入 Google 並啟用雲端備份'),
                 ),
               ),
           ] else ...[
