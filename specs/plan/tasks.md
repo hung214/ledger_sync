@@ -216,6 +216,42 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | Feature | **「最近刪除」直接刪除（PM 2026-10-24 需求增補）**：①單筆 `recent-delete-purge-{id}`＋②清空全部 `recent-delete-purge-all`，皆**二次確認**（`recent-delete-purge-confirm`／`-cancel`）→ `PurgeTombstoneUseCase`（`AppDatabase.purgeTombstoneById`／`executeAll` 走同一 30 天清除路徑）＝**實體刪除、oplog 墓標保留**（同步安全）；未刪除者拋 StateError（防誤刪）、清除後回 0（冪等）③原型 `12-recent-deletions.html`＋DEMO「12 最近刪除」。TODOLIST：BE ✅／UC ✅／FE ✅／測試 ✅／雛型 ✅／DEMO ✅／文件 ✅／驗證 ✅ | ✅（fix 分支待 PM 驗收） |
 | Fix | **DBG-009 分類設定變更不連動＋子分類無法編輯**（PM 實機回報）：`_refresh` 失效衍生快取（expense/income/ledger）＋新增 `incomeCategoriesProvider`；子列 `cat-edit-{name}`（改名/emoji/顏色）；emoji 庫 33；同步 SPEC FR-B1／SDD §5.6/§7.2／BDD F11／acceptance F11 S11.2／ui 09／debug.md | ✅（待 v0.4.21 發佈） |
 
+### 6.0 進行中工作清單（TODOLIST；PM 2026-11-16 AndroMoney 匯入批）
+
+> PM 決策（2026-11-16）：**做「匯入」**——一次性把 AndroMoney 的歷史資料帶進 LedgerSync
+> （**不**改成共用同一個 DB 檔；理由見 `session.md`／本表說明）。
+
+**背景（已完成調查）**：`AndroMoney_bk_2.db` 為**完全加密**容器（熵 8.00 bits/byte、無 SQLite 標頭、
+大小＝8B 標頭＋88×4096）→ 無法直接讀；且 AndroMoney 為封閉原始碼，其 schema／KDF 不可得。
+
+| # | TASK | 範圍 | 驗收 | 狀態 |
+|---|---|---|---|---|
+| I1 | **取得來源資料**：PM 由 AndroMoney 匯出 **CSV/Excel**（或提供 `.db` 備份密碼——先做小實驗判定是否 SQLCipher） | —（PM） | 檔案可讀、含表頭 | ⏳ 待 PM |
+| I2 | **欄位對映規格**：日期／類型（支出·收入·轉帳）／金額／幣別／帳戶／分類（主·子）／商家／備註 → 本專案 schema；並定義**未知帳戶/分類**與**重複**處理策略 | `specs/plan`（設計）| PM 確認對映表 | ⬜ |
+| I3 | **匯入引擎**（純 Dart、可單元測試）：CSV → 草稿（不直接寫 DB）→ 驗證（欄位/金額/日期解析）→ 統計（筆數·期間·金額合計）→ 落地（＋oplog 契約一致） | `lib/application/import/` | unit：解析/對映/金額守恆/冪等 | ⬜ |
+| I4 | **匯入入口**（PM 決策：App 內 UI 或 CLI）：選檔（`file_selector` 已有）→ **預覽/乾跑** → 確認 → 結果報告（成功/略過/錯誤列） | `lib/presentation/screens/settings/` | widget：預覽→匯入→報告 | ⬜ |
+| I5 | **安全**：匯入前自動備份（`BackupService`）＋匯入為**可回溯**（oplog 留痕；必要時提供「取消本批匯入」） | 同上 | 測試：備份存在、可撤 | ⬜ |
+| I6 | **文件**：SPEC（新 FR：從其他 App 匯入）／SDD §5.x／acceptance（新情境）／dsl／CHANGELOG／session | 各文件 | 同步矩陣 §7.2 | ⬜ |
+
+### 6.0b 進行中工作清單（TODOLIST；PM 2026-11-16 iOS PWA 批，分支 `feature/ios-pwa`）
+
+> 背景決策（2026-11-16）：iOS 不付 Apple 開發者年費 → PM 選定**先做 PWA 可行性 Spike**。
+> Spike 結論（✅ 已完成）：`sqlite3.wasm`（2.9.4）＋IndexedDB VFS 於**真實 Chrome 實測通過**
+> ——載入 wasm → **`SchemaV1` 全表建立**（7 tables）→ 寫入交易 → 關閉重開**資料仍在**（`RESULT:OK`）。
+> Spike 產物：`web/`（含 sqlite3.wasm）、`lib/main_web_spike.dart`（非正式入口）、`web` 1.1.2（techstack v0.3.9 §6 SP-8）。
+
+| # | TASK | 範圍 | 驗收 | 狀態 |
+|---|---|---|---|---|
+| P1 | **PWA Spike**（sqlite3.wasm＋IndexedDB 持久化實測） | `lib/main_web_spike.dart` | headless Chrome `RESULT:OK` | ✅ 2026-11-16 |
+| P2 | **PM 決策：採用 PWA 完整化？**（工時：資料層 adapter＋附件層＋同步 OAuth＋部署；報告見 pm-actions §12） | —（PM） | PM 親口確認 | ⏳ 待 PM |
+| P3 | 資料層 Web adapter：`AppDatabase` 開檔改**平台分流**（native=`path_provider`；web=`WasmSqlite3`＋IndexedDB），schema/DAO 不動 | `lib/data/sqlite/` | unit＋web 實測 CRUD | ⬜ |
+| P4 | 附件層 Web adapter：`blobs/` 檔案 → IndexedDB（sha256 內容定址不變） | `lib/data/attachments/` | web 存取附件往返 | ⬜ |
+| P5 | 雲端同步 Web 流程：Google Drive OAuth（GIS）＋`googleapis` 於 Web 的檔案讀寫 | `lib/cloud/` | 雙裝置互通（web↔macOS） | ⬜ |
+| P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨（UI 隱藏或替代） | presentation | 走查清單 | ⬜ |
+| P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |
+| P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ⬜ |
+| P9 | 文件同步：SDD（Web 平台章）／BDD 平台對照／techstack（web 正式化）／CHANGELOG／session | 各文件 | 同步矩陣 §7.2 | ⬜ |
+
 ### 6.1 進行中工作清單（TODOLIST；PM 2026-10-26 統計頁批）
 
 > PM：**整頁重新調整**（統計頁），依 `specs/plan/ui/11-stats.html`。

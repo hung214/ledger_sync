@@ -246,3 +246,20 @@ sudo xcodebuild -runFirstLaunch
   ```
 
   （已用此法驗證：`dart analyze` 0 issues、**121 unit 全綠**。）
+
+## 12. iOS 發佈：PWA Spike 完成，待您決策（2026-11-16）
+
+**結論先講：技術可行 ✅。** 在真實 Chrome 實測：我們的資料庫（SQLite→Web 版）能建立完整 schema、
+寫入交易、關閉後重開資料還在。PWA 的做法＝把 App 放上一個**免費靜態網站**
+（GitHub Pages／Cloudflare Pages，0 元、不用架後端），朋友用 iPhone 開網址 →「加到主畫面」，
+點開就是全螢幕 App，**免簽章、永久有效、更新不用重裝**。
+
+### 您需要決定的事（二選一）
+
+| 選項 | 說明 | 我這邊的工程量 |
+|---|---|---|
+| **A. 採用 PWA**（iPhone 朋友從網址安裝） | 完整化以下四項：①資料庫改 Web 版載入 ②附件照片改存瀏覽器空間 ③雲端同步改 Web 版 Google 登入 ④部署上免費託管 | 約 1–2 週（已驗證最難的資料庫關卡） |
+| **B. 先不做 PWA** | 維持現狀：Android APK（免費永久）＋桌面版；iPhone 朋友用免費側載（7 天重簽，我可寫圖文教學） | 0（Spike 產物保留，之後想做隨時能接） |
+
+> 附註：Spike 產物已在專用分支 `feature/ios-pwa`（不影響現有 Android／macOS／Windows；
+> 剛驗證過 162 測試全綠＋macOS 建置成功）。您說一聲 A 或 B 即可。
