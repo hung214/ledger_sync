@@ -509,6 +509,20 @@ sequenceDiagram
 
 ---
 
+### 5.6b 從其他 App 匯入（FR-O5；PM 2026-11-16 決策）
+
+**管線**：CSV →（`CsvImportParser` 純函式：分隔符自動／表頭別名中英／日期多格式／
+金額千分位·歐式·負號·括號→minor／類型判定）→ **草稿**（逐列錯誤不擋整批）→
+**preview**（筆數·期間·各類型合計·新帳戶分類·重複·非 TWD 略過）→ **apply**
+（未知帳戶/分類自動建立；交易＋oplog 同一 DB transaction，payload＝整列快照）→ 報告。
+
+- **去重**（PM 決策）：日期＋金額＋備註＋帳戶——檔內＋對 DB → **重複匯入冪等**。
+- **幣別**：僅 TWD；非 TWD 略過並標示（多幣別＝SP-x）。
+- **可回溯**（I5）：批次 id 記錄於 settings `import.batch.last`；「取消本批」＝
+  軟刪除＋墓標 oplog（NULL payload；§5.5.4）——其他裝置同步刪除；重複呼叫冪等。
+- **安全**：匯入前自動雲端備份（`BackupService.export()`；已連結時）。
+- 入口：設定→資料管理→從其他 App 匯入（`import_data_page.dart`；keys `import-entry`/`dm-import-*`）。
+
 ### 5.6 設定群：帳戶／分類 CRUD（FR-A7／FR-B1；M8）
 
 **契約與既有寫入路徑一致**（SDD §5.1）：每次變更＝`業務表 + oplog` 同 transaction，
