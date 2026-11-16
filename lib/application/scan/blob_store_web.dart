@@ -77,6 +77,14 @@ class IdbBlobStore implements BlobStore {
     tx.objectStore(_storeName).delete(sha256.toJS);
     await _txDone(tx);
   }
+
+  @override
+  Future<void> deleteAll() async {
+    final db = await _db;
+    final tx = _tx(db, 'readwrite');
+    tx.objectStore(_storeName).clear();
+    await _txDone(tx);
+  }
 }
 
 /// promisify：IDBRequest → Future（onsuccess 取 result／onerror 失敗）。

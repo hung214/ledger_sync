@@ -266,7 +266,26 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | P5.4 | └ `SyncCoordinator` 附件源改 `BlobStore`（native=檔案、web=IndexedDB）；f07/f09/main 接線 | 多檔 | 162+6 綠 | ✅ |
 | P5.5 | └ 端到端（web↔Drive）：**待 PM 憑證**——Web OAuth client id＋`http://localhost` origin（開發）／正式網址 origin（部署後） | pm-actions §14 | 真實 token 往返 | ⏳ 待 PM |
 | P5.6 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
-| P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨（UI 隱藏或替代） | presentation | 走查清單 | ⬜ |
+| P6 | 平台能力降級表：本機通知／提醒／檔案掃描在 Web 的取捨 | presentation＋platform | 走查清單 | ✅ 2026-11-16（表見下） |
+| P6.1 | └ 盤點：dart:io/ffi 於 UI 可達程式碼＝scan_state／wipe_service／data_management_page／invoice_detail_codec（main.dart 為 native 入口不需動） | — | 清單 | ✅ |
+| P6.2 | └ 降級表（下方）；`BlobStore` 增 `deleteAll()`（native=刪目錄、web=清 store） | 多檔 | f09 綠 | ✅ |
+| P6.3 | └ 實作：WipeService→BlobStore；data_management 頁去 blobsDirProvider；scan_state 去 dart:io（`defaultTargetPlatform`——web 仍正確回報底層 OS）；發票 zlib→archive 純 Dart（**跨平台位元組一致**，Q 測試＋f03 全綠） | 多檔 | 168 綠 | ✅ |
+| P6.4 | └ **正式 App Web 入口 `lib/main_web_app.dart`**：同一 provider 注入約定（web 分流：AppDatabase.openWeb／newBlobStore()／GIS-或-Unconfigured）；headless 實測 `web:app-started`（無例外） | `lib/main_web_app.dart` | headless 通過 | ✅ |
+| P6.5 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
+
+**P6 平台能力降級表**（Web＝PWA 對照 native）：
+
+| 能力 | native | Web（PWA） | 對策 |
+|---|---|---|---|
+| 本地 DB | sqlite3 FFI＋檔案 | sqlite3.wasm＋IndexedDB（P3 ✅） | 平台分流 opener |
+| 附件 blobs | `blobs/{sha256}` 檔案 | IndexedDB（key=sha256；P4 ✅） | BlobStore |
+| 雲端同步 | loopback OAuth（憑證未就緒） | GIS（client id 待 PM §14） | P5（E2E 待憑證） |
+| 掃描（QR） | file_selector 檔案對話框 | file_selector web（`<input type=file>`）✓ 同路徑 | 無需分流 |
+| 通知（N-x） | flutter_local_notifications（M2/M3 未接） | 應內呈現（SnackBar/Dialog 即現行） | M2 接線時分流 |
+| App 鎖 | local_auth（TR-8 暫緩）→ PIN | PIN（**無**生物辨識——瀏覽器無此 API） | TR-8 回歸時分流 |
+| 資料管理（Wipe） | 刪檔案目錄 | 清 IndexedDB store（P6 ✅） | BlobStore.deleteAll |
+| 發票 QR zlib | （原 dart:io zlib） | archive 純 Dart（P6 ✅ 位元組一致） | 單一實作 |
+| 桌面快捷鍵／關閉確認 | ✓ | N/A（瀏覽器分頁；AppLifecycleListener 不觸發，無害） | 無需分流 |
 | P7 | 部署：免費靜態託管（GitHub Pages／Cloudflare Pages）＋HTTPS＋`flutter build web --pwa-strategy=offline-first`＋manifest/圖示 | CI／託管 | 手機加到主畫面可離線啟動 | ⬜ |
 | P8 | UI 走查：分欄殼於手機直向／平板的響應式（`specs/plan/ui/*.html` 為真相） | presentation | 走查通過 | ⬜ |
 | P9 | 文件同步：SDD（Web 平台章）／BDD 平台對照／techstack（web 正式化）／CHANGELOG／session | 各文件 | 同步矩陣 §7.2 | ⬜ |

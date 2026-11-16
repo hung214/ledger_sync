@@ -20,6 +20,7 @@ import 'package:ledger_sync/presentation/app_shell.dart';
 import 'package:ledger_sync/presentation/screens/scan/import_page.dart';
 import 'package:ledger_sync/presentation/screens/scan/review_page.dart';
 import 'package:ledger_sync/presentation/screens/scan/scan_page.dart';
+import 'package:ledger_sync/application/scan/blob_store_factory.dart';
 
 import '../../integration_test/helpers/hooks.dart';
 import '../../test/helpers/in_memory_cloud_adapter.dart';
@@ -298,7 +299,7 @@ Future<void> _ensureApp(_World w) async {
   w.blobDirs.add(blobsDir);
   final container = ProviderContainer(overrides: [
     dbProvider.overrideWithValue(w.db!),
-    blobsDirProvider.overrideWithValue(blobsDir),
+    blobStoreProvider.overrideWithValue(newBlobStore(dirPath: blobsDir.path)),
     // 啟動同步鉤子（FR-Y11 afterSave——F07-BE 接線）防 UnimplementedError。
     syncCoordinatorProvider.overrideWithValue(
         SyncCoordinator(w.db!, InMemoryCloudAdapter(), deviceId: 'd-A')),

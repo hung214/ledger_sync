@@ -17,4 +17,7 @@ abstract interface class BlobStore {
 
   /// 刪除（不存在為 no-op）。
   Future<void> delete(String sha256);
+
+  /// 清空全部（Wipe 全清用；P6）。
+  Future<void> deleteAll();
 }

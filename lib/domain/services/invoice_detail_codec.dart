@@ -1,6 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
+
+// P6 Web（PWA）：v4 公開 API 未暴露 raw deflate；直接取其核心 Deflate/Inflate
+// （**純 Dart**，跨平台位元組一致——平台加速僅用於 gzip/zlib 外殼，核心不受影響）。
+// 規格＝財政部 raw deflate＋Base32。
+// ignore: implementation_imports
+import 'package:archive/src/codecs/zlib/deflate.dart';
+// ignore: implementation_imports
+import 'package:archive/src/codecs/zlib/inflate.dart';
 
 /// 台灣電子發票右側 QR 明細編碼（SDD §5.4）：**deflate（raw）＋ Base32（字元集 0-9A-Z）**。
 ///
@@ -12,10 +18,10 @@ class InvoiceDetailCodec {
   static const String _alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   static String encode(String text) =>
-      base32Encode(Uint8List.fromList(ZLibEncoder(raw: true).convert(utf8.encode(text))));
+      base32Encode(Deflate(utf8.encode(text)).getBytes());
 
   static String decode(String encoded) =>
-      utf8.decode(ZLibDecoder(raw: true).convert(base32Decode(encoded)));
+      utf8.decode(Inflate(base32Decode(encoded)).getBytes());
 
   /// Base32（0-9A-Z，無 padding）：5 bits 一組，尾端補零湊滿。
   static String base32Encode(List<int> bytes) {

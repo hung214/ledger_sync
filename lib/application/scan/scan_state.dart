@@ -1,6 +1,5 @@
-import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/transaction_draft.dart';
@@ -63,7 +62,9 @@ final cameraAvailableProvider =
 
 class CameraAvailableNotifier extends Notifier<bool> {
   @override
-  bool build() => Platform.isIOS || Platform.isAndroid;
+  bool build() =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
 
   void set(bool available) => state = available;
 }
@@ -88,14 +89,6 @@ class AttachmentTxIdsNotifier extends Notifier<Set<String>> {
   /// 附件落地後刷新（ReviewPage 儲存呼叫）。
   void refresh() => state = _collect();
 }
-
-/// blobs 目錄（附件落盤位置；生產由 main() 以應用支援目錄 override——
-/// 同 dbProvider 注入約定；測試注入暫存目錄）。
-/// ⚠ native 概念（dart:io Directory）——web（PWA）不用本 provider，
-/// 以 [blobStoreProvider] 注入 IndexedDB 實作。
-final blobsDirProvider = Provider<Directory>((ref) {
-  throw UnimplementedError('blobsDirProvider 須於 main() 或測試 override 注入');
-});
 
 /// 附件 Blob 儲存（P4 平台分流）：native＝main() 以
 /// `newBlobStore(dirPath: blobs 目錄)` override；web＝`newBlobStore()`（IndexedDB）。

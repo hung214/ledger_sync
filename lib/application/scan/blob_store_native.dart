@@ -32,6 +32,12 @@ class FileBlobStore implements BlobStore {
     final f = _fileOf(sha256);
     if (f.existsSync()) await f.delete();
   }
+
+  @override
+  Future<void> deleteAll() async {
+    final dir = Directory(dirPath);
+    if (dir.existsSync()) await dir.delete(recursive: true);
+  }
 }
 
 /// 平台分流工廠（native 分支）。

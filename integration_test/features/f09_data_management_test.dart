@@ -14,6 +14,7 @@ import 'package:ledger_sync/application/scan/scan_state.dart';
 import 'package:ledger_sync/data/sqlite/app_database.dart';
 import 'package:ledger_sync/presentation/app_shell.dart';
 import 'package:ledger_sync/presentation/screens/settings/data_management_page.dart';
+import 'package:ledger_sync/application/scan/blob_store_factory.dart';
 
 import '../../test/helpers/db_fixture.dart';
 import '../../test/helpers/in_memory_cloud_adapter.dart';
@@ -89,7 +90,7 @@ Future<void> _ensureApp(_World w) async {
         : AppLockController(db, pin: w.pin, thresholdSec: 30)),
     oauthProvider.overrideWithValue(() async => w.oauthEmail),
     cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
-    blobsDirProvider.overrideWithValue(blobs),
+    blobStoreProvider.overrideWithValue(newBlobStore(dirPath: blobs.path)),
     // 啟動同步鉤子（FR-Y11）防 UnimplementedError——隔離雲端空間。
     syncCoordinatorProvider.overrideWithValue(
         SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),

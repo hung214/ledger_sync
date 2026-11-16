@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/providers.dart';
 import '../../../application/sync/backup_service.dart';
 import '../../../application/wipe/wipe_service.dart';
+import '../../../application/scan/blob_store.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../application/sync/sync_fe_state.dart';
 import '../../../application/lock/lock_fe_state.dart';
@@ -71,15 +71,15 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     try {
       final db = ref.read(dbProvider);
       final linked = _linked;
-      Directory? blobs;
+      BlobStore? blobs;
       try {
-        blobs = ref.read(blobsDirProvider);
+        blobs = ref.read(blobStoreProvider);
       } catch (_) {
         blobs = null; // 生產未接線（main() override 前）防護——測試必注入
       }
       final service = WipeService(db,
           cloud: linked ? ref.read(cloudAdapterProvider) : null,
-          blobsDir: blobs);
+          blobs: blobs);
       if (_factoryReset) {
         // 回到系統預設值：全清空（含雲端資料夾）＋下次啟動重新播種內建集。
         await service.wipe(includeCloud: linked);

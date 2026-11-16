@@ -22,7 +22,7 @@ import 'presentation/app_shell.dart';
 ///
 /// 啟動流程：文件目錄開檔案 DB（`<documents>/ledger_sync/ledger.db`）→
 /// 首次啟動播種（空帳本自動建立內建分類集＋預設現金帳戶）→ 注入 provider：
-/// - `dbProvider`／`blobsDirProvider`（附件落盤 `<documents>/ledger_sync/blobs`）
+/// - `dbProvider`／`blobStoreProvider`（附件 blobs——native=檔案、web=IndexedDB）
 /// - `deviceId`（per-device：首次產生並持久化於 settings `device.id`——HLC/同步用）
 /// - `cloudAdapterProvider`／`oauthProvider`／`syncCoordinatorProvider`（FR-Y7）
 ///
@@ -54,7 +54,6 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         dbProvider.overrideWithValue(db),
-        blobsDirProvider.overrideWithValue(blobsDir),
         blobStoreProvider.overrideWithValue(newBlobStore(dirPath: blobsDir.path)),
         cloudAdapterProvider.overrideWithValue(cloud),
         oauthProvider.overrideWithValue(googleOAuthSignIn(cloud)),

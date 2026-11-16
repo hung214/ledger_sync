@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../../core/clock.dart';
 import '../../core/hlc.dart';
 import '../../data/sqlite/app_database.dart';
 import '../../platform/cloud/cloud_storage_adapter.dart';
+import '../scan/blob_store.dart';
 import '../first_run_bootstrap.dart';
 
 /// 雲端資料已被清除（WipeService 清空後其他裝置之 pull 偵測——FR-O3
@@ -20,15 +20,16 @@ class CloudWipedException implements Exception {
 /// 資料清除服務（FR-O3；SDD §7.3）：本地全表清空＋附件檔案刪除；
 /// 含雲端 → LedgerSync/ 整個資料夾刪除（vault/devices/ops/blobs/backups）。
 class WipeService {
-  WipeService(this._db, {this.cloud, this.blobsDir});
+  WipeService(this._db, {this.cloud, this.blobs});
 
   final AppDatabase _db;
 
   /// 雲端 adapter（null＋含雲端=false＝未連結語意——頁面層無須注入）。
   final CloudStorageAdapter? cloud;
 
-  /// 本地 blobs 目錄（附件檔案；null＝略）。
-  final Directory? blobsDir;
+  /// 附件 blob 儲存（P6 起以 [BlobStore] 平台分流——native=檔案、web=IndexedDB；
+  /// null＝略）。
+  final BlobStore? blobs;
 
   static const _tables = [
     'statement_items', 'refund_links', 'attachments', 'installment_plans',
@@ -130,11 +131,8 @@ class WipeService {
         _db.clearTable(t);
       }
     });
-    // 附件檔案刪除。
-    final dir = blobsDir;
-    if (dir != null && dir.existsSync()) {
-      dir.deleteSync(recursive: true);
-    }
+    // 附件刪除（P6：平台分流——native=檔案目錄、web=IndexedDB store 清空）。
+    await blobs?.deleteAll();
     // 雲端：根清單逐一刪除（adapter 無 rmdir——逐檔；資料夾語意由路徑前綴）。
     if (includeCloud) {
       final adapter = cloud;

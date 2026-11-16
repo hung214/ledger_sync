@@ -210,12 +210,12 @@ void _bind(GherkinRunner runner, _World w) {
   // ── When ─────────────────────────────────────────────────
   runner.on(r'執行清空資料（含雲端={flag}，身分驗證通過）$', (p) async {
     // 身分驗證前提（FR-O3/驗收 S9.2——重新登入雲端帳號通過）已由情境敘述成立。
-    await WipeService(w.db, cloud: w.cloud, blobsDir: w.blobsDir)
+    await WipeService(w.db, cloud: w.cloud, blobs: newBlobStore(dirPath: w.blobsDir.path))
         .wipe(includeCloud: p['flag'] == 'true');
   });
 
   runner.on(r'執行清空資料（含雲端={flag}）$', (p) async {
-    await WipeService(w.db, cloud: w.cloud, blobsDir: w.blobsDir)
+    await WipeService(w.db, cloud: w.cloud, blobs: newBlobStore(dirPath: w.blobsDir.path))
         .wipe(includeCloud: p['flag'] == 'true');
   });
 
