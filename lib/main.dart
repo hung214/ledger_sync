@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'application/first_run_bootstrap.dart';
 import 'application/providers.dart';
 import 'application/scan/blob_store_factory.dart';
 import 'application/scan/scan_state.dart';
+import 'application/sync/local_backup.dart';
 import 'application/sync/sync_coordinator.dart';
 import 'application/sync/sync_fe_state.dart';
 import 'data/sqlite/app_database.dart';
@@ -45,6 +47,9 @@ Future<void> main() async {
     deviceId = 'd-${const Uuid().v7().substring(0, 8)}';
     db.setSetting('device.id', deviceId);
   }
+
+  // 桌面每日自動本地備份（>24h；保留 7 份——安全網，不需雲端憑證）。
+  unawaited(runLocalBackupIfNeeded(db, '${root.path}${Platform.pathSeparator}backups'));
 
   // 雲端 adapter（憑證未就緒 → 降級；不影響本地功能）。
   final cloud =
