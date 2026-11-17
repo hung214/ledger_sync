@@ -1,12 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/scan/scan_state.dart';
 import 'import_page.dart';
+import 'web_camera_scan.dart';
 import 'review_page.dart';
 
 /// 掃描入口路由（FR-S6）：相機可用 → 掃描頁；無相機裝置 → 相簿/檔案匯入。
+/// F14（PWA）：**Web → 即時相機掃描頁**（getUserMedia；相機不可用時頁內回退檔案匯入）。
 Future<void> openScanFlow(BuildContext context, WidgetRef ref) {
+  if (kIsWeb) {
+    return Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => const WebCameraScanPage()));
+  }
   final hasCamera = ref.read(cameraAvailableProvider);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
