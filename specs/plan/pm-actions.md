@@ -277,19 +277,21 @@ push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH �
 > 分支與 2 筆提交**已在本地安全保存**，僅差推上遠端備份／預覽。
 
 
-## 14. P5 雲端同步（Web）：需要您的 Google 憑證（2026-11-16）
+## 14. 雲端備份：Google 憑證步驟（2026-11-17 詳版；約 10 分鐘，不用付費）
 
-程式層已完成並測試通過（168 測試綠；Drive REST seam 6 測試）。**真實雲端往返（E2E）**需要：
+資料存您**自己的 Google Drive 隱藏資料夾**（appDataFolder；計您 15GB 額度）。步驟：
 
-| # | 您要做的事 | 約時 |
+| # | 動作 | 在哪裡 |
 |---|---|---|
-| 1 | Google Cloud Console → APIs & Services → **OAuth 同意畫面**：確認 test user 含您自己 | 2 分 |
-| 2 | **Credentials → Web 用戶端**（類型「Web application」那一組）：Authorized JavaScript origins 加入 `http://localhost:8899`（開發測試用） | 2 分 |
-| 3 | 回報**該組 client id**（格式 `xxxx.apps.googleusercontent.com`；不用 secret） | 1 分 |
+| 1 | console.cloud.google.com → 建立/選擇專案（如 `ledgersync`） | 首頁 |
+| 2 | 搜尋「Google Drive API」→ **啟用** | API 和服務 → 程式庫 |
+| 3 | **OAuth 同意畫面**：外部 → App 名稱 `LedgerSync`＋您的 email → 儲存；**測試使用者加您（與朋友）的 Gmail** | API 和服務 → OAuth 同意畫面 |
+| 4 | 憑證 → 建立憑證 → OAuth 用戶端 ID → **網頁應用程式**（PWA 用）：JavaScript 來源加 `https://hung214.github.io` 與 `http://localhost:8899` → 複製 **Client ID** | 憑證 |
+| 5 | 再建 **桌面應用程式**（macOS/Windows 用）→ 複製 **Client ID＋Client Secret** | 憑證 |
+| 6 | 回報三個值：**Web Client ID／Desktop Client ID／Desktop Secret** | — |
 
-拿到後我以 `--dart-define=GOOGLE_OAUTH_WEB_CLIENT_ID=...` 建置 → 用您的瀏覽器登入一次
-→ 完成 web↔Drive 真實往返驗證（vault／opbundle／blob 上傳下載）。
-正式部署時再加正式網址 origin 即可（同一組 client id）。
+憑證到位後：①**PWA** 重新建置部署即用（接線已完成）②**macOS/Windows** 我補 loopback
+登入接線（約半天）再交付新版。Secret 只進本機建置參數，不進 git（§7）。
 
 ## 15. PWA 已部署到 GitHub Pages——需您開啟設定（2026-11-16；約 2 分鐘）
 
