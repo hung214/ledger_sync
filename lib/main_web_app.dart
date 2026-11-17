@@ -18,7 +18,7 @@ import 'platform/cloud/drive/google_apis_drive_api.dart';
 import 'platform/cloud/drive/google_drive_adapter.dart';
 import 'platform/cloud/unconfigured_cloud_adapter.dart';
 import 'platform/scan/image_qr_scan.dart';
-import 'presentation/app_shell.dart';
+import 'presentation/app_root.dart';
 
 /// **Web（PWA）正式入口**（P6/P8；PM 2026-11-16 決策 A：採用 PWA）。
 ///
@@ -72,7 +72,7 @@ Future<void> main() async {
           importPipelineProvider
               .overrideWithValue(const ImageQrScanner().pickAndScan),
         ],
-        child: const AppShell(),
+        child: AppRoot(db: db),
       ),
     );
     _report('web:app-started v=$_kAppVersion');

@@ -6,6 +6,7 @@ import '../../../application/providers.dart';
 import 'account_settings_page.dart';
 import 'category_settings_page.dart';
 import 'data_management_page.dart';
+import 'help_page.dart';
 import 'settings_sync_page.dart';
 
 /// 設定 Hub（SDD §8 設定群；M7 恢復入口＋M8 設定群）：
@@ -55,6 +56,15 @@ class SettingsHubPage extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const CategorySettingsPage())),
+          ),
+          ListTile(
+            key: const Key('settings-help'),
+            leading: const Icon(Icons.help_outline),
+            title: const Text('使用說明'),
+            subtitle: const Text('安裝更新／備份還原／匯入／常見問題'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const HelpPage())),
           ),
           ListTile(
             key: const Key('settings-data-management'),

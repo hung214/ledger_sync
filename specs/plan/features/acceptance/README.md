@@ -24,6 +24,7 @@
 | `F09_data-management.md` | 資料清除與重置 | FR-O3 | M7 | 2 |
 | `F10_reports-search.md` | 報表統計與搜尋 | FR-R1~R4 | M2 | 3 |
 | `F12_import-andromoney.md` | 從其他 App 匯入（AndroMoney） | FR-O5 | 匯入批 | 10 |
+| `F13_onboarding.md` | 首次啟動引導與使用說明 | PM §4#1 | 匯入批後續 | 8 |
 
 ---
 

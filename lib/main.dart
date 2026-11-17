@@ -16,7 +16,7 @@ import 'platform/auth/google_oauth.dart';
 import 'platform/cloud/drive/google_drive_adapter.dart';
 import 'platform/cloud/unconfigured_cloud_adapter.dart';
 import 'platform/scan/image_qr_scan.dart';
-import 'presentation/app_shell.dart';
+import 'presentation/app_root.dart';
 
 /// LedgerSync — 本地優先記帳 App（production 入口）。
 ///
@@ -63,7 +63,7 @@ Future<void> main() async {
         // 找不到可辨識 QR → 空白確認卡（FR-S2）。行動版仍走相機（ScanPage）。
         importPipelineProvider.overrideWithValue(const ImageQrScanner().pickAndScan),
       ],
-      child: const AppShell(),
+      child: AppRoot(db: db),
     ),
   );
 }
