@@ -277,32 +277,15 @@ push 錯誤：`Invalid username or token`（HTTPS token 已過期；本機 SSH �
 > 分支與 2 筆提交**已在本地安全保存**，僅差推上遠端備份／預覽。
 
 
-## 14. 雲端備份：Google 憑證步驟（2026-11-17 詳版；約 10 分鐘，不用付費）
+## 14. 雲端備份：Google 憑證（2026-11-17）——**步驟已移至 `specs/plan/user-guide.md` §6.1**
 
-資料存您**自己的 Google Drive 隱藏資料夾**（appDataFolder；計您 15GB 額度）。步驟：
+您要做的＝user-guide §6.1 的 6 步（建專案→啟用 Drive API→同意畫面+測試使用者→
+網頁應用程式憑證→桌面應用程式憑證→把 **Web Client ID／Desktop Client ID／Desktop Secret**
+交給開發者）。憑證到位後：PWA 重新部署即用（接線已完成）；macOS/Windows 補 loopback
+登入接線（約半天）。
 
-| # | 動作 | 在哪裡 |
-|---|---|---|
-| 1 | console.cloud.google.com → 建立/選擇專案（如 `ledgersync`） | 首頁 |
-| 2 | 搜尋「Google Drive API」→ **啟用** | API 和服務 → 程式庫 |
-| 3 | **OAuth 同意畫面**：外部 → App 名稱 `LedgerSync`＋您的 email → 儲存；**測試使用者加您（與朋友）的 Gmail** | API 和服務 → OAuth 同意畫面 |
-| 4 | 憑證 → 建立憑證 → OAuth 用戶端 ID → **網頁應用程式**（PWA 用）：JavaScript 來源加 `https://hung214.github.io` 與 `http://localhost:8899` → 複製 **Client ID** | 憑證 |
-| 5 | 再建 **桌面應用程式**（macOS/Windows 用）→ 複製 **Client ID＋Client Secret** | 憑證 |
-| 6 | 回報三個值：**Web Client ID／Desktop Client ID／Desktop Secret** | — |
+## 15. PWA 已部署到 GitHub Pages——✅ 已完成（2026-11-16 PM 開啟設定；2026-11-17 最新版）
 
-憑證到位後：①**PWA** 重新建置部署即用（接線已完成）②**macOS/Windows** 我補 loopback
-登入接線（約半天）再交付新版。Secret 只進本機建置參數，不進 git（§7）。
-
-## 15. PWA 已部署到 GitHub Pages——需您開啟設定（2026-11-16；約 2 分鐘）
-
-我已把 PWA 建置推到 repo 的 `gh-pages` 分支（含離線快取＋App 圖示）。**剩一步只有您能做**：
-
-1. 開瀏覽器 → `https://github.com/hung214/ledger_sync/settings/pages`
-2. **Build and deployment → Source**：選 **Deploy from a branch**
-3. Branch：**gh-pages** ／ 資料夾：**/ (root)** → Save
-
-約 1–2 分鐘後網址生效：**`https://hung214.github.io/ledger_sync/`**
-（iPhone 開此網址 → 分享 → **加到主畫面** → 就是 App ✓；離線也可啟動）
-
-> 附註：①repo 已是公開（Pages 免費方案必要）②OAuth 正式 origin（`https://hung214.github.io`）
-> 等您做 §14 項目 2 時一起加上即可（先手動同步、之後雲端功能才會在 PWA 上可用）。
+網址：**`https://hung214.github.io/ledger_sync/`**（離線可啟動；service worker 驗證通過）。
+安裝／更新／常見問題＝**`specs/plan/user-guide.md`** §2/§7（單一來源）。
+> 附註：OAuth 正式 origin（`https://hung214.github.io`）於 §14 步驟 4 一起登記。
