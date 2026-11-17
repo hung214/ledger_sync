@@ -43,5 +43,20 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // P10 新版偵測：主動檢查 Service Worker 更新（Flutter SW 於 activate 時
+    // 會自動重載開啟中的頁面——使用者不需手動「重新整理兩次」）。
+    // ①App 回到前景時檢查 ②每小時檢查一次。
+    if ('serviceWorker' in navigator) {
+      const check = () => navigator.serviceWorker.getRegistration()
+        .then((reg) => reg && reg.update())
+        .catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check();
+      });
+      setInterval(check, 60 * 60 * 1000);
+      window.addEventListener('load', () => setTimeout(check, 3000));
+    }
+  </script>
 </body>
 </html>

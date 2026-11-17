@@ -32,6 +32,7 @@ import 'presentation/app_shell.dart';
 /// 啟動里程碑 POST 至同源 `/spike-result`（自動化驗證；
 /// `flutter build web --release -t lib/main_web_app.dart`）。
 const String _kWebClientId = String.fromEnvironment('GOOGLE_OAUTH_WEB_CLIENT_ID');
+const String _kAppVersion = String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 
 void _report(String s) {
   try {
@@ -74,7 +75,7 @@ Future<void> main() async {
         child: const AppShell(),
       ),
     );
-    _report('web:app-started');
+    _report('web:app-started v=$_kAppVersion');
   } catch (e) {
     _report('web:FAIL $e');
     runApp(_WebBootError(message: '$e'));

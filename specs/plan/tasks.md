@@ -297,7 +297,13 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | P8.2 | └ Web 分流修正：`cameraAvailableProvider` 加 `!kIsWeb`——Web＋行動 UA 不再誤入相機頁，一律檔案匯入（file_selector web ✓） | `scan_state.dart` | 168 綠 | ✅ |
 | P8.3 | └ headless 雙視窗 smoke：**390×844**（手機直向）／**1600×1000**（桌面寬）皆 `app-started`＋**0 個 Flutter 異常**（stderr 掃描） | — | 兩者通過 | ✅ |
 | P8.4 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
-| P9 | 文件同步：SDD（Web 平台章）／BDD 平台對照／techstack（web 正式化）／CHANGELOG／session | 各文件 | 同步矩陣 §7.2 | ⬜ |
+| P9 | 文件同步：SDD（§13 Web 平台章）／BDD §2.1 Web 對照／techstack v0.3.12／CHANGELOG 0.5.0／session | 各文件 | 同步矩陣 §7.2 | ✅ 2026-11-16 |
+| P10 | **新版偵測與自動更新**（PM 2026-11-17 問「有偵測新版嗎」→ 沒有 → 已做） | `web/index.html`＋部署 | E2E：部署 test1→SW 安裝→部署 test2→**自動重載至 test2** | ✅ 2026-11-17 |
+| P10.1 | └ Flutter SW 內建：install=`skipWaiting`＋activate=**重載開啟中頁面**（不需 SKIP_WAITING 訊息） | — | 機制確認 | ✅ |
+| P10.2 | └ 主動檢查：visibilitychange（回前景）＋每小時 `registration.update()`（長時間開著也會拿到新版） | `web/index.html` | E2E | ✅ |
+| P10.3 | └ **版本標章**：部署帶 `--dart-define=APP_VERSION=0.5.0-pwa.20261117` → 總覽頁尾可見（確認更新生效） | 部署 | 線上版含標章 | ✅ |
+| P10.4 | └ **部署標頭教訓**：GitHub Pages `max-age=600` → SW 更新檢查可能拿舊 SW（最慢 10 分鐘生效）；本機 no-cache 標頭 E2E 實測通過 | — | 記錄 | ✅ |
+| P10.5 | └ user-guide §2.4 改為「自動更新」說明；§提交 | — | — | ✅ |
 
 ### 6.1 進行中工作清單（TODOLIST；PM 2026-10-26 統計頁批）
 
