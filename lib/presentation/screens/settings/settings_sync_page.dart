@@ -24,6 +24,26 @@ class _SettingsSyncPageState extends ConsumerState<SettingsSyncPage> {
   String? _syncResult; // 「已同步 N 筆變更」
   String? _restoreResult; // 「還原完成」/「此帳號沒有可還原的資料」
   String? _error;
+  late String _syncMode; // F16/U4：per-transaction／batch／manual
+  late bool _wifiOnly; // F16/U5：附件僅 Wi-Fi 同步
+
+  @override
+  void initState() {
+    super.initState();
+    final db = ref.read(dbProvider);
+    _syncMode = db.getSetting('sync.mode') ?? 'batch';
+    _wifiOnly = db.getSetting('backup.attachments_wifi_only') == 'true';
+  }
+
+  void _setSyncMode(String mode) {
+    setState(() => _syncMode = mode);
+    ref.read(dbProvider).setSetting('sync.mode', mode);
+  }
+
+  void _setWifiOnly(bool v) {
+    setState(() => _wifiOnly = v);
+    ref.read(dbProvider).setSetting('backup.attachments_wifi_only', v ? 'true' : 'false');
+  }
 
   bool get _linked => (ref.watch(syncAccountProvider) ?? '').isNotEmpty;
 
@@ -247,6 +267,56 @@ class _SettingsSyncPageState extends ConsumerState<SettingsSyncPage> {
               label: const Text('從雲端還原'),
             ),
           ],
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('同步模式（三選一）',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  RadioGroup<String>(
+                    groupValue: _syncMode,
+                    onChanged: (v) => _setSyncMode(v!),
+                    child: Column(children: [
+                      RadioListTile<String>(
+                        key: const Key('sync-mode-per'),
+                        value: 'per-transaction',
+                        title: const Text('每筆自動同步（記一筆傳一筆）'),
+                      ),
+                      RadioListTile<String>(
+                        key: const Key('sync-mode-batch'),
+                        value: 'batch',
+                        title: const Text('節能批次（預設：記帳後 30 秒＋閒置 15 分）'),
+                      ),
+                      RadioListTile<String>(
+                        key: const Key('sync-mode-manual'),
+                        value: 'manual',
+                        title: const Text('僅手動（啟動同步＋按鈕）'),
+                      ),
+                    ]),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.rocket_launch_outlined),
+                    title: const Text('啟動同步（必做）'),
+                    subtitle: const Text('開啟 App／回前台時自動執行一次'),
+                    trailing: Text('固定開啟',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  SwitchListTile(
+                    key: const Key('sync-attachments-wifi'),
+                    value: _wifiOnly,
+                    onChanged: _setWifiOnly,
+                    title: const Text('附件僅 Wi-Fi 同步'),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (_restoreResult != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),

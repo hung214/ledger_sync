@@ -752,6 +752,13 @@ class AppDatabase {
       .map(StatementRow.fromRow)
       .toList();
 
+
+  /// 某卡之全部帳單（新→舊；F16/U1 帳單歷史）。
+  List<StatementRow> statementsForCard(String accountId) => _db
+      .select('SELECT * FROM statements WHERE account_id = ? '
+          'ORDER BY statement_date DESC', [accountId])
+      .map(StatementRow.fromRow)
+      .toList();
   /// 逾期已通知標記（N-6 恰一次，FR-C6）。
   void markStatementOverdueNotified(String id) {
     _db.execute('UPDATE statements SET overdue_notified = 1 WHERE id = ?', [id]);

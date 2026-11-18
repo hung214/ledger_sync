@@ -46,6 +46,23 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
     ref.watch(ledgerProvider); // 交易變化即時刷新
     final card = db.allAccounts().firstWhere((a) => a.id == widget.cardAccountId);
     final statement = _latestStatement(db, widget.cardAccountId);
+    final details = db.creditCardDetail(widget.cardAccountId);
+    final cardStatements = db
+        .allStatementsForTest()
+        .where((s) => s.accountId == widget.cardAccountId)
+        .toList()
+      ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    // 未來已承諾（分期；FR-C7）：未來 pending 分期扣款合計＋剩餘期數。
+    final futureRows = db
+        .select('SELECT amount_minor, occurred_at, split_group_id '
+            'FROM transactions WHERE account_id = ? '
+            'AND installment_seq IS NOT NULL AND occurred_at > ? '
+            "AND deleted_at IS NULL ORDER BY occurred_at", [
+      widget.cardAccountId,
+      nowMs,
+    ]);
+    final futureTotal = futureRows.fold<int>(0, (s, r) => s + (r['amount_minor'] as int));
     final calc = const BalanceCalculator();
     final account = _accountEntity(card);
     final openBalance =
@@ -108,6 +125,20 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
                   ),
               ]),
             ),
+          if (details?.last4 != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(children: [
+                Icon(Icons.credit_card,
+                    size: 16, color: AppTokens.of(context).subText),
+                const SizedBox(width: 6),
+                Text('•••• •••• •••• ${details!.last4}',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: AppTokens.of(context).subText,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -153,9 +184,89 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
               ),
             ),
           ),
+          if (futureTotal > 0)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('未來已承諾（分期）',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(fmt.format(futureTotal),
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    Text('${futureRows.length} 筆待扣（FR-C7：分期自動排程）',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTokens.of(context).subText)),
+                  ],
+                ),
+              ),
+            ),
+          if (cardStatements.length > 1)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('帳單歷史',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    for (final st in cardStatements.skip(1))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(children: [
+                          _Badge(
+                            label: _historyBadge(st, nowMs),
+                            color: _historyBadgeColor(st, nowMs, context),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${_md(st.periodStart)}~${_md(st.periodEnd)} 期',
+                                    style: Theme.of(context).textTheme.bodyMedium),
+                                Text(
+                                    '應繳 ${fmt.format(st.totalMinor)} · 已繳 ${fmt.format(st.paidMinor)}'
+                                    '${st.remainingMinor > 0 ? ' · 剩餘 ${fmt.format(st.remainingMinor)}' : ''}'
+                                    ' · ${_md(st.dueDate)} 繳款截止',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppTokens.of(context).subText)),
+                              ],
+                            ),
+                          ),
+                        ]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  /// 歷史帳單徽章（F16/U1：部分繳/已繳/逾期；本期除外）。
+  String _historyBadge(StatementRow st, int nowMs) {
+    if (st.status == 'paid') return '已繳';
+    if (st.remainingMinor > 0 &&
+        DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(st.dueDate))) {
+      return '逾期';
+    }
+    if (st.paidMinor > 0) return '部分繳';
+    return '未繳';
+  }
+
+  Color _historyBadgeColor(StatementRow st, int nowMs, BuildContext context) {
+    final badge = _historyBadge(st, nowMs);
+    return badge == '逾期'
+        ? AppTokens.of(context).danger
+        : (badge == '已繳'
+            ? AppTokens.of(context).success
+            : AppTokens.of(context).warning);
   }
 
   Account _accountEntity(AccountRow r) => Account(
