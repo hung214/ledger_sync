@@ -250,10 +250,10 @@ void _bind(GherkinRunner runner, _World w) {
 Future<void> _ensureApp(_World w) async {
   if (w.pumped) return;
   final db = w.db!;
+  final lock = await AppLockController.create(db, pin: '1234', thresholdSec: 30);
   final container = ProviderContainer(overrides: [
     dbProvider.overrideWithValue(db),
-    appLockControllerProvider.overrideWithValue(
-        AppLockController(db, pin: '1234', thresholdSec: 30)),
+    appLockControllerProvider.overrideWithValue(lock),
     biometricAuthProvider
         .overrideWithValue(() async => w.biometricResult),
     // 啟動同步鉤子（FR-Y11）防 UnimplementedError——隔離雲端空間。

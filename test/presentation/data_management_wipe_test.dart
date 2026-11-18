@@ -53,14 +53,15 @@ void main() {
 
   testWidgets('清空資料（已設定 PIN）：仍要求 PIN（既有三重防護不變）', (tester) async {
     final db = DbFixture.create();
-    AppLockController(db, pin: '1234', thresholdSec: 30); // 設定 PIN
+    // Argon2id 內部以 Future.delayed 分段——widget 測試須 runAsync（真實時間）。
+    final lock = (await tester.runAsync(() =>
+        AppLockController.create(db, pin: '1234', thresholdSec: 30)))!;
     tester.view.physicalSize = const Size(1080, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(overrides: [
       dbProvider.overrideWithValue(db),
-      appLockControllerProvider
-          .overrideWithValue(AppLockController(db, pin: '1234', thresholdSec: 30)),
+      appLockControllerProvider.overrideWithValue(lock),
     ]);
     try {
       await tester.pumpWidget(UncontrolledProviderScope(

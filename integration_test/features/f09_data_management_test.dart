@@ -87,7 +87,7 @@ Future<void> _ensureApp(_World w) async {
     // DBG-008：未設定 PIN 之裝置→不寫 pin_hash（hasPin=false）。
     appLockControllerProvider.overrideWithValue(w.noPin
         ? AppLockController(db, thresholdSec: 30)
-        : AppLockController(db, pin: w.pin, thresholdSec: 30)),
+        : await AppLockController.create(db, pin: w.pin, thresholdSec: 30)),
     oauthProvider.overrideWithValue(() async => w.oauthEmail),
     cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
     blobStoreProvider.overrideWithValue(newBlobStore(dirPath: blobs.path)),

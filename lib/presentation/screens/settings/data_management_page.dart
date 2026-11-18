@@ -537,10 +537,11 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
           const SizedBox(height: 12),
           FilledButton(
             key: const Key('wipe-pin-submit'),
-            onPressed: () {
-              final ok = ref
+            onPressed: () async {
+              final ok = await ref
                   .read(appLockControllerProvider)
                   .verifyPin(_pinController.text);
+              if (!mounted) return;
               setState(() {
                 _pinError = !ok;
                 if (ok) _step = _WipeStep.confirm;

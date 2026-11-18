@@ -50,8 +50,8 @@ void _bind(GherkinRunner runner, _World w) {
     w.db = db;
   });
 
-  runner.on(r'App 鎖設定: PIN={pin}、生物辨識 {state}、門檻 {n} 秒$', (p) {
-    w.lock = AppLockController(w.db,
+  runner.on(r'App 鎖設定: PIN={pin}、生物辨識 {state}、門檻 {n} 秒$', (p) async {
+    w.lock = await AppLockController.create(w.db,
         pin: p['pin']!,
         biometricEnabled: p['state'] == 'enabled',
         thresholdSec: int.parse(p['n']!));
@@ -135,12 +135,12 @@ void _bind(GherkinRunner runner, _World w) {
         reason: 'FR-X1：累計 ≥3 停用生物辨識');
   });
 
-  runner.on(r'允許設定新 PIN$', (p) {
+  runner.on(r'允許設定新 PIN$', (p) async {
     expect(
         w.lock.canResetPin(cloudTokenValid: w.tokenValid), isTrue,
         reason: 'FR-X5：雲端 token 驗證通過可重設');
-    w.lock.setPin('5678');
-    expect(w.lock.verifyPin('5678'), isTrue);
+    await w.lock.setPin('5678');
+    expect(await w.lock.verifyPin('5678'), isTrue);
   });
 
   runner.on(r'本地資料未清空（交易筆數不變）$', (p) {

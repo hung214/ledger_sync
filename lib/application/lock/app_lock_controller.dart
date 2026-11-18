@@ -1,4 +1,5 @@
 import '../../core/clock.dart';
+import 'pin_hash.dart';
 import '../../data/sqlite/app_database.dart';
 
 /// App 鎖判定控制器（SDD §7.2；FR-X1/X5；AC-09）。
@@ -15,10 +16,22 @@ import '../../data/sqlite/app_database.dart';
 class AppLockController {
   /// [pin] 未提供 → **不寫入 pin_hash**（裝置從未設定 PIN——
   /// PM 2026-10-23 修復：此前建構子強制寫 hash，與「無 PIN」情境矛盾）。
-  AppLockController(this._db, {String? pin, bool biometricEnabled = true, int thresholdSec = 30}) {
-    if (pin != null) setPin(pin);
+  AppLockController(this._db, {bool biometricEnabled = true, int thresholdSec = 30}) {
     _db.setSetting('lock.threshold_sec', '$thresholdSec');
     _db.setSetting('lock.biometric', biometricEnabled ? 'true' : 'false');
+  }
+
+  /// 建構並同時設定 PIN（F15：Argon2id 為非同步——工廠方法）。
+  static Future<AppLockController> create(
+    AppDatabase db, {
+    required String pin,
+    bool biometricEnabled = true,
+    int thresholdSec = 30,
+  }) async {
+    final c = AppLockController(db,
+        biometricEnabled: biometricEnabled, thresholdSec: thresholdSec);
+    await c.setPin(pin);
+    return c;
   }
 
   final AppDatabase _db;
@@ -35,21 +48,21 @@ class AppLockController {
   bool get biometricEnabled =>
       (_db.getSetting('lock.biometric') ?? 'true') == 'true';
 
-  /// PIN 雜湊比對（sha256 最小實作；TODO(SP-4) Argon2id——truth D8）。
-  static String _hash(String pin) {
-    var h = 0x811c9dc5; // FNV-1a 32bit（測試用途非加密強度——TODO(SP-4)）
-    for (final c in pin.codeUnits) {
-      h ^= c & 0xFF;
-      h = (h * 0x01000193) & 0xFFFFFFFF;
+  /// 設定 PIN（F15/SP-4：**Argon2id 帶鹽**——見 pin_hash.dart）。
+  Future<void> setPin(String pin) async =>
+      _db.setSetting('lock.pin_hash', await PinHasher.hash(pin));
+
+  /// PIN 驗證。**舊格式（FNV）成功 → 透明遷移**重雜湊為 Argon2id（升級不換 PIN）。
+  Future<bool> verifyPin(String pin) async {
+    final stored = _db.getSetting('lock.pin_hash');
+    if (stored == null) return false;
+    if (PinHasher.isLegacy(stored)) {
+      if (!PinHasher.legacyVerify(pin, stored)) return false;
+      await setPin(pin); // 遷移：同 PIN 升級為 Argon2id
+      return true;
     }
-    return h.toRadixString(16);
+    return PinHasher.verify(pin, stored);
   }
-
-  void setPin(String pin) =>
-      _db.setSetting('lock.pin_hash', _hash(pin));
-
-  bool verifyPin(String pin) =>
-      _db.getSetting('lock.pin_hash') == _hash(pin);
 
   /// 是否已設定 PIN（PM 2026-10-23 修復：從未設定 PIN 時，
   /// 清空資料流程應**跳過** PIN 步驟——否則 null 比對恆 false 鎖死）。

@@ -65,7 +65,7 @@
 | data | sqlite3_flutter_libs | 0.5.42 | 四平台 SQLite 原生庫 | — |
 | data | path_provider | 2.1.6 | 應用文件目錄（production DB 檔案位置 `<documents>/ledger_sync/ledger.db`；PM 定案 2026-10-19） | SDD §7 |
 | data | sqlcipher_flutter_libs | 0.7.0+eol（⚠ 套件已標 EOL → SP-1 強化評估） | DB 加密（FR-X2，D2） | SDD §7 |
-| data | cryptography | 2.9.0 | AES-256-GCM（D8；Argon2id 僅備份檔密碼用，效能見 research TR-4） | SDD §7 |
+| data | cryptography | 2.9.0 | AES-256-GCM（D8）＋**Argon2id PIN 雜湊**（F15/SP-4 結案：8MB/p2/i1 純 Dart 實測 106ms；**帶鹽+舊 FNV 透明遷移**，pin_hash.dart） | SDD §7 |
 | core | local_auth | ⚠ TR-8 暫緩（隨 flutter_secure_storage 同步於 M2 回歸） | 生物辨識 App 鎖（FR-X1） | SDD §7.2 |
 
 ### 2.3 功能套件
@@ -141,7 +141,7 @@
 | 3 | iCloud：flutter_cloud_kit vs 自寫 channel | SP-5 | §2.3 |
 | 4 | 發佈鏈：Codemagic vs Fastlane | SP-7 | §2.4 |
 | 5 | FTS5 中文 bigram 細節 | SP-1 | §2.3 |
-| 6 | Argon2：cryptography 純 Dart vs FFI libargon2 | SP-4 附測 | §2.2 |
+| 6 | ~~Argon2：cryptography 純 Dart vs FFI libargon2~~ **✅ 結案（F15，2026-11-17）**：cryptography 純 Dart（8MB/p2/i1＝106ms 實測）夠快，不需 FFI | SP-4 附測 | §2.2 |
 | 7 | SQLCipher 四平台整合（sqlcipher_flutter_libs 0.7.0+eol 已標 EOL） | SP-1（強化） | §2.3 |
 | 8 | **PWA（iOS 免付費發佈）**：sqlite3.wasm＋IndexedDB 在 Web 可行性——**Spike 已過（2026-11-16，真實 Chrome 實測）**：wasm 載入→`SchemaV1` 全表建立→寫入→重開資料仍在（`RESULT:OK`，rows=1/tables=7）。完整化待估：附件改 IndexedDB、`path_provider`/本機通知無 Web、Drive OAuth 流程不同；採用與否待 PM 決策 | SP-8（PWA Spike，入口 `lib/main_web_spike.dart`） | §2.2（web） |
 

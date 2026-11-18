@@ -45,9 +45,11 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     }
   }
 
-  void _submitPin() {
+  Future<void> _submitPin() async {
     final lock = ref.read(appLockControllerProvider);
-    if (lock.verifyPin(_pinCtrl.text)) {
+    final ok = await lock.verifyPin(_pinCtrl.text);
+    if (!mounted) return;
+    if (ok) {
       ref.read(lockOverlayProvider.notifier).dismiss();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -73,10 +75,10 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     }
   }
 
-  void _submitNewPin() {
+  Future<void> _submitNewPin() async {
     final pin = _newPinCtrl.text;
     if (pin.length < 4) return;
-    ref.read(appLockControllerProvider).setPin(pin);
+    await ref.read(appLockControllerProvider).setPin(pin);
     ref.read(lockOverlayProvider.notifier).dismiss();
   }
 
