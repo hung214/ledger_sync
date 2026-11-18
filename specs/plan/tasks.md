@@ -298,6 +298,23 @@ M8（**新增：UI 對照雛型整合＋設定群**）：
 | P8.3 | └ headless 雙視窗 smoke：**390×844**（手機直向）／**1600×1000**（桌面寬）皆 `app-started`＋**0 個 Flutter 異常**（stderr 掃描） | — | 兩者通過 | ✅ |
 | P8.4 | └ 提交＋推送 `feature/ios-pwa` | — | origin 有提交 | ✅ |
 | P9 | 文件同步：SDD（§13 Web 平台章）／BDD §2.1 Web 對照／techstack v0.3.12／CHANGELOG 0.5.0／session | 各文件 | 同步矩陣 §7.2 | ✅ 2026-11-16 |
+
+### 6.0c UI 對照批（F16；E 走查 2026-11-17 發現——「DEMO 有、正式頁沒接」）
+
+> E 走查（06 信用卡／07 設定 vs 正式頁逐字比對）發現 6 個缺口：
+> **UI_DEMO 畫廊已做、正式頁未接**（demo/credit_card_demo_page.dart、demo/settings_demo_page.dart 有、正式頁無）。
+
+| # | TASK | 現況 | 驗收 |
+|---|---|---|---|
+| U1 | 06 信用卡：**帳單歷史列表**（未繳/部分繳/已繳/逾期——statements 既有 BE） | demo 有、正式頁無 | 對照 06 雛型 |
+| U2 | 06 信用卡：**未來已承諾（分期）卡**（FR-C7；installments 既有 BE） | 同上 | 對照 06 |
+| U3 | 06 信用卡：**卡號顯示**（•••• 1234） | 同上 | 對照 06 |
+| U4 | 07 設定同步：**同步模式三選一**（每筆自動/節能批次預設/僅手動） | demo 有、正式頁無 | 對照 07 |
+| U5 | 07 設定同步：**附件僅 Wi-Fi 開關**（settings `backup.attachments_wifi_only`——SyncCoordinator 已讀） | 同上 | 對照 07 |
+| U6 | 07 設定 hub：**安全區塊**（App 鎖＋門檻＋隱私遮蔽——FR-X1/X3；通知管理=M2 註記） | 同上 | 對照 07 |
+
+> 建議順序：U4/U5（設定快赢）→ U1（帳單歷史最有感）→ U2/U3 → U6。
+
 | P10 | **新版偵測與自動更新**（PM 2026-11-17 問「有偵測新版嗎」→ 沒有 → 已做） | `web/index.html`＋部署 | E2E：部署 test1→SW 安裝→部署 test2→**自動重載至 test2** | ✅ 2026-11-17 |
 | P10.1 | └ Flutter SW 內建：install=`skipWaiting`＋activate=**重載開啟中頁面**（不需 SKIP_WAITING 訊息） | — | 機制確認 | ✅ |
 | P10.2 | └ 主動檢查：visibilitychange（回前景）＋每小時 `registration.update()`（長時間開著也會拿到新版） | `web/index.html` | E2E | ✅ |
