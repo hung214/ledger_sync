@@ -17,8 +17,14 @@ class AppLockController {
   /// [pin] 未提供 → **不寫入 pin_hash**（裝置從未設定 PIN——
   /// PM 2026-10-23 修復：此前建構子強制寫 hash，與「無 PIN」情境矛盾）。
   AppLockController(this._db, {bool biometricEnabled = true, int thresholdSec = 30}) {
-    _db.setSetting('lock.threshold_sec', '$thresholdSec');
-    _db.setSetting('lock.biometric', biometricEnabled ? 'true' : 'false');
+    // **僅在無設定時寫入預設**（PM 2026-11-19：每次啟動都覆寫會把使用者
+    // 在設定→安全選的門檻/生物辨識打回 30s/預設）。
+    if (_db.getSetting('lock.threshold_sec') == null) {
+      _db.setSetting('lock.threshold_sec', '$thresholdSec');
+    }
+    if (_db.getSetting('lock.biometric') == null) {
+      _db.setSetting('lock.biometric', biometricEnabled ? 'true' : 'false');
+    }
   }
 
   /// 建構並同時設定 PIN（F15：Argon2id 為非同步——工廠方法）。
@@ -75,6 +81,7 @@ class AppLockController {
   /// **純查詢**（同背景會話可多次邊界探測——29/30/31s 遞增；背景時刻保留，
   /// 由解鎖成功或重新前景操作重置）。
   bool shouldLockOnResume() {
+    if (!hasPin) return false; // 無 PIN → 無鎖可言（否則鎖屏無解鎖手段）
     final bg = _backgroundAt;
     if (bg == null) return false;
     final elapsed = Clock.now().difference(bg).inSeconds;

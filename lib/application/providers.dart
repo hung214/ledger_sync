@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../platform/file_saver/file_saver.dart';
+
 import '../core/clock.dart';
 import '../data/sqlite/app_database.dart';
 import 'budgets/budget_alert_service.dart';
@@ -182,3 +184,9 @@ class RecentDeletionsNotifier extends Notifier<List<TxRow>> {
 }
 
 // ── Row → 領域實體對映：移至 mappers.dart（頂部 export；服務層共用） ──
+
+/// CSV 匯出存檔（PM 2026-11-19 修復：匯出只 print 未存檔）。
+/// 平台實作見 platform/file_saver（native=存檔對話框、web=瀏覽器下載）。
+final fileSaverProvider =
+    Provider<FileSaver>((ref) => throw UnimplementedError(
+        'fileSaverProvider 須於 main()/測試 override 注入'));

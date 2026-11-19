@@ -157,6 +157,18 @@
 - **預算與收入目標**（週期、預警分級、預扣、達標率）— F05。
 - **報表與搜尋**（占比、月趨勢、複合篩選、CSV 匯出）— F10。
 
+### 修正 Fixed（清空資料沒反應＋匯出存檔——PM 實測回饋；2026-11-19）
+
+- **清空資料「點了沒反應」**：main／main_web_app **漏接** `appLockControllerProvider`
+  （throw-provider）→ 清空流程「下一步」與設定→安全的「設定/變更 PIN」拋
+  UnimplementedError **靜默失敗**。已補接線（生物辨識 seam＝恆 false，M2 才接 local_auth）。
+- **匯出 CSV 沒有真的存檔＋只有單月**：改為**先選範圍**（全部資料／目前篩選結果）
+  → native 存檔對話框／web 瀏覽器下載（此前只 print 到主控台＋僅顯示「已匯出」對話框）。
+  新增 `fileSaverProvider` 平台分流（native=file_selector、web=Blob 下載）。
+- **App 鎖設定不再被啟動覆蓋**：AppLockController 改「無設定才寫入預設」
+  （此前每次啟動把門檻打回 30s）；**無 PIN 不鎖**（shouldLockOnResume 加 hasPin 護欄）。
+- 測試 +2 → **213 全綠**。
+
 ### 修正 Fixed（UI 對照批 F16——分支 `feature/ios-pwa`；2026-11-18）
 
 - **六個「DEMO 有、正式頁沒接」缺口補齊**（E 走查發現）：

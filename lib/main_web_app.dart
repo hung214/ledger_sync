@@ -6,8 +6,11 @@ import 'package:uuid/uuid.dart';
 import 'package:web/web.dart' as web;
 
 import 'application/first_run_bootstrap.dart';
+import 'application/lock/app_lock_controller.dart';
+import 'application/lock/lock_fe_state.dart';
 import 'application/providers.dart';
 import 'application/scan/blob_store_factory.dart';
+import 'platform/file_saver/file_saver.dart';
 import 'application/scan/scan_state.dart';
 import 'application/sync/sync_coordinator.dart';
 import 'application/sync/sync_fe_state.dart';
@@ -71,6 +74,12 @@ Future<void> main() async {
               deviceId: deviceId, blobs: newBlobStore())),
           importPipelineProvider
               .overrideWithValue(const ImageQrScanner().pickAndScan),
+          // App 鎖＋存檔接線（PM 2026-11-19 修復：清空資料/設定 PIN/匯出存檔
+          // 讀 throw-provider → 靜默無反應）。生物辨識 M2 才接——先恆 false。
+          appLockControllerProvider
+              .overrideWithValue(AppLockController(db, biometricEnabled: false)),
+          biometricAuthProvider.overrideWithValue(() async => false),
+          fileSaverProvider.overrideWithValue(const FileSaver()),
         ],
         child: AppRoot(db: db),
       ),

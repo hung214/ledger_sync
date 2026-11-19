@@ -7,7 +7,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'application/first_run_bootstrap.dart';
+import 'application/lock/app_lock_controller.dart';
+import 'application/lock/lock_fe_state.dart';
 import 'application/providers.dart';
+import 'platform/file_saver/file_saver.dart';
 import 'application/scan/blob_store_factory.dart';
 import 'application/scan/scan_state.dart';
 import 'application/sync/local_backup.dart';
@@ -67,6 +70,13 @@ Future<void> main() async {
         // PC／桌面掃描（PM 2026-10-29）：檔案對話框選圖 → 圖片解 QR → 確認頁；
         // 找不到可辨識 QR → 空白確認卡（FR-S2）。行動版仍走相機（ScanPage）。
         importPipelineProvider.overrideWithValue(const ImageQrScanner().pickAndScan),
+        // App 鎖接線（PM 2026-11-19 修復：清空資料/設定 PIN 讀此 provider
+        // 時拋 UnimplementedError → 靜默無反應）。生物辨識 M2 才接 local_auth
+        // ——先恆 false（鎖屏直接走 PIN）。
+        appLockControllerProvider
+            .overrideWithValue(AppLockController(db, biometricEnabled: false)),
+        biometricAuthProvider.overrideWithValue(() async => false),
+        fileSaverProvider.overrideWithValue(const FileSaver()),
       ],
       child: AppRoot(db: db),
     ),

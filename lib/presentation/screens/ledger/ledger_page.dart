@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -601,8 +603,46 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     return list;
   }
 
-  void _exportCsv(BuildContext context, List<TxRow> rows) {
+  /// 匯出 CSV（FR-R4；PM 2026-11-19 修復）：**先選範圍**（全部資料／目前篩選）
+  /// → 平台存檔（native=存檔對話框、web=瀏覽器下載）。此前只 print 未存檔。
+  Future<void> _exportCsv(BuildContext context, List<TxRow> rows) async {
     final db = ref.read(dbProvider);
+    final all = db.allTransactions();
+    final scope = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('匯出 CSV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              key: const Key('export-scope-all'),
+              onPressed: () => Navigator.of(ctx).pop('all'),
+              icon: const Icon(Icons.download),
+              label: Text(
+                  '全部資料（${NumberFormat('#,###').format(all.length)} 筆）'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('export-scope-filter'),
+              onPressed: () => Navigator.of(ctx).pop('filter'),
+              icon: const Icon(Icons.filter_alt_outlined),
+              label: Text(
+                  '目前篩選結果（${NumberFormat('#,###').format(rows.length)} 筆）'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+    if (scope == null || !context.mounted) return;
+    final list = scope == 'all' ? all : rows;
     final csv = CsvExporter(
       categoryName: (id) => db.categoryName(id) ?? id,
       accountName: (id) {
@@ -610,27 +650,54 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
             db.allAccounts().where((a) => a.id == id).map((a) => a.name).toList();
         return names.isEmpty ? id : names.first;
       },
-    ).export(rows);
-    // ignore: avoid_print
-    print('CSV 匯出（${rows.length} 筆，UTF-8 BOM）：${csv.length} 字元');
-    final m0 = _month;
-    final label = _range != null
-        ? '${DateFormat('yyyy/MM/dd').format(_range!.start)}–${DateFormat('yyyy/MM/dd').format(_range!.end)}'
-        : (m0 == null ? '全部' : '${m0.$1}/${m0.$2.toString().padLeft(2, '0')}');
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('匯出 CSV'),
-        content: Text(
-            '已匯出 $label交易（${NumberFormat('#,###').format(rows.length)} 筆，UTF-8）'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('確定'),
-          ),
-        ],
-      ),
-    );
+    ).export(list);
+    final name =
+        'ledger_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+    try {
+      final dest =
+          await ref.read(fileSaverProvider).saveCsv(name, utf8.encode(csv));
+      if (!context.mounted || dest == null) return; // null＝取消存檔對話框
+      final m0 = _month;
+      final label = scope == 'all'
+          ? '全部資料'
+          : (_range != null
+              ? '${DateFormat('yyyy/MM/dd').format(_range!.start)}–${DateFormat('yyyy/MM/dd').format(_range!.end)}'
+              : (m0 == null
+                  ? '全部'
+                  : '${m0.$1}/${m0.$2.toString().padLeft(2, '0')}'));
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('匯出 CSV'),
+          content: Text(
+              '已匯出 $label交易（${NumberFormat('#,###').format(list.length)} 筆，UTF-8）'
+              '\n儲存於：$dest',
+              key: const Key('export-result')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('確定'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('匯出失敗'),
+          content: Text('$e', key: const Key('export-error')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('確定'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
 }
