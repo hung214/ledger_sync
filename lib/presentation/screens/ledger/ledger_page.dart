@@ -656,7 +656,13 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     try {
       final dest =
           await ref.read(fileSaverProvider).saveCsv(name, utf8.encode(csv));
-      if (!context.mounted || dest == null) return; // null＝取消存檔對話框
+      if (!context.mounted) return;
+      if (dest == null) {
+        // 使用者取消存檔對話框——明確回饋（此前靜默返回，PM 以為沒反應）。
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已取消匯出（未存檔）')));
+        return;
+      }
       final m0 = _month;
       final label = scope == 'all'
           ? '全部資料'
@@ -665,6 +671,10 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
               : (m0 == null
                   ? '全部'
                   : '${m0.$1}/${m0.$2.toString().padLeft(2, '0')}'));
+      // native 回完整路徑；web 回檔名（無路徑概念）→ 指向瀏覽器下載項目。
+      final where = dest.startsWith('/')
+          ? '儲存於：$dest'
+          : '已下載 $dest（請開瀏覽器的「下載」項目查看）';
       if (!context.mounted) return;
       showDialog<void>(
         context: context,
@@ -672,7 +682,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
           title: const Text('匯出 CSV'),
           content: Text(
               '已匯出 $label交易（${NumberFormat('#,###').format(list.length)} 筆，UTF-8）'
-              '\n儲存於：$dest',
+              '\n$where',
               key: const Key('export-result')),
           actions: [
             TextButton(
