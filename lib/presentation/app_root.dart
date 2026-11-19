@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/sqlite/app_database.dart';
+import 'screens/lock/lock_gate.dart';
+import 'screens/main_shell_page.dart';
 import 'screens/onboarding/first_run_guide_page.dart';
 import 'app_shell.dart';
 
@@ -40,7 +42,14 @@ class _AppRootState extends ConsumerState<AppRoot> {
 
   @override
   Widget build(BuildContext context) {
-    if (_onboarded) return const AppShell();
-    return FirstRunGuidePage(onDone: _completeOnboarding);
+    // **引導頁必須在 MaterialApp 內**（PM 2026-11-19 修復：此前未引導時直接
+    // 回傳 FirstRunGuidePage——MaterialApp 之外的 Scaffold 無 Directionality
+    // → release 版啟動即灰畫面；清空資料後首次觸發此路徑）。
+    return AppShell(
+      home: _onboarded
+          ? const LockGate(child: MainShellPage())
+          : LockGate(
+              child: FirstRunGuidePage(onDone: _completeOnboarding)),
+    );
   }
 }

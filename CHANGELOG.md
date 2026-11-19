@@ -167,6 +167,9 @@
   新增 `fileSaverProvider` 平台分流（native=file_selector、web=Blob 下載）。
 - **App 鎖設定不再被啟動覆蓋**：AppLockController 改「無設定才寫入預設」
   （此前每次啟動把門檻打回 30s）；**無 PIN 不鎖**（shouldLockOnResume 加 hasPin 護欄）。
+- **啟動全灰畫面**（PM 2026-11-19 實測；**清空資料後首次重啟觸發**）：
+  F13 引導頁被放在 MaterialApp 之外（Scaffold 無 Directionality → release 錯誤
+  畫面＝全灰）。改為經 AppShell(home:) 在 MaterialApp 內分流。
 - **匯出→匯入來回相容**（PM 2026-11-19 實測「執行後軟體壞了」）：四處斷點全修——
   ①表頭「日期/時間」加入匯入日期別名 ②匯入日期格式支援**帶時間**（`yyyy/M/d HH:mm[:ss]`）
   ③匯出補**轉入帳戶**欄（轉帳來回保留方向）④**金額欄 minor→major 兩位小數**

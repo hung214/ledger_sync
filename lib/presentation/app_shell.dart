@@ -17,7 +17,8 @@ import 'theme/app_theme.dart';
 /// 主題：M7 UI 統整——buildAppTheme 唯一入口；**themeMode 由
 /// themeModeProvider 控制（FR-O1：跟隨系統/淺色/深色——設定→外觀）**。
 class AppShell extends ConsumerStatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.home});
+  final Widget? home;
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -85,7 +86,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
       themeMode: themeMode,
-      home: const LockGate(child: MainShellPage()),
+      home: widget.home ?? const LockGate(child: MainShellPage()),
     );
   }
 }
