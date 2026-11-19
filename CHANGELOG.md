@@ -167,6 +167,9 @@
   新增 `fileSaverProvider` 平台分流（native=file_selector、web=Blob 下載）。
 - **App 鎖設定不再被啟動覆蓋**：AppLockController 改「無設定才寫入預設」
   （此前每次啟動把門檻打回 30s）；**無 PIN 不鎖**（shouldLockOnResume 加 hasPin 護欄）。
+- **macOS 存檔看不到檔案**（PM 2026-11-19 實測）：沙盒 entitlements 缺
+  `user-selected.read-write`（僅 read-only）→ 存檔被擋。已修正＋結果訊息
+  明確化（完整路徑／「請開瀏覽器下載項目」／取消＝SnackBar 提示）。
 - 測試 +2 → **213 全綠**。
 
 ### 修正 Fixed（UI 對照批 F16——分支 `feature/ios-pwa`；2026-11-18）
