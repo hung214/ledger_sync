@@ -118,6 +118,8 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
       if (!mounted) return;
       // 還原後衍生快取全部失效。
       ref.invalidate(ledgerProvider);
+      ref.invalidate(activeAccountsProvider);
+      ref.refreshAllData();
       ref.invalidate(recentDeletionsProvider);
       ref.invalidate(expenseCategoriesProvider);
       ref.invalidate(incomeCategoriesProvider);
@@ -213,6 +215,8 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
       // 範圍刪除可能軟刪交易/分類/帳戶/預算 → 衍生快取一律失效重算
       // （PM 2026-10-25：明細範圍刪除後「最近刪除」須看得到）。
       ref.invalidate(ledgerProvider);
+      ref.invalidate(activeAccountsProvider);
+      ref.refreshAllData();
       ref.invalidate(recentDeletionsProvider);
       ref.invalidate(expenseCategoriesProvider);
       ref.invalidate(incomeCategoriesProvider);
@@ -356,6 +360,8 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
                     if (mounted) {
                       // 匯入／取消後衍生快取一律失效（PM 2026-10-25 慣例）。
                       ref.invalidate(ledgerProvider);
+      ref.invalidate(activeAccountsProvider);
+      ref.refreshAllData();
                       ref.invalidate(expenseCategoriesProvider);
                       ref.invalidate(incomeCategoriesProvider);
                       ref.invalidate(activeAccountsProvider);

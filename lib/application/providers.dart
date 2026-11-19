@@ -99,7 +99,10 @@ final recurringDueCountProvider =
 
 class RecurringDueCountNotifier extends Notifier<int> {
   @override
-  int build() => _collect();
+  int build() {
+    ref.watch(dataVersionProvider);
+    return _collect();
+  }
 
   int _collect() {
     final db = ref.watch(dbProvider);
@@ -114,17 +117,48 @@ class RecurringDueCountNotifier extends Notifier<int> {
   void refresh() => state = _collect();
 }
 
+/// **資料版本戳**（PM 2026-11-19：「所有的變更都要全畫面刷新」）。
+///
+/// 任何寫入（快記/掃描/匯入/帳戶/分類/預算/定期/還原/清空…）後呼叫
+/// [refreshAllData]（＝bump 一次）；所有「讀 db 快取」型 provider watch 此戳
+/// → 全 App 同步重算。此前各頁各自 invalidate 常有漏（新帳戶總覽/快記
+/// 不出現＝實例）。
+final dataVersionProvider =
+    NotifierProvider<DataVersionNotifier, int>(DataVersionNotifier.new);
+
+class DataVersionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+  void bump() => state++;
+}
+
+extension RefreshAllDataRef on Ref {
+  /// 任何資料寫入後呼叫——全部快取 provider 同步重算（全畫面刷新）。
+  void refreshAllData() => read(dataVersionProvider.notifier).bump();
+}
+
+extension RefreshAllDataWidgetRef on WidgetRef {
+  /// 同上（UI 層）。
+  void refreshAllData() => read(dataVersionProvider.notifier).bump();
+}
+
 /// 未封存帳戶（快記/總覽）。
-final activeAccountsProvider = Provider((ref) =>
-    ref.watch(dbProvider).allAccounts().where((a) => !a.archived).toList());
+final activeAccountsProvider = Provider((ref) {
+  ref.watch(dataVersionProvider); // 變更即重算（全畫面刷新）
+  return ref.watch(dbProvider).allAccounts().where((a) => !a.archived).toList();
+});
 
 /// 支出分類（快記/分類設定）。
-final expenseCategoriesProvider =
-    Provider((ref) => ref.watch(dbProvider).categoriesByKind('expense'));
+final expenseCategoriesProvider = Provider((ref) {
+  ref.watch(dataVersionProvider);
+  return ref.watch(dbProvider).categoriesByKind('expense');
+});
 
 /// 收入分類（設定頁分頁；與支出同源快取策略）。
-final incomeCategoriesProvider =
-    Provider((ref) => ref.watch(dbProvider).categoriesByKind('income'));
+final incomeCategoriesProvider = Provider((ref) {
+  ref.watch(dataVersionProvider);
+  return ref.watch(dbProvider).categoriesByKind('income');
+});
 
 /// 常用類別（FR-B1 常用區）：最近使用分類（依交易時間新→舊去重，取前 10）。
 /// 監看 [ledgerProvider]——存帳後即時反映（下一筆選單最上方）。
@@ -149,6 +183,7 @@ final ledgerProvider =
 class LedgerNotifier extends Notifier<List<TxRow>> {
   @override
   List<TxRow> build() {
+    ref.watch(dataVersionProvider); // 任何寫入 → 明細重算（全畫面刷新）
     final txs = ref
         .watch(dbProvider)
         .allTransactions()
@@ -170,6 +205,7 @@ final recentDeletionsProvider =
 class RecentDeletionsNotifier extends Notifier<List<TxRow>> {
   @override
   List<TxRow> build() {
+    ref.watch(dataVersionProvider);
     final txs = ref
         .watch(dbProvider)
         .allTransactions()

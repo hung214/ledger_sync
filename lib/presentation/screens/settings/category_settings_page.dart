@@ -36,6 +36,7 @@ class _CategorySettingsPageState extends ConsumerState<CategorySettingsPage> {
     ref.invalidate(expenseCategoriesProvider);
     ref.invalidate(incomeCategoriesProvider);
     ref.invalidate(ledgerProvider); // 交易列的分類名稱/圖示重新解析
+    ref.refreshAllData(); // 全畫面刷新（PM 2026-11-19）
     setState(() {});
   }
 

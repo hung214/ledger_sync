@@ -167,6 +167,16 @@
   新增 `fileSaverProvider` 平台分流（native=file_selector、web=Blob 下載）。
 - **App 鎖設定不再被啟動覆蓋**：AppLockController 改「無設定才寫入預設」
   （此前每次啟動把門檻打回 30s）；**無 PIN 不鎖**（shouldLockOnResume 加 hasPin 護欄）。
+- **「設定了新帳戶，總覽/快記卻看不到」**（PM 2026-11-19 實測）：帳戶 mutation
+  後未失效 `activeAccountsProvider`（讀 db 快取型 provider 算一次就快取）。
+  已在所有 mutation 點補失效＋回歸測試。
+- **所有的變更都要全畫面刷新**（PM 2026-11-19 指示——系統性修法）：
+  新增 **資料版本戳** `dataVersionProvider`；所有讀 db 的快取 provider
+  （明細/最近刪除/帳戶/收支分類/定期到期數）watch 此戳；**14 個寫入點**
+  （快記存檔/復原、掃描確認、編輯/刪除/還原/永久刪除、信用卡結帳/繳款、
+  帳戶/分類管理、引導還原、匯入、清空/範圍刪除）統一呼叫 `refreshAllData()`
+  → 任何變更全 App 同步重算，不再有頁面各自為政的漏刷新。
+- 桌面掃描入口改名「**掃描／匯入圖片**」（即時相機掃描＝手機/PWA 版；桌面 M4）。
 - **啟動全灰畫面**（PM 2026-11-19 實測；**清空資料後首次重啟觸發**）：
   F13 引導頁被放在 MaterialApp 之外（Scaffold 無 Directionality → release 錯誤
   畫面＝全灰）。改為經 AppShell(home:) 在 MaterialApp 內分流。

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../application/providers.dart';
 import '../data/sqlite/app_database.dart';
 import 'screens/lock/lock_gate.dart';
 import 'screens/main_shell_page.dart';
@@ -37,6 +38,9 @@ class _AppRootState extends ConsumerState<AppRoot> {
 
   void _completeOnboarding() {
     widget.db.setSetting('app.onboarded', '1');
+    // 引導（全新開始/還原/匯入）可能建立帳戶——失效快取（PM 2026-11-19）。
+    ref.invalidate(activeAccountsProvider);
+    ref.refreshAllData(); // 全畫面刷新
     setState(() => _onboarded = true);
   }
 

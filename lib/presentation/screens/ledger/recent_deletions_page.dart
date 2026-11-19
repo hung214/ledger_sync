@@ -91,6 +91,7 @@ class RecentDeletionsPage extends ConsumerWidget {
                         ref.read(restoreTransactionProvider).execute(t.id);
                         ref.invalidate(ledgerProvider);
                         ref.invalidate(recentDeletionsProvider);
+                        ref.refreshAllData();
                       },
                       onPurge: () => _purgeOne(context, ref, t.id),
                     );
@@ -108,6 +109,7 @@ class RecentDeletionsPage extends ConsumerWidget {
     if (!ok) return;
     final result = ref.read(purgeTombstoneProvider).execute(id);
     ref.invalidate(recentDeletionsProvider);
+    ref.refreshAllData();
     if (context.mounted) _toast(context, '已永久刪除 ${result.purgedCount} 筆');
   }
 
@@ -118,6 +120,7 @@ class RecentDeletionsPage extends ConsumerWidget {
     if (!ok) return;
     final result = ref.read(purgeTombstoneProvider).executeAll();
     ref.invalidate(recentDeletionsProvider);
+    ref.refreshAllData();
     if (context.mounted) _toast(context, '已永久刪除 ${result.purgedCount} 筆');
   }
 

@@ -47,6 +47,7 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   void _refreshCategories() {
     ref.invalidate(expenseCategoriesProvider);
     ref.invalidate(incomeCategoriesProvider);
+    ref.refreshAllData();
   }
 
   @override

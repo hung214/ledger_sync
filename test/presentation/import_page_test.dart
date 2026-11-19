@@ -41,7 +41,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('匯入圖片'), findsOneWidget, reason: '桌面匯入頁（原「相簿/檔案匯入」）');
+    expect(find.text('掃描／匯入圖片'), findsOneWidget, reason: '桌面匯入頁（原「相簿/檔案匯入」）');
     expect(find.byKey(const Key('import-pick')), findsOneWidget);
     expect(find.textContaining('選擇圖片'), findsWidgets);
 

@@ -282,8 +282,9 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
       sessionCount: state.sessionCount + 1,
       lastSaveMs: sw.elapsedMilliseconds,
     );
-    // 明細/總覽即時刷新（AC-02，SDD 原則 2：衍生值即時反映）。
+    // 明細/總覽即時刷新（AC-02）＋全畫面刷新（PM 2026-11-19：資料版本戳）。
     ref.invalidate(ledgerProvider);
+    ref.refreshAllData();
   }
 
   /// 繼續（FR-Q2/Q5）：Sticky 保留帳戶/分類/商家；時間重設為現在（FR-Q5）。
@@ -306,6 +307,7 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     ref.invalidate(ledgerProvider);
     // 復原＝軟刪除墓標 → 「最近刪除」須即時反映（PM 2026-10-25）。
     ref.invalidate(recentDeletionsProvider);
+    ref.refreshAllData();
   }
 }
 

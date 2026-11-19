@@ -13,7 +13,7 @@ class ImportPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('匯入圖片')),
+      appBar: AppBar(title: const Text('掃描／匯入圖片')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -282,6 +282,7 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
     BillingCycleService(ref.read(dbProvider), ref.read(notificationProvider))
         .run(widget.cardAccountId);
     ref.invalidate(ledgerProvider);
+    ref.refreshAllData();
   }
 
   StatementRow? _latestStatement(AppDatabase db, String accountId) {
@@ -312,6 +313,7 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
                         amountMinor: statement.totalMinor - statement.paidMinor,
                       );
                   ref.invalidate(ledgerProvider);
+    ref.refreshAllData();
                   Navigator.of(sheetCtx).pop();
                   setState(() {});
                 },
@@ -337,6 +339,7 @@ class _CreditCardPageState extends ConsumerState<CreditCardPage> {
                           amountMinor: amount,
                         );
                     ref.invalidate(ledgerProvider);
+    ref.refreshAllData();
                   }
                   Navigator.of(sheetCtx).pop();
                   setState(() {});

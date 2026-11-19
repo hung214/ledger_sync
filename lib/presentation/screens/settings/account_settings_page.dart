@@ -24,7 +24,13 @@ class _AccountSettingsPageState extends ConsumerState<AccountSettingsPage> {
   String? _message;
   late final AccountService _service = AccountService(ref.read(dbProvider));
 
-  void _refresh() => setState(() {});
+  void _refresh() {
+    // PM 2026-11-19 修復：新帳戶在總覽/快記不出現——activeAccountsProvider
+    // 是「讀 db 快取」型 provider，mutation 後必須 invalidate（同分類集慣例）。
+    ref.invalidate(activeAccountsProvider);
+    ref.refreshAllData(); // 全畫面刷新（PM 2026-11-19）
+    setState(() {});
+  }
 
   void _showSnack(String msg) {
     if (!mounted) return;

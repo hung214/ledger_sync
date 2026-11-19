@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart';
 
 /// PIN 雜湊（F15／SP-4：FNV-1a 32bit（弱）→ **Argon2id 帶鹽**，truth D8）。
 ///
@@ -13,6 +14,11 @@ import 'package:cryptography/cryptography.dart';
 ///   呼叫端（AppLockController.verifyPin）**透明遷移**重雜湊升級。
 class PinHasher {
   PinHasher._();
+
+  /// **測試接縫**：true → 以 sha256（同格式）取代 Argon2id。
+  /// 僅供 widget 測試（假時鐘無法驅動 Argon2id 的分段 Timer——pumpAndSettle
+  /// 只推 frame）。生產程式碼**禁止**設定；單元測試（真實非同步）維持 false。
+  static bool kTestMode = false;
 
   static const String _prefix = 'v2.argon2id';
   static const int _saltBytes = 16;
@@ -28,9 +34,8 @@ class PinHasher {
   static Future<String> hash(String pin) async {
     final salt = Uint8List.fromList(
         List<int>.generate(_saltBytes, (_) => _random.nextInt(256)));
-    final out = await _algo.deriveKeyFromPassword(
-        password: pin, nonce: salt);
-    return '$_prefix\$${base64Encode(salt)}\$${base64Encode(await out.extractBytes())}';
+    final digest = await _derive(pin, salt);
+    return '$_prefix\$${base64Encode(salt)}\$${base64Encode(digest)}';
   }
 
   /// 是否為**舊格式**（FNV hex）。
@@ -51,8 +56,17 @@ class PinHasher {
     } on FormatException {
       return false;
     }
+    final digest = await _derive(pin, salt);
+    return constTimeEquals(digest, base64Decode(parts[2]));
+  }
+
+  /// 衍生核心（kTestMode＝sha256；生產＝Argon2id）。
+  static Future<List<int>> _derive(String pin, Uint8List salt) async {
+    if (kTestMode) {
+      return sha256.convert([...salt, ...utf8.encode(pin)]).bytes;
+    }
     final out = await _algo.deriveKeyFromPassword(password: pin, nonce: salt);
-    return constTimeEquals(await out.extractBytes(), base64Decode(parts[2]));
+    return out.extractBytes();
   }
 
   /// 常數時間比較（避免逐字早退洩漏）。

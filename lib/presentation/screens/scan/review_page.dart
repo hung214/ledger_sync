@@ -99,6 +99,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       ref.read(attachmentTxIdsProvider.notifier).refresh();
     }
     ref.read(ledgerProvider.notifier).refresh();
+    ref.refreshAllData();
 
     if (_index + 1 < widget.items.length) {
       // 自動跳下一張（acceptance S3.3-5：維持連續性）。

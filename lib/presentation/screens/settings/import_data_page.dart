@@ -113,6 +113,8 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
   void _undo() {
     final n = ref.read(_importServiceProvider).undoLastBatch();
     ref.invalidate(ledgerProvider);
+    ref.invalidate(activeAccountsProvider); // 匯入可能以名稱建立帳戶
+    ref.refreshAllData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已取消本批匯入（軟刪除 $n 筆；其他裝置會同步刪除）')));

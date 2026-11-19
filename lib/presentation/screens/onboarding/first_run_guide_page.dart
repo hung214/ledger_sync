@@ -63,6 +63,7 @@ class _FirstRunGuidePageState extends ConsumerState<FirstRunGuidePage> {
           .restoreFromBytes(db, bytes);
       if (!mounted) return;
       ref.invalidate(ledgerProvider);
+      ref.refreshAllData();
       ref.invalidate(expenseCategoriesProvider);
       ref.invalidate(incomeCategoriesProvider);
       ref.invalidate(activeAccountsProvider);

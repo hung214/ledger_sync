@@ -109,6 +109,7 @@ class _RecurringQueuePageState extends ConsumerState<RecurringQueuePage> {
                                           Clock.now().month, Clock.now().day),
                                     );
                                     ref.read(ledgerProvider.notifier).refresh();
+                                    ref.refreshAllData();
                                     ref
                                         .read(recurringDueCountProvider.notifier)
                                         .refresh();

@@ -462,6 +462,7 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
           .create(kind: kind, name: name, parentId: parentId);
       ref.invalidate(expenseCategoriesProvider);
       ref.invalidate(incomeCategoriesProvider);
+      ref.refreshAllData();
       ref.read(quickEntryControllerProvider.notifier).selectCategoryById(row.id);
     } catch (e) {
       if (mounted) {
