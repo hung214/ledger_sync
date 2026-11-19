@@ -268,7 +268,8 @@ void _bind(GherkinRunner runner, _World w) {
     expect(lines, hasLength(int.parse(p['n']!)), reason: '資料列數（篩選期間）');
     for (final line in lines) {
       final amount = line.split(',')[2]; // 金額欄（無逗號欄位干擾：測資無引號欄）
-      expect(int.tryParse(amount), isNotNull, reason: '金額欄應為純數字：$amount');
+      expect(double.tryParse(amount), isNotNull,
+          reason: '金額欄應為數字（major 兩位小數）：$amount');
     }
   });
 

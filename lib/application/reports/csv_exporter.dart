@@ -3,9 +3,10 @@ import '../../data/sqlite/app_database.dart';
 /// CSV 匯出（FR-R4；acceptance S10.3）。
 ///
 /// - **UTF-8 with BOM**（EF BB BF）——Windows Excel 直接開啟中文不亂碼。
-/// - 欄位：日期/時間、類型、金額、幣別、帳戶、分類、商家、備註、標籤、source
-///   （S10.3-3；標籤 M2 未使用輸出空值）。
-/// - 金額欄為**純整數**（minor units，可 SUM；S10.3-4）。
+/// - 欄位：日期/時間、類型、金額、幣別、帳戶、轉入帳戶、分類、商家、備註、標籤、source
+///   （S10.3-3＋PM 2026-11-19 來回相容：轉帳列需轉入帳戶；標籤 M2 未使用輸出空值）。
+/// - 金額欄為**major 單位兩位小數**（`1.00`＝1 元；PM 2026-11-19 來回相容決策：
+///   舊版寫 minor，再匯入被當 major ×100——金額全錯）。Excel 可讀可 SUM。
 /// - 欄值含逗號/引號/換行 → CSV 標準逸出（雙引號包裹＋引號加倍）。
 class CsvExporter {
   const CsvExporter({
@@ -17,7 +18,7 @@ class CsvExporter {
   final String Function(String id)? accountName;
 
   static const List<String> header = [
-    '日期/時間', '類型', '金額', '幣別', '帳戶', '分類', '商家', '備註', '標籤', 'source',
+    '日期/時間', '類型', '金額', '幣別', '帳戶', '轉入帳戶', '分類', '商家', '備註', '標籤', 'source',
   ];
 
   String export(List<TxRow> txs) {
@@ -31,9 +32,12 @@ class CsvExporter {
       final cells = [
         date,
         t.kind,
-        '${t.amountMinor}', // 純數字（minor units 可 SUM）
+        (t.amountMinor / 100).toStringAsFixed(2), // major 兩位小數（匯入引擎互逆）
         t.currency,
         accountName?.call(t.accountId) ?? t.accountId,
+        t.toAccountId == null
+            ? ''
+            : (accountName?.call(t.toAccountId!) ?? t.toAccountId!),
         t.categoryId == null ? '' : (categoryName?.call(t.categoryId!) ?? t.categoryId!),
         t.merchant ?? '',
         t.note ?? '',

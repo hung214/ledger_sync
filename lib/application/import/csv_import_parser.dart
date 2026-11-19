@@ -23,6 +23,11 @@ class CsvImportParser {
   static const String defaultCurrency = 'TWD';
 
   static const List<String> _datePatterns = [
+    // 帶時間者優先（本 App 匯出即 `2026/11/19 14:30`——來回匯入必須可解析）。
+    'yyyy/M/d HH:mm',
+    'yyyy-M-d HH:mm',
+    'yyyy/M/d HH:mm:ss',
+    'yyyy-M-d HH:mm:ss',
     'yyyy-MM-dd',
     'yyyy/M/d',
     'yyyy/MM/dd',
@@ -34,12 +39,12 @@ class CsvImportParser {
   ];
 
   static const Map<String, List<String>> _aliases = {
-    'date': ['date', '日期', '日付'],
+    'date': ['date', '日期', '日付', '日期/時間', '日期時間', 'datetime', 'date/time'],
     'type': ['type', '交易類型', '類型', '類別類型'],
     'amount': ['amount', '金額'],
     'currency': ['currency', '幣別', '貨幣'],
     'account': ['account', '帳戶', '帳號'],
-    'toAccount': ['to account', 'transfer account', '轉入帳戶', '轉出至', '目標帳戶'],
+    'toAccount': ['to account', 'transfer account', '轉入帳戶', '轉出至', '目標帳戶', '轉入'],
     'category': ['category', '分類', '類別'],
     'subcategory': ['subcategory', 'sub category', '子分類', '子類別'],
     'merchant': ['payee', 'merchant', '商家', '對象'],
