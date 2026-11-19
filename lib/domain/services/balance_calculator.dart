@@ -74,7 +74,12 @@ class BalanceCalculator {
     var open = 0;
     for (final tx in txs) {
       if (tx.deleted || tx.accountId != card.id) continue;
-      if (tx.settlementStatus != SettlementStatus.pending) continue;
+      // PM 2026-11-19 修復：'none'（歷史資料/未知來源）視同未結帳——
+      // 只排除已結入帳單/已繳（billed/settled），否則應付恆 0。
+      if (tx.settlementStatus == SettlementStatus.billed ||
+          tx.settlementStatus == SettlementStatus.settled) {
+        continue;
+      }
       switch (tx.kind) {
         case TxKind.expense:
           open += tx.amountMinor;

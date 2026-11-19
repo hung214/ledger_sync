@@ -100,6 +100,7 @@ class ImportReport {
     required this.skippedCurrencyRows,
     required this.accountsCreated,
     required this.categoriesCreated,
+    this.overwritten = 0,
   });
 
   final int inserted;
@@ -108,5 +109,8 @@ class ImportReport {
   final int errorRows;
   final int skippedCurrencyRows;
   final int accountsCreated;
+
+  /// 覆蓋既有筆數（PM 2026-11-19：重複處理＝覆蓋時 >0）。
+  final int overwritten;
   final int categoriesCreated;
 }

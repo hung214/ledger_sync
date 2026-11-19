@@ -34,6 +34,7 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
   ImportPreview? _preview;
   ImportReport? _report;
   bool _backedUp = false;
+  bool _overwrite = false; // 重複處理：略過（預設）／覆蓋（PM 2026-11-19）
   String? _error;
 
   static final NumberFormat _fmt = NumberFormat('#,###');
@@ -94,9 +95,9 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
         _backedUp = false; // 備份失敗不擋匯入（oplog 契約仍可回溯）
       }
 
-      final report = ref
-          .read(_importServiceProvider)
-          .apply(utf8.decode(_pendingBytes, allowMalformed: true));
+      final report = ref.read(_importServiceProvider).apply(
+          utf8.decode(_pendingBytes, allowMalformed: true),
+          overwriteDuplicates: _overwrite);
       setState(() {
         _report = report;
         _step = _Step.done;
@@ -159,7 +160,7 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
                 const SizedBox(height: 8),
                 const Text(
                     '支援 AndroMoney 等其他 App 匯出的 CSV（日期／類型／金額／帳戶／分類…，'
-                    '中英文表頭皆可）。未知帳戶與分類會自動建立；重複的交易會自動跳過。'),
+                    '中英文表頭皆可）。未知帳戶與分類會自動建立；重複的交易可選擇略過（預設）或覆蓋。'),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   key: const Key('dm-import-pick'),
@@ -201,7 +202,25 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
                     '轉帳 ${p.rows.where((r) => r.kind == ImportKind.transfer).length} 筆）'),
                 if (p.minDate != null)
                   Text('期間：${_fmtDate(p.minDate!)} ~ ${_fmtDate(p.maxDate!)}'),
-                Text('重複（自動跳過）：${p.duplicateLines.length} 筆'),
+                Text('重複：${p.duplicateLines.length} 筆（處理方式見下方選擇）'),
+                RadioGroup<bool>(
+                  groupValue: _overwrite,
+                  onChanged: (v) => setState(() => _overwrite = v!),
+                  child: Column(children: [
+                    RadioListTile<bool>(
+                      key: const Key('import-dup-skip'),
+                      value: false,
+                      title: const Text('略過（預設）'),
+                      dense: true,
+                    ),
+                    RadioListTile<bool>(
+                      key: const Key('import-dup-overwrite'),
+                      value: true,
+                      title: const Text('覆蓋既有資料（以匯入內容更新該筆）'),
+                      dense: true,
+                    ),
+                  ]),
+                ),
                 Text('錯誤列（略過）：${p.errors.length} 筆'),
                 if (p.skippedCurrency.isNotEmpty)
                   Text('非 TWD（略過）：${p.skippedCurrency.length} 筆',
@@ -266,6 +285,7 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
                 const SizedBox(height: 8),
                 Text('新增 ${r.inserted} 筆（含轉帳 ${r.transfersInserted} 筆）'),
                 Text('自動跳過重複 ${r.skippedDuplicate} 筆'),
+                if (r.overwritten > 0) Text('覆蓋既有 ${r.overwritten} 筆'),
                 if (r.errorRows > 0) Text('錯誤略過 ${r.errorRows} 筆'),
                 if (r.skippedCurrencyRows > 0)
                   Text('非 TWD 略過 ${r.skippedCurrencyRows} 筆'),

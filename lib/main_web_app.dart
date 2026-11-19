@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:web/web.dart' as web;
 
 import 'application/first_run_bootstrap.dart';
+import 'application/maintenance/data_repair_service.dart';
 import 'application/lock/app_lock_controller.dart';
 import 'application/lock/lock_fe_state.dart';
 import 'application/providers.dart';
@@ -62,6 +63,10 @@ Future<void> main() async {
         ? const UnconfiguredCloudAdapter()
         : GoogleDriveAdapter(GoogleApisDriveApi(GisBearerClient(_kWebClientId)));
     _report('web:providers-ready');
+
+    // 一次性資料修復（PM 2026-11-19；冪等）。
+    final repair = DataRepairService(db, deviceId: deviceId).run();
+    _report('web:repair credit=${repair.creditPendingFixed} orphans=${repair.orphansFixed}');
 
     runApp(
       ProviderScope(

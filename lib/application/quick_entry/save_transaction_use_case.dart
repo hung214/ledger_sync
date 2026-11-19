@@ -76,6 +76,16 @@ class SaveTransactionUseCase {
     if (isCrossAccount && (toAccountId == null || toAccountId == accountId)) {
       throw const TransactionValidationException('驗證失敗：轉帳須指定相異目標帳戶');
     }
+    // PM 2026-11-19 修復：信用卡支出/退款＝**預扣（pending）**——此前一律
+    // 'none' → 信用卡「應付」恆 0（明細 chips/總覽/信用卡頁全部失真）。
+    var effectiveStatus = settlementStatus;
+    if (settlementStatus == 'none' &&
+        (kind == TxKind.expense || kind == TxKind.refund)) {
+      final accType = _db
+          .select('SELECT type FROM accounts WHERE id = ?', [accountId])
+          .firstOrNull?['type'] as String?;
+      if (accType == 'credit') effectiveStatus = 'pending';
+    }
     final now = Clock.now();
     final row = TxRow(
       id: const Uuid().v7(),
@@ -91,7 +101,7 @@ class SaveTransactionUseCase {
       occurredAt: occurredAt.millisecondsSinceEpoch,
       source: source,
       // F05 S5.3：信用卡預扣（pending）——預算「承諾支出」口徑；完整帳單語意屬 F04。
-      settlementStatus: settlementStatus,
+      settlementStatus: effectiveStatus,
       createdAt: now.millisecondsSinceEpoch,
       updatedAt: now.millisecondsSinceEpoch,
       hlc: Hlc.now(deviceId).toString(),

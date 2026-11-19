@@ -88,7 +88,10 @@ class AccountService {
 
   /// 刪除帳戶（FR-A2 把關）：**信用卡未繳 > 0 → 拋
   /// [AccountInUseException]（提示改為封存）**；否則實體刪除＋oplog。
-  void delete(String id) {
+  /// 刪除帳戶＋**連動軟刪其相關交易**（PM 2026-11-19：孤兒交易會讓
+  /// 明細/統計加總錯誤）。交易走墓標（「最近刪除」可還原；同步安全——
+  /// 與 DeleteTransactionUseCase 同一語意）。回傳連動刪除筆數。
+  int delete(String id) {
     final row = _find(id);
     if (row.type == 'credit') {
       final unpaid = calc.creditUnpaidTotal(
@@ -101,6 +104,36 @@ class AccountService {
     }
     final hlc = Hlc.now(deviceId).toString();
     _db.mutateAccountWithOplog(row, _op(row, hlc), delete: true);
+    return _softDeleteRelatedTransactions(id);
+  }
+
+  /// 軟刪除某帳戶相關之全部未刪交易（來源或轉入目標）。
+  int _softDeleteRelatedTransactions(String accountId) {
+    final rows = _db.select(
+      'SELECT id FROM transactions '
+      'WHERE deleted_at IS NULL AND (account_id = ? OR to_account_id = ?)',
+      [accountId, accountId],
+    );
+    var n = 0;
+    for (final r in rows) {
+      final txId = r['id'] as String;
+      final nowMs = Clock.now().millisecondsSinceEpoch;
+      final hlc = Hlc.now(deviceId).toString();
+      _db.softDeleteTransactionWithOplog(
+        txId,
+        OplogRow(
+          entity: 'transactions',
+          entityId: txId,
+          hlc: hlc,
+          payload: null, // 墓標（SDD §5.5.4）
+          packedSeq: null,
+        ),
+        deletedAt: nowMs,
+        hlc: hlc,
+      );
+      n++;
+    }
+    return n;
   }
 
   List<AccountRow> all() => _db.allAccounts();

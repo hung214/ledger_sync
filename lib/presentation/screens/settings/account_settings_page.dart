@@ -160,9 +160,41 @@ class _AccountSettingsPageState extends ConsumerState<AccountSettingsPage> {
   }
 
   Future<void> _delete(String id, String name) async {
+    final db = ref.read(dbProvider);
+    final txCount = db.select(
+            'SELECT COUNT(*) c FROM transactions '
+            "WHERE deleted_at IS NULL AND (account_id = ? OR to_account_id = ?)",
+            [id, id])
+        .first['c'] as int;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('刪除「$name」？'),
+        content: Text(txCount == 0
+            ? '此帳戶沒有交易。刪除後無法從帳戶列表復原（可重新新增）。'
+            : '將**同時刪除此帳戶相關的 $txCount 筆交易**'
+                '（可在「設定→最近刪除」還原；雲端同步會一併生效）。'),
+        actions: [
+          TextButton(
+            key: const Key('acct-delete-cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('acct-delete-confirm'),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
     try {
-      _service.delete(id);
+      final n = _service.delete(id);
       _refresh();
+      if (mounted && n > 0) _showSnack('已刪除帳戶＋$n 筆相關交易');
     } catch (e) {
       _showSnack('$e');
     }
