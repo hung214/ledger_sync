@@ -86,7 +86,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       final draft = ImageQrScanner.draftFromQrTexts([raw]);
       if (draft == null) {
         // 非發票 QR（網址等）→ 略過，但**畫面回饋**（診斷：偵測有到、格式不符）
-        _flashHint('偵測到 QR（${raw.length} 字）——非發票格式，已略過');
+        final fmt = barcode.format.name;
+        _flashHint('偵測到 $fmt（${raw.length} 字）——非發票格式，已略過');
         continue;
       }
       ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
