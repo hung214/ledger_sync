@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/scan/scan_state.dart';
 import 'import_page.dart';
+import 'native_camera_scanner.dart';
 import 'web_camera_scan.dart';
 import 'review_page.dart';
 
@@ -111,22 +112,21 @@ class _ScanningBody extends ConsumerWidget {
     final items = ref.watch(scanDraftsProvider);
     return Column(
       children: [
-        // 相機預覽佔位（行動端 mobile_scanner 接線點，SP-2b）。
+        // 原生即時相機（SP-2b 完成：mobile_scanner——Android/iOS/macOS）。
         Expanded(
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.center,
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.center_focus_weak, size: 48),
-                Text('對準發票 QR code'),
-              ],
-            ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Stack(children: [
+              const Positioned.fill(child: NativeCameraScanner()),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 8,
+                child: Center(
+                  child: _AimHint(),
+                ),
+              ),
+            ]),
           ),
         ),
         Text('已掃 ${items.length} 張', key: const Key('scan-count'),
@@ -201,6 +201,25 @@ class _Thumbnail extends StatelessWidget {
               style: Theme.of(context).textTheme.labelMedium),
         ],
       ),
+    );
+  }
+}
+
+
+/// 掃描提示（半透明膠囊——覆蓋在預覽上）。
+class _AimHint extends StatelessWidget {
+  const _AimHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Text('對準發票 QR code（自動辨識；重複掃描自動略過）',
+          style: TextStyle(color: Colors.white, fontSize: 12)),
     );
   }
 }

@@ -267,8 +267,9 @@ sudo xcodebuild -license accept
 - [ ] **多幣別匯入**（非 TWD 目前自動略過；語意待定：金額幣別欄＋匯率）
 
 ### M4（掃描/相機尾段）
-- [ ] **手機原生即時相機掃描**（Android/iOS mobile_scanner 接線——目前手機掃描頁為佔位；可用替代＝PWA 相機／檔案匯入）
-- [ ] **桌面即時相機掃描**（macOS/Windows——目前桌面＝「掃描／匯入圖片」檔案路徑）
+- [x] **手機原生即時相機掃描**（✅ 2026-11-20 mobile_scanner 接線：Android/iOS；連拍去重＋非發票 QR 略過）
+- [x] **macOS 即時相機掃描**（✅ 2026-11-20 同套件支援；entitlements camera 已加）
+- [ ] **Windows 即時相機**（mobile_scanner 不支援 Windows——維持「掃描／匯入圖片」檔案路徑）
 
 ### 等 PM 提供/決策
 - [ ] **Google 憑證**（Web/Desktop Client ID——給了半天內接完雲端備份/同步）
