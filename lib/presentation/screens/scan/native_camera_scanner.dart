@@ -29,6 +29,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   String? _lastRaw;
   DateTime? _lastAt;
   Timer? _dedupReset;
+  String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
+  Timer? _hintReset;
 
   @override
   void initState() {
@@ -43,18 +45,30 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   @override
   void dispose() {
     _dedupReset?.cancel();
+    _hintReset?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  /// 條碼偵測入口（連拍＋去重）。
+  void _flashHint(String text) {
+    if (!mounted) return;
+    setState(() => _hint = text);
+    _hintReset?.cancel();
+    _hintReset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _hint = null);
+    });
+  }
+
+  /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
     for (final barcode in capture.barcodes) {
-      final raw = barcode.rawValue;
+      final raw = barcode.rawValue?.trim();
       if (raw == null || raw.isEmpty) continue;
       final now = DateTime.now();
       // 同一條碼 1.5s 內重複 → 略過（對準同一張發票會連續回呼）。
-      if (raw == _lastRaw && _lastAt != null && now.difference(_lastAt!) < const Duration(milliseconds: 1500)) {
+      if (raw == _lastRaw &&
+          _lastAt != null &&
+          now.difference(_lastAt!) < const Duration(milliseconds: 1500)) {
         continue;
       }
       _lastRaw = raw;
@@ -66,8 +80,13 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       });
 
       final draft = ImageQrScanner.draftFromQrTexts([raw]);
-      if (draft == null) continue; // 非發票 QR（網址等）→ 略過
+      if (draft == null) {
+        // 非發票 QR（網址等）→ 略過，但**畫面回饋**（診斷：偵測有到、格式不符）
+        _flashHint('偵測到 QR（${raw.length} 字）——非發票格式，已略過');
+        continue;
+      }
       ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
+      _flashHint('✓ 已加入：${draft.merchant.value ?? '（未辨識商家）'}');
     }
   }
 
@@ -75,13 +94,37 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: MobileScanner(
-        controller: _controller,
-        onDetect: _onDetect,
-        errorBuilder: (context, error) => _CameraError(onFallback: () {
-          Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => const ImportPage()));
-        }),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+            errorBuilder: (context, error) => _CameraError(onFallback: () {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const ImportPage()));
+            }),
+          ),
+          if (_hint != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 12,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(_hint!,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
