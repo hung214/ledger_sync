@@ -31,12 +31,13 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   Timer? _dedupReset;
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
   Timer? _hintReset;
+  int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
 
   @override
   void initState() {
     super.initState();
     _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
+      detectionSpeed: DetectionSpeed.unrestricted, // PM：掃描頻率——最高頻偵測
       facing: CameraFacing.back,
       autoStart: true,
     );
@@ -61,6 +62,9 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
 
   /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
+    if (capture.barcodes.isNotEmpty && mounted) {
+      setState(() => _events++);
+    }
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue?.trim();
       if (raw == null || raw.isEmpty) continue;
@@ -92,40 +96,75 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
 
   @override
   Widget build(BuildContext context) {
+    // PM 2026-11-20：區域太大 → 中央 70% 掃描窗（Vision 只分析此區，
+    // 減噪＋聚焦；7.x scanWindow＝widget 內邏輯座標，官方範例同款）。
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) => _CameraError(onFallback: () {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => const ImportPage()));
-            }),
-          ),
-          if (_hint != null)
-            Positioned(
-              left: 12,
-              right: 12,
-              top: 12,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(_hint!,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 12)),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final scanWindow = Rect.fromCenter(
+          center: constraints.biggest.center(Offset.zero),
+          width: constraints.biggest.width * 0.7,
+          height: constraints.biggest.height * 0.7,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
+              scanWindow: scanWindow,
+              errorBuilder: (context, error) => _CameraError(onFallback: () {
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const ImportPage()));
+              }),
+            ),
+            // 掃描窗框線（讓使用者知道對準範圍）
+            Positioned.fromRect(
+              rect: scanWindow,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white70, width: 1.5),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-        ],
-      ),
+            // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）
+            Positioned(
+              left: 8,
+              top: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('偵測 $_events 次',
+                    style: const TextStyle(color: Colors.white, fontSize: 11)),
+              ),
+            ),
+            if (_hint != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(_hint!,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12)),
+                  ),
+                ),
+              ),
+          ],
+        );
+      }),
     );
   }
 }
