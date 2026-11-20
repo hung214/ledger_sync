@@ -70,6 +70,18 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     });
   }
 
+  /// 從解碼文字中**定位發票左碼**（PM 2026-11-20：Byte-mode 標頭/填充
+  /// 殘留會讓長度 ≠77 → 被拒）。找 `[A-Z]{2}\d{8}`（字軌）起的 77 字片段；
+  /// 找不到回原字串（右碼 `**` 開頭、URL 等不受影響）。
+  String _normalizeInvoiceText(String s) {
+    if (s.length == 77) return s;
+    final m = RegExp(r'[A-Z]{2}[0-9]{8}').firstMatch(s);
+    if (m != null && s.length >= m.start + 77) {
+      return s.substring(m.start, m.start + 77);
+    }
+    return s;
+  }
+
   /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
     if (capture.barcodes.isNotEmpty && mounted) {
@@ -92,6 +104,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         }
       }
       if (raw == null || raw.isEmpty) continue;
+      raw = _normalizeInvoiceText(raw);
       final now = DateTime.now();
       // 同一條碼 1.5s 內重複 → 略過（對準同一張發票會連續回呼）。
       if (raw == _lastRaw &&
