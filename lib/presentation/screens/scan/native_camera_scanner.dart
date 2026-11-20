@@ -85,7 +85,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
           DecodedBarcodeBytes(:final bytes) => bytes,
           DecodedVisionBarcodeBytes(:final bytes, :final rawBytes) =>
             bytes ?? rawBytes,
-          _ => barcode.rawBytes,
+          _ => null,
         };
         if (bytes != null && bytes.isNotEmpty) {
           raw = utf8.decode(bytes, allowMalformed: true).trim();
