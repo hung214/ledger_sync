@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../application/scan/scan_state.dart';
+import '../../../domain/entities/transaction_draft.dart';
+import '../../../domain/services/invoice_qr_parser.dart';
 import '../../../platform/scan/image_qr_scan.dart';
 import 'import_page.dart';
 
@@ -29,6 +31,11 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   String? _lastRaw;
   DateTime? _lastAt;
   Timer? _dedupReset;
+  // 兩碼配對（PM 2026-11-20：發票同時有左右兩個 QR——左碼先等右碼
+  // 0.8 秒，湊成完整明細再一次入單；逾時才以左碼單獨入單）。
+  final Map<String, DateTime> _recent = {}; // 偵測過的條碼 → 時間（3s TTL）
+  String? _pendingLeft;
+  Timer? _pendingTimer;
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
@@ -46,6 +53,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   @override
   void dispose() {
     _dedupReset?.cancel();
+    _pendingTimer?.cancel();
     _hintReset?.cancel();
     _controller.dispose();
     super.dispose();
@@ -83,16 +91,54 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         _lastAt = null;
       });
 
-      final draft = ImageQrScanner.draftFromQrTexts([raw]);
-      if (draft == null) {
-        // 非發票 QR（網址等）→ 略過，但**畫面回饋**（診斷：偵測有到、格式不符）
+      // 診斷：記錄偵測到的原始內容（長度＋開頭 20 字）。
+      // ignore: avoid_print
+      print('[scan] raw len=${raw.length} head=${raw.substring(0, raw.length > 20 ? 20 : raw.length)}');
+
+      // 收集近 3 秒條碼（左右兩碼常分幀出現）。
+      final now2 = DateTime.now();
+      _recent.removeWhere((_, t) => now2.difference(t) > const Duration(seconds: 3));
+      _recent[raw] = now2;
+
+      final texts = _recent.keys.toList();
+      final left = texts.firstWhere((t) => t.length == 77, orElse: () => '');
+      if (left.isEmpty) {
         final fmt = barcode.format.name;
         _flashHint('偵測到 $fmt（${raw.length} 字）——非發票格式，已略過');
         continue;
       }
-      ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
-      _flashHint('✓ 已加入：${draft.merchant.value ?? '（未辨識商家）'}');
+      final right = texts.firstWhere((t) => t.length != 77, orElse: () => '');
+
+      if (right.isEmpty) {
+        // 只有左碼：等 0.8 秒讓右碼進來；逾時以左碼單獨入單。
+        if (_pendingLeft == left) continue;
+        _pendingLeft = left;
+        _pendingTimer?.cancel();
+        _pendingTimer = Timer(const Duration(milliseconds: 800), () {
+          _commitLeft(left);
+        });
+        continue;
+      }
+      // 左右都到 → 完整明細一次入單。
+      _pendingTimer?.cancel();
+      final draft = ImageQrScanner.draftFromQrTexts([left, right]);
+      if (draft != null) _commitDraft(draft, '✓ 已加入（含明細）');
     }
+  }
+
+  /// 左碼單獨入單（右碼未現）。
+  void _commitLeft(String left) {
+    final draft = InvoiceQrParser.parseLeft(left);
+    if (draft == null) return;
+    _commitDraft(draft, '✓ 已加入（左碼）');
+  }
+
+  void _commitDraft(TransactionDraft draft, String note) {
+    ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
+    _recent.clear();
+    _pendingLeft = null;
+    _flashHint('$note：${draft.merchant.value ?? '（未辨識商家）'}'
+        '${draft.totalMinor.value != null ? ' ${draft.totalMinor.value} 元' : ''}');
   }
 
   @override
@@ -113,7 +159,6 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
             MobileScanner(
               controller: _controller,
               onDetect: _onDetect,
-              scanWindow: scanWindow,
               errorBuilder: (context, error) => _CameraError(onFallback: () {
                 Navigator.of(context).push(MaterialPageRoute<void>(
                     builder: (_) => const ImportPage()));
