@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,7 +76,21 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       setState(() => _events++);
     }
     for (final barcode in capture.barcodes) {
-      final raw = barcode.rawValue?.trim();
+      // Apple Vision 已知行為（PM 2026-11-20：有偵測、無提示＝rawValue 空）：
+      // 對 Byte-mode QR 的 payloadStringValue 可能回 null，但位元組有解出。
+      // → rawValue 空時退回 rawDecodedBytes/rawBytes 解碼。
+      var raw = barcode.rawValue?.trim();
+      if (raw == null || raw.isEmpty) {
+        final Uint8List? bytes = switch (barcode.rawDecodedBytes) {
+          DecodedBarcodeBytes(:final bytes) => bytes,
+          DecodedVisionBarcodeBytes(:final bytes, :final rawBytes) =>
+            bytes ?? rawBytes,
+          _ => barcode.rawBytes,
+        };
+        if (bytes != null && bytes.isNotEmpty) {
+          raw = utf8.decode(bytes, allowMalformed: true).trim();
+        }
+      }
       if (raw == null || raw.isEmpty) continue;
       final now = DateTime.now();
       // 同一條碼 1.5s 內重複 → 略過（對準同一張發票會連續回呼）。
