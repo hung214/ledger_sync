@@ -101,14 +101,21 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       _recent[raw] = now2;
 
       final texts = _recent.keys.toList();
-      final left = texts.firstWhere((t) => t.length == 77, orElse: () => '');
+      // 左碼＝官方規格 77 字（字軌 AB…）；右碼＝固定 `**` 起始（財政部規格
+      // 「右方二維條碼前兩碼起始符號」）——**僅 `**` 開頭者視為右碼**，
+      // 其他（網址/雲端發票 App 條碼）不得毒害配對（PM 2026-11-20 修復）。
+      final left = texts.firstWhere(
+          (t) => t.length == 77 && !t.startsWith('**'),
+          orElse: () => '');
       if (left.isEmpty) {
         final fmt = barcode.format.name;
         final head = raw.substring(0, raw.length > 12 ? 12 : raw.length);
-        _flashHint('偵測到 $fmt（${raw.length} 字）：$head… ——非發票證明聯格式');
+        _flashHint('偵測到 $fmt（${raw.length} 字）：$head… ——非發票證明聯格式，無法記帳');
         continue;
       }
-      final right = texts.firstWhere((t) => t.length != 77, orElse: () => '');
+      final right = texts.firstWhere(
+          (t) => t.length != 77 && t.startsWith('**'),
+          orElse: () => '');
 
       if (right.isEmpty) {
         // 只有左碼：等 0.8 秒讓右碼進來；逾時以左碼單獨入單。
@@ -120,10 +127,13 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         });
         continue;
       }
-      // 左右都到 → 完整明細一次入單。
+      // 左右都到 → 完整明細一次入單；配對失敗（右碼異常）→ 退回左碼入單。
       _pendingTimer?.cancel();
-      final draft = ImageQrScanner.draftFromQrTexts([left, right]);
-      if (draft != null) _commitDraft(draft, '✓ 已加入（含明細）');
+      final draft = ImageQrScanner.draftFromQrTexts([left, right]) ??
+          InvoiceQrParser.parseLeft(left);
+      if (draft != null) {
+        _commitDraft(draft, right.isEmpty ? '✓ 已加入（左碼）' : '✓ 已加入');
+      }
     }
   }
 
@@ -139,7 +149,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     _recent.clear();
     _pendingLeft = null;
     _flashHint('$note：${draft.merchant.value ?? '（未辨識商家）'}'
-        '${draft.totalMinor.value != null ? ' ${draft.totalMinor.value} 元' : ''}');
+        '${draft.totalMinor.value != null ? ' ${draft.totalMinor.value} 元' : ''}'
+        '——請按「完成掃描」確認');
   }
 
   @override
