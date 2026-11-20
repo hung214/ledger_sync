@@ -134,7 +134,7 @@ class _FirstRunGuidePageState extends ConsumerState<FirstRunGuidePage> {
                     key: const Key('guide-import'),
                     icon: Icons.upload_file,
                     title: '從其他 App 匯入（CSV）',
-                    subtitle: '把 AndroMoney 等其他 App 的 CSV 帶進來（自動建立帳戶/分類）',
+                    subtitle: '把其他記帳 App 的 CSV 帶進來（自動建立帳戶/分類）',
                     onTap: _importCsv,
                   ),
                   if (_error != null) ...[

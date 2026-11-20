@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'import_models.dart';
 
-/// AndroMoney CSV 解析器（I3.2；**純函式**——不觸 DB）。
+/// 外部 CSV 解析器（I3.2；**純函式**——不觸 DB）。
 ///
 /// - **分隔符自動偵測**：表頭列統計 `,`／`;`／`\t` 取最多（預設 `,`）；BOM 剝除。
 /// - **表頭別名對映**（大小寫不敏感；中／英並列）——真實檔案到位後（I1/I2）

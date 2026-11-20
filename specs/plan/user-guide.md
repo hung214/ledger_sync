@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v1.0（2026-11-17；涵蓋 PWA／macOS／Windows／Android 安裝、備份還原、AndroMoney 匯入、Google 雲端設定） |
+| 文件版本 | v1.0（2026-11-17；涵蓋 PWA／macOS／Windows／Android 安裝、備份還原、CSV 匯入、Google 雲端設定） |
 | 對象 | 使用者（PM 與朋友）；開發者細節見 specs/plan/pm-actions.md |
 | 單一來源原則 | 本文件為「使用與設定步驟」唯一來源；pm-actions §14/§15 指向本文件 |
 
@@ -76,11 +76,11 @@ LedgerSync 是**本地優先記帳 App**：資料存在**你自己的裝置**（
 - 之後：設定 → 雲端備份 → 登入 Google → 自動備份＋跨裝置同步＋衝突檢視
 - 好處：自動、多裝置；備份檔方式的好處：零設定、完全自主——兩者可並用
 
-## 5. 從其他 App 匯入（AndroMoney）
+## 5. 從其他 App 匯入（CSV）
 
-### 5.1 先從 AndroMoney 匯出 CSV
+### 5.1 先從原記帳 App 匯出 CSV
 
-1. 開 AndroMoney → 左上 **☰ 選單** → **工具／匯出**（版本不同名稱略異）
+1. 開原記帳 App → 找 **匯出**（通常在設定／工具選單；多數 App 支援 CSV）
 2. 選 **CSV**（或 Excel 後另存 CSV）→ 匯出全部歷史
 3. 把檔案傳到要匯入的裝置（AirDrop／雲端硬碟／電腦）
 

@@ -349,7 +349,7 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
                 Text('從其他 App 匯入',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                const Text('把 AndroMoney 等其他 App 匯出的 CSV 帶進本帳本'
+                const Text('把其他記帳 App 匯出的 CSV 帶進本帳本'
                     '（先預覽、匯入前自動備份、可取消本批）。'),
                 const SizedBox(height: 12),
                 FilledButton.tonal(

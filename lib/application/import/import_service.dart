@@ -8,7 +8,8 @@ import '../../data/sqlite/app_database.dart';
 import 'csv_import_parser.dart';
 import 'import_models.dart';
 
-/// AndroMoney 匯入服務（I3.3；tasks §6.0；PM 2026-11-16 決策）。
+/// 外部記帳 App CSV 匯入服務（I3.3；tasks §6.0；PM 2026-11-16 決策；
+/// PM 2026-11-20：文案不再指名 AndroMoney，引擎/別名表不變）。
 ///
 /// - **preview**：解析＋統計（筆數·期間·各類型金額合計·重複·錯誤·非 TWD）＋
   /// 「將自動建立」之帳戶/分類清單——I4「選檔→預覽/乾跑」畫面直接呈現。

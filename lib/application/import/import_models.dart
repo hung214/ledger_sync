@@ -1,10 +1,10 @@
-/// AndroMoney 匯入——領域模型（I3；tasks §6.0；PM 2026-11-16 決策）。
+/// CSV 匯入——領域模型（I3；tasks §6.0；PM 2026-11-16 決策）。
 ///
 /// 設計原則：**parser 純函式**（CSV→草稿，不觸 DB）；`ImportService` 負責
 /// DB 互動（preview 統計／apply 落地）。壞列不擋整批（逐列錯誤）。
 library;
 
-/// 交易類型（AndroMoney Type 欄對映）。
+/// 交易類型（CSV Type 欄對映；支出/收入/轉帳）。
 enum ImportKind { expense, income, transfer }
 
 /// 單列匯入草稿（已解析成功；金額一律**正數** minor，方向由 [kind] 表達）。

@@ -159,7 +159,7 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 const Text(
-                    '支援 AndroMoney 等其他 App 匯出的 CSV（日期／類型／金額／帳戶／分類…，'
+                    '支援其他記帳 App 匯出的 CSV（日期／類型／金額／帳戶／分類…，'
                     '中英文表頭皆可）。未知帳戶與分類會自動建立；重複的交易可選擇略過（預設）或覆蓋。'),
                 const SizedBox(height: 12),
                 FilledButton.icon(
