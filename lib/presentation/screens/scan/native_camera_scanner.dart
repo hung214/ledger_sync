@@ -104,7 +104,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       final left = texts.firstWhere((t) => t.length == 77, orElse: () => '');
       if (left.isEmpty) {
         final fmt = barcode.format.name;
-        _flashHint('偵測到 $fmt（${raw.length} 字）——非發票格式，已略過');
+        final head = raw.substring(0, raw.length > 12 ? 12 : raw.length);
+        _flashHint('偵測到 $fmt（${raw.length} 字）：$head… ——非發票證明聯格式');
         continue;
       }
       final right = texts.firstWhere((t) => t.length != 77, orElse: () => '');
