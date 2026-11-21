@@ -73,6 +73,33 @@ class CameraAvailableNotifier extends Notifier<bool> {
   void set(bool available) => state = available;
 }
 
+/// 掃描模式（PM 2026-11-21）：電子發票＝相機即時 QR 辨識（雲端發票證明聯
+/// 同此路徑——掃到即顯示）；紙本發票＝快速手動開一筆（空白確認卡補號碼/
+/// 金額；印刷號碼 OCR 辨識屬後續套件接線，見 debug/techstack 討論）。
+enum ScanMode { eInvoice, paper }
+
+class ScanModeNotifier extends Notifier<ScanMode> {
+  @override
+  ScanMode build() => ScanMode.eInvoice;
+
+  void set(ScanMode mode) => state = mode;
+}
+
+final scanModeProvider =
+    NotifierProvider<ScanModeNotifier, ScanMode>(ScanModeNotifier.new);
+
+/// 連續掃描（PM 2026-11-21）：開＝連拍累積（FR-S7，預設——「完成掃描」
+/// 統一進確認清單）；關＝掃到一張自動進確認清單。
+class ContinuousScanNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void set(bool value) => state = value;
+}
+
+final continuousScanProvider =
+    NotifierProvider<ContinuousScanNotifier, bool>(ContinuousScanNotifier.new);
+
 /// 附件索引（交易 id 集合；明細 📷 標記用——儲存附件後 refresh）。
 final attachmentTxIdsProvider =
     NotifierProvider<AttachmentTxIdsNotifier, Set<String>>(

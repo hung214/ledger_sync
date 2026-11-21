@@ -49,3 +49,7 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 tool/Output/
+
+# 真實發票照片（個資——僅本地自動測試用，不入版控）
+test/fixtures/invoices/*
+!test/fixtures/invoices/README.md

@@ -1,10 +1,14 @@
 /// 相機串流控制器（F14 PWA 即時掃描；平台分流——分析期恆選 base，編譯期 CFE 分流）。
 ///
-/// - **web**：`getUserMedia`（後鏡頭優先）＋`<video>` 預覽＋canvas 取幀（JPEG）。
+/// - **web**：`getUserMedia`（後鏡頭）＋`<video>` 預覽＋canvas 取幀（JPEG）。
 /// - **native**：暫不支援（SP-2b mobile_scanner）→ start 拋
 ///   [CameraUnavailableException]，呼叫端回退檔案匯入。
 ///
 /// 詳見 `lib/data/sqlite/db_opener_stub.dart` 註解（stub 型別必須正確）。
+///
+/// 平台分流工廠：**只能由條件匯出提供**（stub/native/web 各自實作）——
+/// 本檔**不得**宣告同名本地函式或實作：Dart 本地宣告會遮蔽條件匯出，
+/// 造成所有平台永遠走丟例外（PWA 相機失效根因，DBG-018 2026-11-21）。
 library;
 
 import 'dart:typed_data';
@@ -33,8 +37,11 @@ abstract interface class CameraStreamController {
 
   /// 停止串流並釋放。
   void dispose();
-}
 
-/// 平台分流工廠。
-CameraStreamController createCameraController() =>
-    throw UnsupportedError('此平台未支援 CameraStreamController');
+  /// 切換相機（前/後循環；PM 2026-11-21 按鈕需求）——僅 web 實作有意義；
+  /// 失敗靜默維持現有鏡頭。
+  Future<void> switchCamera();
+
+  /// 診斷資訊（目前朝向／切換結果——掃描頁診斷面板顯示，定位用）。
+  String get diagInfo;
+}

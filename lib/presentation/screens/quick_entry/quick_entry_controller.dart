@@ -165,6 +165,16 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
             }
           }
         }
+        // 「子類別帶入」（PM 2026-11-21）：同分類**最後一筆交易**的商家/金額
+        // 為最新事實（涵蓋掃描/匯入等非快記入帳——記憶只記快記流程），
+        // 覆蓋記憶值；商家 null → 不清空既有值。
+        final tx = ref.read(dbProvider).latestTransactionByCategory(c.id);
+        if (tx != null) {
+          next = next.copyWith(amount: '${tx.amountMinor}');
+          if (tx.merchant != null) {
+            next = next.copyWith(merchant: tx.merchant!);
+          }
+        }
         state = next;
         return;
       }

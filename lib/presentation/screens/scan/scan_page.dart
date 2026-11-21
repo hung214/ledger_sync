@@ -103,15 +103,45 @@ class _PermissionDenied extends StatelessWidget {
   }
 }
 
-/// 掃描中（FR-S7 連拍）：相機預覽佔位＋已掃計數＋縮圖列＋完成掃描。
+/// 掃描中（FR-S7 連拍）：模式切換＋相機預覽＋已掃計數＋連續掃描開關
+/// ＋縮圖列＋完成掃描。
 class _ScanningBody extends ConsumerWidget {
   const _ScanningBody();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(scanDraftsProvider);
+    final mode = ref.watch(scanModeProvider);
+    // 連續掃描關閉（PM 2026-11-21）：掃到一張（QR 命中或紙本手動開卡）
+    // → 自動進確認清單；開啟＝連拍累積（FR-S7 預設，「完成掃描」統一進）。
+    ref.listen(scanDraftsProvider, (prev, next) {
+      if (!ref.read(continuousScanProvider) && next.isNotEmpty) {
+        Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => ReviewPage(items: List.of(next))));
+      }
+    });
     return Column(
       children: [
+        // 掃描模式（PM 2026-11-21）：電子發票＝即時 QR；紙本發票＝快速手動開卡。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: SegmentedButton<ScanMode>(
+            key: const Key('scan-mode-toggle'),
+            segments: const [
+              ButtonSegment(
+                  value: ScanMode.eInvoice,
+                  icon: Icon(Icons.qr_code_scanner),
+                  label: Text('電子發票 QR')),
+              ButtonSegment(
+                  value: ScanMode.paper,
+                  icon: Icon(Icons.receipt_long),
+                  label: Text('紙本發票')),
+            ],
+            selected: {mode},
+            onSelectionChanged: (selection) =>
+                ref.read(scanModeProvider.notifier).set(selection.first),
+          ),
+        ),
         // 原生即時相機（SP-2b 完成：mobile_scanner——Android/iOS/macOS）。
         Expanded(
           child: Padding(
@@ -121,7 +151,7 @@ class _ScanningBody extends ConsumerWidget {
               const Positioned(
                 left: 0,
                 right: 0,
-                bottom: 8,
+                top: 8,
                 child: Center(
                   child: _AimHint(),
                 ),
@@ -129,8 +159,24 @@ class _ScanningBody extends ConsumerWidget {
             ]),
           ),
         ),
-        Text('已掃 ${items.length} 張', key: const Key('scan-count'),
-            style: Theme.of(context).textTheme.titleMedium),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text('已掃 ${items.length} 張',
+                  key: const Key('scan-count'),
+                  style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              const Text('連續掃描', style: TextStyle(fontSize: 13)),
+              Switch(
+                key: const Key('scan-continuous-toggle'),
+                value: ref.watch(continuousScanProvider),
+                onChanged: (v) =>
+                    ref.read(continuousScanProvider.notifier).set(v),
+              ),
+            ],
+          ),
+        ),
         if (items.isNotEmpty)
           SizedBox(
             height: 96,

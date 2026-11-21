@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -41,6 +42,11 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
+  // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
+  // 400ms 內無新偵測即清空——對準時 unrestricted 連續回呼，框持續顯示。
+  List<List<Offset>> _boxes = const [];
+  Size _boxImageSize = Size.zero;
+  Timer? _boxReset;
 
   @override
   void initState() {
@@ -49,6 +55,14 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       detectionSpeed: DetectionSpeed.unrestricted, // PM：掃描頻率——最高頻偵測
       facing: CameraFacing.back,
       autoStart: true,
+      // PM 2026-11-21：只掃 QR（發票左右碼）——排除底部一維條碼（Code 39）
+      // 被誤判「非發票格式」的雜訊（PM 實測：拿雲端發票掃描誤中一維碼）。
+      formats: const [BarcodeFormat.qrCode],
+      // 辨識距離（PM 2026-11-21：「要拉到很近才掃得到」）——提高分析解析度
+      // ＋條碼過小自動變焦。mobile_scanner 7.5 文件明載**僅 Android 支援**，
+      // iOS/macOS 忽略（上游未開參數；距離天花板屬外掛限制）。
+      cameraResolution: const Size(1920, 1080),
+      autoZoom: true,
     );
   }
 
@@ -57,6 +71,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     _dedupReset?.cancel();
     _pendingTimer?.cancel();
     _hintReset?.cancel();
+    _boxReset?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -70,22 +85,30 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     });
   }
 
-  /// 從解碼文字中**定位發票左碼**（PM 2026-11-20：Byte-mode 標頭/填充
-  /// 殘留會讓長度 ≠77 → 被拒）。找 `[A-Z]{2}\d{8}`（字軌）起的 77 字片段；
-  /// 找不到回原字串（右碼 `**` 開頭、URL 等不受影響）。
-  String _normalizeInvoiceText(String s) {
-    if (s.length == 77) return s;
-    final m = RegExp(r'[A-Z]{2}[0-9]{8}').firstMatch(s);
-    if (m != null && s.length >= m.start + 77) {
-      return s.substring(m.start, m.start + 77);
-    }
-    return s;
-  }
+  /// 發票字軌號碼樣式（官方規格 v1.9：左碼前 10 碼＝2 大寫字母＋8 數字）。
+  /// 定位/分類邏輯集中於 `ImageQrScanner.extractOfficialLeft`（三路徑共用）。
+  static final RegExp _invoiceNoPattern = RegExp(r'[A-Z]{2}[0-9]{8}');
 
   /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
-    if (capture.barcodes.isNotEmpty && mounted) {
-      setState(() => _events++);
+    // 綠框高亮＋偵測計數：**所有**偵測到的條碼都畫（含非發票碼——讓使用者
+    // 看到「掃到什麼」；角點為影像座標，相對 [BarcodeCapture.size]）。
+    if (mounted && !capture.size.isEmpty) {
+      final boxes = <List<Offset>>[
+        for (final barcode in capture.barcodes)
+          if (barcode.corners.length >= 4) List<Offset>.of(barcode.corners),
+      ];
+      setState(() {
+        if (capture.barcodes.isNotEmpty) _events++;
+        _boxImageSize = capture.size;
+        _boxes = boxes;
+      });
+      _boxReset?.cancel();
+      if (boxes.isNotEmpty) {
+        _boxReset = Timer(const Duration(milliseconds: 400), () {
+          if (mounted) setState(() => _boxes = const []);
+        });
+      }
     }
     for (final barcode in capture.barcodes) {
       // Apple Vision 已知行為（PM 2026-11-20：有偵測、無提示＝rawValue 空）：
@@ -104,7 +127,6 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         }
       }
       if (raw == null || raw.isEmpty) continue;
-      raw = _normalizeInvoiceText(raw);
       final now = DateTime.now();
       // 同一條碼 1.5s 內重複 → 略過（對準同一張發票會連續回呼）。
       if (raw == _lastRaw &&
@@ -120,31 +142,52 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         _lastAt = null;
       });
 
-      // 診斷：記錄偵測到的原始內容（長度＋開頭 20 字）。
-      // ignore: avoid_print
-      print('[scan] raw len=${raw.length} head=${raw.substring(0, raw.length > 20 ? 20 : raw.length)}');
+      // 診斷：發票形碼記**完整內容**（fixture 建置用），其他記長度＋開頭 20 字。
+      if (_invoiceNoPattern.hasMatch(raw) || raw.startsWith('**')) {
+        // ignore: avoid_print
+        print('[scan] raw len=${raw.length} full=$raw');
+      } else {
+        // ignore: avoid_print
+        print('[scan] raw len=${raw.length} '
+            'head=${raw.substring(0, raw.length > 20 ? 20 : raw.length)}');
+      }
 
       // 收集近 3 秒條碼（左右兩碼常分幀出現）。
       final now2 = DateTime.now();
-      _recent.removeWhere((_, t) => now2.difference(t) > const Duration(seconds: 3));
+      _recent.removeWhere(
+          (_, t) => now2.difference(t) > const Duration(seconds: 3));
       _recent[raw] = now2;
 
+      // 官方規格分類（PM 2026-11-22 根因修復）：左碼＝字軌起 77 碼（金額
+      // **十六進位**）＋`:` 延伸區（常 90–130 字）；右碼＝`**` 起始。
+      // 分類集中 ImageQrScanner——相機/PWA/檔案匯入三路徑同一套規則。
       final texts = _recent.keys.toList();
-      // 左碼＝官方規格 77 字（字軌 AB…）；右碼＝固定 `**` 起始（財政部規格
-      // 「右方二維條碼前兩碼起始符號」）——**僅 `**` 開頭者視為右碼**，
-      // 其他（網址/雲端發票 App 條碼）不得毒害配對（PM 2026-11-20 修復）。
-      final left = texts.firstWhere(
-          (t) => t.length == 77 && !t.startsWith('**'),
-          orElse: () => '');
-      if (left.isEmpty) {
-        final fmt = barcode.format.name;
-        final head = raw.substring(0, raw.length > 12 ? 12 : raw.length);
-        _flashHint('偵測到 $fmt（${raw.length} 字）：$head… ——非發票證明聯格式，無法記帳');
+      String? found;
+      for (final t in texts) {
+        found = ImageQrScanner.extractOfficialLeft(t);
+        if (found != null) break;
+      }
+      if (found == null) {
+        // 三態引導（PM 2026-11-21：區分右碼先到／內容不完整／真非發票碼）。
+        if (raw.startsWith('**')) {
+          _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票字軌號碼那格）');
+        } else if (_invoiceNoPattern.hasMatch(raw)) {
+          _flashHint('左側 QR 內容不完整（${raw.length} 字）——請靠近重掃，'
+              '或改用「掃描／匯入圖片」');
+        } else {
+          _flashHint('偵測到 ${barcode.format.name}（${raw.length} 字）'
+              '——非發票 QR，請對準發票上的兩個 QR code');
+        }
         continue;
       }
-      final right = texts.firstWhere(
-          (t) => t.length != 77 && t.startsWith('**'),
-          orElse: () => '');
+      final left = found;
+      var right = '';
+      for (final t in texts) {
+        if (t.startsWith('**')) {
+          right = t;
+          break;
+        }
+      }
 
       if (right.isEmpty) {
         // 只有左碼：等 0.8 秒讓右碼進來；逾時以左碼單獨入單。
@@ -159,16 +202,16 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       // 左右都到 → 完整明細一次入單；配對失敗（右碼異常）→ 退回左碼入單。
       _pendingTimer?.cancel();
       final draft = ImageQrScanner.draftFromQrTexts([left, right]) ??
-          InvoiceQrParser.parseLeft(left);
+          InvoiceQrParser.parseOfficial(left);
       if (draft != null) {
-        _commitDraft(draft, right.isEmpty ? '✓ 已加入（左碼）' : '✓ 已加入');
+        _commitDraft(draft, '✓ 已加入');
       }
     }
   }
 
   /// 左碼單獨入單（右碼未現）。
   void _commitLeft(String left) {
-    final draft = InvoiceQrParser.parseLeft(left);
+    final draft = InvoiceQrParser.parseOfficial(left);
     if (draft == null) return;
     _commitDraft(draft, '✓ 已加入（左碼）');
   }
@@ -182,10 +225,19 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         '——請按「完成掃描」確認');
   }
 
+  /// 紙本發票模式（PM 2026-11-21）：快速手動開一筆——空白確認卡進列，
+  /// ReviewPage 補號碼/金額。QR 自動辨識不關（雲端發票證明聯照掃）。
+  void _addBlankDraft() {
+    ref.read(scanDraftsProvider.notifier)
+        .add(ScannedItem(draft: TransactionDraft.blank(DateTime.now())));
+    _flashHint('已開空白卡——按「完成掃描」輸入金額與發票號碼');
+  }
+
   @override
   Widget build(BuildContext context) {
-    // PM 2026-11-20：區域太大 → 中央 70% 掃描窗（Vision 只分析此區，
-    // 減噪＋聚焦；7.x scanWindow＝widget 內邏輯座標，官方範例同款）。
+    // 中央 70% 掃描窗＝**視覺引導框**（PM 2026-11-20：聚焦對準）。
+    // 注意：scanWindow 未傳入 MobileScanner——Vision 分析**整個畫面**
+    // （最大化偵測範圍；PM 2026-11-21 回報「要拉很近才掃得到」後不限定區域）。
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(builder: (context, constraints) {
@@ -205,6 +257,17 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
                     builder: (_) => const ImportPage()));
               }),
             ),
+            // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _BarcodeHighlightPainter(
+                    boxes: _boxes,
+                    imageSize: _boxImageSize,
+                  ),
+                ),
+              ),
+            ),
             // 掃描窗框線（讓使用者知道對準範圍）
             Positioned.fromRect(
               rect: scanWindow,
@@ -215,10 +278,12 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
                 ),
               ),
             ),
-            // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）
+            // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
+            // 置底部左側：頂部讓位給「對準發票」提示（scan_page 疊層）；
+            // 無偵測時恰無提示浮條遮擋——診斷資訊在最重要時可見。
             Positioned(
               left: 8,
-              top: 8,
+              bottom: 8,
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -230,6 +295,22 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
                     style: const TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ),
+            // 紙本發票模式：手動開卡入口（PM 2026-11-21；雲端發票不需要
+            // 截圖——即時掃到即顯示，此鈕供無 QR 的紙本發票快速記帳）。
+            if (ref.watch(scanModeProvider) == ScanMode.paper)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 48,
+                child: Center(
+                  child: FilledButton.icon(
+                    key: const Key('scan-manual-entry'),
+                    onPressed: _addBlankDraft,
+                    icon: const Icon(Icons.receipt_long),
+                    label: const Text('手動開一筆'),
+                  ),
+                ),
+              ),
             if (_hint != null)
               Positioned(
                 left: 12,
@@ -254,6 +335,52 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       }),
     );
   }
+}
+
+/// 條碼高亮畫筆：影像座標的條碼角點 → 預覽座標（[BoxFit.cover] 映射，
+/// 與 MobileScanner 預覽同款縮放：等比取 max、置中裁切），畫綠色多邊形。
+/// 角點為透視下的實際四角（不必然矩形），以 `Path.addPolygon` 原樣描繪。
+class _BarcodeHighlightPainter extends CustomPainter {
+  _BarcodeHighlightPainter({required this.boxes, required this.imageSize});
+
+  /// 每個條碼的角點清單（影像座標；空＝不繪製）。
+  final List<List<Offset>> boxes;
+
+  /// 角點所屬的原始影像尺寸（[BarcodeCapture.size]）。
+  final Size imageSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (imageSize.isEmpty || boxes.isEmpty) return;
+    final scale = math.max(
+      size.width / imageSize.width,
+      size.height / imageSize.height,
+    );
+    final offset = Offset(
+      (size.width - imageSize.width * scale) / 2,
+      (size.height - imageSize.height * scale) / 2,
+    );
+    final fill = Paint()..color = Colors.green.withValues(alpha: 0.15);
+    final stroke = Paint()
+      ..color = Colors.greenAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
+    for (final corners in boxes) {
+      final path = Path()
+        ..addPolygon(
+          [for (final p in corners) p * scale + offset],
+          true,
+        );
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BarcodeHighlightPainter oldDelegate) =>
+      oldDelegate.imageSize != imageSize ||
+      !listEquals(oldDelegate.boxes, boxes);
 }
 
 /// 相機錯誤（權限被拒／無相機）——訊息＋回退檔案匯入（不離開流程）。

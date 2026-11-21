@@ -465,6 +465,19 @@ class AppDatabase {
       .map(TxRow.fromRow)
       .toList();
 
+  /// 同分類最後一筆未刪除交易（PM 2026-11-21：快記選分類自動帶入上次
+  /// 商家/金額——涵蓋掃描/匯入等非快記入帳，補快記記憶之缺漏）。
+  TxRow? latestTransactionByCategory(String categoryId) {
+    final rows = _db
+        .select('SELECT * FROM transactions'
+                ' WHERE deleted_at IS NULL AND category_id = ?'
+                ' ORDER BY occurred_at DESC, id DESC LIMIT 1',
+            [categoryId])
+        .map(TxRow.fromRow)
+        .toList();
+    return rows.isEmpty ? null : rows.first;
+  }
+
   // ── FTS5（FR-R3；schema v2 transactions_fts） ─────────────
 
   /// FTS5 影子表是否可用（環境缺模組時 false——搜尋降級 LIKE，F10）。

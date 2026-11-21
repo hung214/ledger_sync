@@ -68,7 +68,9 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
         setState(() => _busy = false); // 取消
         return;
       }
-      await saveBytesToPath(location.path, bytes);
+      // web：getSaveLocation 回 dummy ''——改傳**建議檔名**（file_saver_web
+      // 以它作瀏覽器下載檔名）；native：完整路徑照舊。
+      await saveBytesToPath(location.path == '' ? name : location.path, bytes);
       setState(() {
         _dmMessage = '已備份：${location.path == '' ? name : location.path}';
         _busy = false;

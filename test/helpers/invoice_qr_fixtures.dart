@@ -23,6 +23,42 @@ class InvoiceQrFixtures {
     taxAmount: 9,
     totalAmount: 195,
   );
+
+  // --- 官方規格（財政部 v1.9）測資——PM 2026-11-22 根因修復 ---------------
+  //
+  // 真實世界樣本（2020 年實掃；欄位經逐碼驗證）：
+  // 字軌 ZJ71292204｜民國109/03/12（2020-03-12）｜隨機 3612｜
+  // 銷售額 0x00000055=85｜總計 0x00000059=89｜買方 00000000｜
+  // 賣方 42308086｜加密驗證 24 碼（AES+Base64）。
+  static const String officialLeftQr77 = 'ZJ71292204'
+      '1090312'
+      '3612'
+      '00000055'
+      '00000059'
+      '00000000'
+      '42308086'
+      'N30oerT4xBGYFS89rT0n+Q==';
+
+  /// 官方左碼＋延伸區：77 碼後接
+  /// `:自行使用區(10):完整筆數:總筆數:編碼參數:品名:數量:單價…`（規格 §貳二）。
+  /// 長度 115——真實發票左碼常為 90–130 字（PM 掃到的 118 字即此形）。
+  static const String officialLeftWithItems =
+      '$officialLeftQr77:**********:1:1:1:mask:1:45:snack:2:22';
+
+  /// 官方右碼：`**` 起始＋品名:數量:單價…（規格 §貳二(二)）。
+  static const String officialRightQr = '**milk:1:25:coffee:1:60';
+
+  /// 官方右碼（中文品名——UTF-8 編碼參數場景；字串層解析用）。
+  static const String officialRightQrCht = '**口罩:1:210:牛奶:1:25';
+
+  /// 官方格式期望值。
+  static const officialExpected = (
+    invoiceNo: 'ZJ71292204',
+    rocDate: '1090312', // 民國 109/03/12 = 2020-03-12
+    sellerTaxId: '42308086',
+    salesAmount: 85, // 0x00000055
+    totalAmount: 89, // 0x00000059
+  );
 }
 
 /// T-H6：OCR 文字 fixtures（紙本收據樣本——OCR 引擎 ML Kit/Vision 輸出之

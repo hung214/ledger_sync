@@ -14,6 +14,13 @@ class _StubCameraController implements CameraStreamController {
   Future<Uint8List?> captureFrame() async => null;
 
   @override
+  Future<void> switchCamera() async =>
+      throw const CameraUnavailableException('此平台未支援相機串流');
+
+  @override
+  String get diagInfo => '';
+
+  @override
   void dispose() {}
 }
 

@@ -46,30 +46,89 @@ class ImageQrScanner {
   TransactionDraft? draftFromImage(Uint8List bytes, {DateTime? now}) =>
       draftFromQrTexts(decodeQrTexts(bytes));
 
-  /// 由 QR 文字組出發票草稿（左碼 77 碼＋右碼明細；僅左碼亦可——S3.2 舊式單碼）。
+  /// **相機幀輕量解碼**（F14 web 迴圈專用）：只試**整張＋左右半**（3 區）。
+  ///
+  /// 相機迴圈每 1.2s 一幀、解碼在主執行緒**同步**跑（dart2js 單執行緒）——
+  /// 完整 9 區掃描在行動裝置上每幀可達數秒，疊加後塞死 UI（PM 2026-11-21
+  /// 「全部掃描失敗＋顯示不正常」根因）。發票雙碼左右同列，切半即可分別
+  /// 解出（PM 2026-10-29 實測）；上下半/四象限留給檔案匯入完整掃。
+  TransactionDraft? draftFromCameraFrame(Uint8List bytes, {DateTime? now}) =>
+      draftFromQrTexts(decodeQrTexts(bytes, fullScan: false));
+
+  /// 左碼字軌特徵（官方規格 v1.9：2 大寫字母＋8 數字）。
+  static final RegExp _invoiceNoPattern = RegExp(r'[A-Z]{2}[0-9]{8}');
+
+  /// 自解碼文字中**定位官方發票左碼**（財政部 v1.9）。
+  ///
+  /// 字軌 `[A-Z]{2}[0-9]{8}` 起始（前導雜訊 ≤4 字——Vision Byte-mode 標頭
+  /// 殘留量級），自字軌起通過 [InvoiceQrParser.isValidOfficialLeft]（金額
+  /// 十六進位＋日期＋Base64 加密驗證＋延伸區 `:` 規則）→ 回傳自字軌起之
+  /// 子字串（含延伸區，常 90–130 字）。不合規（其他 App 條碼/斷碼）回
+  /// null——**不硬湊 77 字**，避免組出錯誤交易。
+  static String? extractOfficialLeft(String s) {
+    for (final m in _invoiceNoPattern.allMatches(s)) {
+      if (m.start > 4) break; // 前導雜訊超過標頭量級——非定位場景
+      final candidate = s.substring(m.start);
+      if (InvoiceQrParser.isValidOfficialLeft(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  /// 由 QR 文字組出發票草稿——**官方規格（財政部 v1.9）優先**，舊內部測資
+  /// 格式（SDD §5.4；deflate+Base32 右碼）保留相容。
+  ///
+  /// PM 2026-11-22 根因修復：真實發票左碼＝77 碼固定區＋`:` 延伸區（金額
+  /// **十六進位**、常 90–130 字）——舊 `length==77＋十進位` 規則把真實發票
+  /// 全數拒絕（僅內部測資可過）。
   static TransactionDraft? draftFromQrTexts(List<String> texts) {
-    String? left;
-    String? right;
+    String? officialLeft;
+    String? officialRight;
+    String? legacyLeft;
+    String? legacyRight;
     for (final t in texts) {
+      final l = extractOfficialLeft(t);
+      if (l != null) {
+        officialLeft ??= l;
+        continue;
+      }
+      if (t.startsWith('**')) {
+        officialRight ??= t;
+        continue;
+      }
+      // 舊內部測資格式（SDD §5.4）——右碼為 deflate+Base32（無 `**` 前綴）。
       if (t.length == 77) {
-        left ??= t;
+        legacyLeft ??= t;
       } else {
-        right ??= t;
+        legacyRight ??= t;
       }
     }
-    if (left == null) return null;
-    return right == null
-        ? InvoiceQrParser.parseLeft(left)
-        : InvoiceQrParser.parse(left, right);
+    if (officialLeft != null) {
+      return InvoiceQrParser.parseOfficial(officialLeft, officialRight);
+    }
+    if (legacyLeft != null) {
+      return legacyRight == null
+          ? InvoiceQrParser.parseLeft(legacyLeft)
+          : InvoiceQrParser.parse(legacyLeft, legacyRight);
+    }
+    return null;
   }
 
   /// 解出影像中所有 QR 文字（去重、最多 [_maxCodes] 個）。
-  static List<String> decodeQrTexts(Uint8List bytes) {
+  ///
+  /// 每區先以原尺寸解碼；失敗且區域過大（最長邊 > [_maxDecodeDim]）時
+  /// **降採樣重試**——zxing2 對大圖/長邊區域易失靈（PM 2026-11-22 實測：
+  /// 手機直式相機幀 1080×1920、實拍照片 3000×4000 的整張/切半皆解不出，
+  /// 降採樣至 ≤800 後全數可解，且解碼更快）。小 QR 照片不受影響——原尺寸
+  /// 先行，降採樣僅為後備。
+  ///
+  /// `fullScan = false` → 只試**整張＋左右半**（相機幀輕量模式——
+  /// 行動裝置主執行緒同步解碼，區域數直接決定每幀耗時）。
+  static List<String> decodeQrTexts(Uint8List bytes, {bool fullScan = true}) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return const [];
     final found = <String>[];
-    for (final region in _regions(decoded)) {
-      final text = _decodeRegion(region);
+    for (final region in _regions(decoded, fullScan: fullScan)) {
+      final text = _decodeRegion(region) ?? _decodeDownscaled(region);
       if (text != null && !found.contains(text)) found.add(text);
       if (found.length >= _maxCodes) break;
     }
@@ -78,8 +137,23 @@ class ImageQrScanner {
 
   static const int _maxCodes = 4;
 
-  /// 嘗試區域：整張 → 左／右半 → 上／下半 → 四象限（發票雙 QR 多在左右）。
-  static Iterable<img.Image> _regions(img.Image src) sync* {
+  /// 區域解碼之降採樣後備上限（最長邊）。
+  static const int _maxDecodeDim = 800;
+
+  static String? _decodeDownscaled(img.Image region) {
+    final maxDim = region.width > region.height ? region.width : region.height;
+    if (maxDim <= _maxDecodeDim) return null;
+    final scale = _maxDecodeDim / maxDim;
+    final small = img.copyResize(region,
+        width: (region.width * scale).round(),
+        height: (region.height * scale).round());
+    return _decodeRegion(small);
+  }
+
+  /// 嘗試區域：整張 → 左／右半 →（完整掃才續）上／下半 → 四象限
+  /// （發票雙 QR 多在左右）。
+  static Iterable<img.Image> _regions(img.Image src,
+      {bool fullScan = true}) sync* {
     final w = src.width;
     final h = src.height;
     img.Image crop(int x, int y, int cw, int ch) =>
@@ -90,6 +164,7 @@ class ImageQrScanner {
       yield crop(0, 0, w ~/ 2, h);
       yield crop(w ~/ 2, 0, w - w ~/ 2, h);
     }
+    if (!fullScan) return; // 相機輕量模式：整張＋左右半即止
     if (h >= 40) {
       yield crop(0, 0, w, h ~/ 2);
       yield crop(0, h ~/ 2, w, h - h ~/ 2);

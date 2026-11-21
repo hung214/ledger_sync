@@ -11,13 +11,18 @@ import '../../../platform/scan/image_qr_scan.dart';
 import 'import_page.dart';
 import 'review_page.dart';
 
-/// 解碼函式 provider（測試可覆寫；預設＝既有檔案掃描同一解碼核心）。
+/// 解碼函式 provider（測試可覆寫；預設＝**相機幀輕量解碼**——只解整張＋
+/// 左右半 3 區；完整 9 區掃描在行動裝置主執行緒上每幀可達數秒，塞死 UI）。
 final webCameraDecodeProvider = Provider<TransactionDraft? Function(Uint8List)>(
-    (ref) => (bytes) => ImageQrScanner().draftFromImage(bytes));
+    (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
 
 /// 相機控制器 provider（測試可覆寫 fake）。
 final webCameraControllerProvider =
     Provider<CameraStreamController>((ref) => createCameraController());
+
+/// 部署版本（dart-define 帶入；掃描診斷面板顯示——確認更新已生效）。
+const String kWebScanAppVersion =
+    String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 
 /// **PWA 即時相機掃描**（F14；PM 2026-11-17 決策 A）。
 ///
@@ -42,6 +47,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   Timer? _loop;
   final Set<String> _seenSignatures = <String>{};
   int _addedFromThisSession = 0;
+  // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
+  int _frames = 0; // 取幀計數
+  String _frameInfo = '—'; // 最近取幀狀態（大小／無畫面）
+  int _decodeHits = 0; // 解碼命中次數
+  bool _decoding = false; // 解碼中跳過新幀（同步解碼塞主執行緒——疊加即卡死）
+  int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
 
   @override
   void initState() {
@@ -81,11 +92,25 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   }
 
   Future<void> _tryDecode() async {
-    if (_state != _CamState.live) return;
+    if (_state != _CamState.live || _decoding) return;
     final bytes = await _controller.captureFrame();
-    if (bytes == null || !mounted) return;
+    if (!mounted) return;
+    if (bytes == null) {
+      setState(() => _frameInfo = '無畫面');
+      return;
+    }
+    setState(() {
+      _frames++;
+      _frameInfo = '${bytes.length} B';
+    });
+    _decoding = true;
+    final sw = Stopwatch()..start();
     final draft = ref.read(webCameraDecodeProvider)(bytes);
+    sw.stop();
+    _decoding = false;
+    if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     if (draft == null) return; // 無 QR——繼續取景
+    if (mounted) setState(() => _decodeHits++);
     final sig = '${draft.totalMinor.value}|${draft.date.value}'
         '|${draft.merchant.value ?? ''}';
     if (!_seenSignatures.add(sig)) return; // 同張去重（QR 還在畫面中）
@@ -170,6 +195,37 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                     label: Text('已加入 ${drafts.length} 張'),
                   ),
                 ),
+              // 切換鏡頭（PM 2026-11-21 按鈕需求）。
+              Positioned(
+                right: 12,
+                top: 12,
+                child: IconButton(
+                  key: const Key('webcam-switch-camera'),
+                  tooltip: '切換鏡頭',
+                  onPressed: () => _controller.switchCamera(),
+                  icon: const Icon(Icons.cameraswitch),
+                  color: Colors.white,
+                ),
+              ),
+              // 診斷面板（定位「無法正確掃描」：取幀是否流動／解碼是否命中）。
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6)),
+                  child: Text(
+                    '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · 命中 $_decodeHits · 解 $_decodeMs ms'
+                    '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}',
+                    key: const Key('webcam-diag'),
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 11),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -210,6 +266,16 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             const SizedBox(height: 8),
             Text(_error ?? '', textAlign: TextAlign.center),
             const SizedBox(height: 16),
+            OutlinedButton.icon(
+              key: const Key('webcam-retry'),
+              onPressed: () {
+                _controller.dispose(); // 停止舊串流——重新請求（權限被拒後可再試）
+                _start();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+            const SizedBox(height: 8),
             FilledButton.icon(
               key: const Key('webcam-fallback-file'),
               onPressed: _fallbackToFile,

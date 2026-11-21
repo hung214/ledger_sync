@@ -94,6 +94,22 @@ void main() {
     expect(item.photoBytes, bytes, reason: '原圖保留為附件（FR-S4）');
   });
 
+  test('相機幀輕量解碼：左右雙碼 3 區（整張＋切半）即湊齊 → 商家與明細帶入', () {
+    // 相機路徑每幀預算有限（主執行緒同步解碼）——只掃整張＋左右半；
+    // 左右並排雙碼必須在 3 區內解出（PM 2026-10-29 實測切半即得）。
+    final png = sideBySide([InvoiceQrFixtures.leftQr77, InvoiceQrFixtures.rightQr]);
+
+    final texts = ImageQrScanner.decodeQrTexts(png, fullScan: false);
+    expect(texts, contains(InvoiceQrFixtures.leftQr77), reason: '左碼（整張或左半）');
+    expect(texts, contains(InvoiceQrFixtures.rightQr), reason: '右碼（右半解出）');
+
+    final draft = const ImageQrScanner().draftFromCameraFrame(png);
+    expect(draft, isNotNull);
+    expect(draft!.invoiceNo, InvoiceQrFixtures.expected.invoiceNo);
+    expect(draft.merchant.value, '測試超商', reason: '商家來自右碼');
+    expect(draft.lineItems.length, 2, reason: '明細 2 項');
+  });
+
   test('草稿組裝：僅左碼 → 商家留空（舊式單碼發票；S3.2）', () {
     final d = ImageQrScanner.draftFromQrTexts([InvoiceQrFixtures.leftQr77]);
     expect(d, isNotNull);
