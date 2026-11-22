@@ -11,17 +11,20 @@
 
 ## 進行中（PM 2026-11-24：PWA 補光開關——原推原生APP，現改 PWA）
 
-- [ ] **T58-PWA PWA 掃描頁補光（手電筒）開關**：
-  web_camera_scan.dart（getUserMedia + video + canvas）加 torch 開關
-  （MediaStreamTrack.applyConstraints torch；無能力＝隱藏）＋測試
-  ⚠️ PWA 鏡頭碼凍結線——此為 PM 明示指示，可動
+- [x] **T58-PWA PWA 掃描頁補光（手電筒）開關**：
+  web_camera_scan.dart（getUserMedia + MediaStreamTrack.applyConstraints torch）
+  ②✓介面加 torch 能力＋開關按鈕（Key webcam-torch-toggle；右上角與切換鏡頭並排）
+  ③✓測試（260 全綠＋analyze 0）
+  ④✓已部署 0.5.0-pwa.20261124i（gh-pages，等 CDN 同步）
+  ⚠️ PWA 鏡頭碼凍結線，但 PM 明示指示在 PWA 加補光開關，故可動
 
 ## 進行中（PM 2026-11-24：手機版補光開關）
 
-- [ ] **T58 手機 APP 掃描頁補光（手電筒）開關**：
-  ①探查 native 掃描頁＋camera_stream_native（mobile_scanner
-  toggleTorch/torchState）②介面加 torch 能力＋開關按鈕
-  （無補光能力＝隱藏；macOS/桌機不顯示）③測試④驗證
+- [x] **T58 手機 APP 掃描頁補光（手電筒）開關**：
+  ①✓探查 native 掃描頁（mobile_scanner 7.5 toggleTorch/TorchState）
+  ②✓介面加 torch 能力＋開關按鈕（Key scan-torch-toggle；iOS/Android 行動 APP；macOS 桌機不顯示）
+  ③✓測試（274 全綠＋analyze 0）
+  ④待 PM 實機走查（iOS/Android 手電筒開關）
   ⚠️ 僅行動 APP 線——**PWA 凍結線不動**（web 端 torch 支援度
   不一，且鏡頭碼凍結中）
 
