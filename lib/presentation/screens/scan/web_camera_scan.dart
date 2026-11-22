@@ -515,6 +515,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                         borderRadius: BorderRadius.circular(6)),
                     child: Text(
                       '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · 命中 $_decodeHits · 解 $_decodeMs ms'
+                      '${_controller.elementInfo.isEmpty ? '' : ' · ${_controller.elementInfo}'}'
                       '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}',
                       key: const Key('webcam-diag'),
                       style: const TextStyle(

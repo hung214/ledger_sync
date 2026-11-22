@@ -52,6 +52,10 @@ abstract interface class CameraStreamController {
   /// 視訊長寬比（w/h；未就緒回 null——web 預覽 contain 幾何用）。
   double? get videoAspect;
 
+  /// video 元素實際渲染尺寸＋readyState（診斷——PM 2026-11-23
+  /// 「預覽有鏡頭但沒顯示」定位用）。
+  String get elementInfo;
+
   /// 瀏覽器**原生條碼偵測器**（BarcodeDetector API）可用？（T10——
   /// Chrome/Edge/Safari 17+；品質遠勝 zxing2。僅 web 實作回 true。）
   bool get hasNativeBarcodeDetector;

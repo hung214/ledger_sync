@@ -65,6 +65,13 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
+  String get elementInfo {
+    final v = _video;
+    if (v == null) return 'no-video';
+    return 'el ${v.offsetWidth}x${v.offsetHeight} rs=${v.readyState}';
+  }
+
+  @override
   double? get videoAspect {
     final v = _video;
     if (v == null || v.videoWidth == 0 || v.videoHeight == 0) return null;
@@ -366,12 +373,16 @@ class WebCameraStreamController implements CameraStreamController {
   Future<void> _openOn(web.HTMLVideoElement video) async {
     _stream = await _acquireRearCamera();
     video.srcObject = _stream;
-    // object-fit: contain（PM 2026-11-23：cover 在預覽區比例不合時會
-    // 大裁切＋放大＝「放很大、比例不對、顆粒清楚」）——完整顯示不變形；
-    // 黑邊由頁面背景呈現；框幾何以 videoRect（contain 幾何）計算。
-    video.style.setProperty('object-fit', 'contain');
+    // **Flutter web 平台檢視標準定位樣式**（absolute 滿版——確保元素
+    // 在 slot 內確實渲染；PM 2026-11-23「預覽有鏡頭但沒顯示」防護）。
+    video.style.setProperty('position', 'absolute');
+    video.style.setProperty('top', '0');
+    video.style.setProperty('left', '0');
     video.style.setProperty('width', '100%');
     video.style.setProperty('height', '100%');
+    // object-fit: contain（完整顯示不變形；黑邊由頁面背景呈現；
+    // 框幾何以 videoRect（contain 幾何）計算。
+    video.style.setProperty('object-fit', 'contain');
     video.style.setProperty('background', '#000');
     // 變焦能力探測（有 zoom 能力 → 掃描頁顯示變焦按鈕）。
     try {
