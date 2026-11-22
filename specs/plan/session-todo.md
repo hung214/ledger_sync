@@ -28,9 +28,9 @@
 
 - [ ] **T45 PWA 黑畫面離線診斷**（headless Chrome：掃描頁進出→video
   渲染狀態）——20261124b/c 實驗版仍有黑畫面；凍結版（20261123）無此問題
-- [ ] **T23-diag 診斷行短格式**（PM 2026-11-23：「幀 N 命中 N 解 N ms」
+- [x] **T23-diag 診斷行短格式**（PM 2026-11-23：「幀 N 命中 N 解 N ms」
   就好——點擊展開詳細）——camera 凍結中，隨 T45 一起做
-- [ ] **T21 OCR 文字框**：確認卡照片預覽帶辨識區域框（iOS/macOS）
+- [x] **T21 OCR 文字框**：確認卡照片預覽帶辨識區域框（iOS/macOS）
 - [ ] **Big5 品名亂碼**（QR 編碼參數 0 的明細——需 Big5 對照表）
 - [ ] **zxing-wasm 升級**（研究完成：MIT、多碼、tryRotate/tryInvert、
   快 3-4 倍——檔案已下載 web/zxing/ 未接線；屬 camera 凍結範圍）
