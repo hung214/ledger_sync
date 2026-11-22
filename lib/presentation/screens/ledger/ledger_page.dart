@@ -14,6 +14,7 @@ import '../../../data/sqlite/app_database.dart';
 import '../../../domain/services/balance_calculator.dart';
 import '../../category_display.dart';
 import '../../theme/app_theme.dart';
+import '../quick_entry/category_picker_dialog.dart';
 import 'recent_deletions_page.dart';
 import 'tx_edit_sheet.dart';
 import '../scan/scan_page.dart';
@@ -539,27 +540,33 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Text('分類',
+                child: Text('分類（與快記同款：MRU 5＋主類別點選展開子類別）',
                     style: TextStyle(fontWeight: FontWeight.w700)),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('全部'),
-                      selected: cat == null,
-                      onSelected: (_) => setSheet(() => cat = null),
-                    ),
-                    for (final c in db.categoriesByKind('expense'))
-                      ChoiceChip(
-                        label: Text(c.name),
-                        selected: cat == c.id,
-                        onSelected: (_) => setSheet(() => cat = c.id),
-                      ),
-                  ],
+                child: InkWell(
+                  key: const Key('filter-category'),
+                  onTap: () async {
+                    final pick = await showCategoryPicker(sheetCtx, ref,
+                        kind: 'all',
+                        selectedId: cat,
+                        recentLimit: 5,
+                        showAdd: false);
+                    if (pick is CategoryPicked) {
+                      setSheet(() => cat = pick.categoryId);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                        labelText: '分類（點選；MRU 5＋兩層）',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: Icon(Icons.arrow_drop_down)),
+                    child: Text(cat == null
+                        ? '全部'
+                        : (db.categoryName(cat!) ?? '全部')),
+                  ),
                 ),
               ),
               Padding(

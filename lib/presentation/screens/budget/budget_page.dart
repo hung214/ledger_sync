@@ -7,11 +7,13 @@ import 'package:intl/intl.dart';
 import '../../../application/budgets/budget_evaluator.dart';
 import '../../../application/budgets/budget_period_service.dart';
 import '../../../application/budgets/budget_service.dart';
+import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
 import '../../../application/stats/monthly_stats_service.dart';
 import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
 import '../../theme/app_theme.dart';
+import '../quick_entry/category_picker_dialog.dart';
 
 /// 預算頁（FR-B2~B7 呈現面；UI-P3 對照 04-budget 雛型）。
 ///
@@ -248,21 +250,72 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
           ),
           if (_mode == 'category') ...[
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
+            // 分類選擇（PM 2026-11-23：與快記同款——**MRU 前 5** 優先＋
+            // 主類別點選才展開子類別；＋即建即選）。
+            InkWell(
               key: const Key('budget-category'),
-              initialValue: _categoryId ?? defaultCatId,
-              decoration: const InputDecoration(
-                labelText: '分類',
-                border: OutlineInputBorder(),
+              onTap: () async {
+                final pick = await showCategoryPicker(context, ref,
+                    kind: 'expense',
+                    selectedId: _categoryId ?? defaultCatId,
+                    recentLimit: 5);
+                if (!mounted) return;
+                switch (pick) {
+                  case CategoryPicked(:final categoryId):
+                    // picker 的 context 已過 async gap——用 State.context。
+                    if (!context.mounted) return;
+                    setState(() => _categoryId = categoryId);
+                  case CategoryAddRequested(:final asSub, :final parentId):
+                    // ＋即建即選（快記同款）。
+                    final nameCtrl = TextEditingController();
+                    final name = await showDialog<String>(
+                      context: context,
+                      builder: (dialogCtx) => AlertDialog(
+                        title: Text(asSub ? '新增子分類' : '新增主類別'),
+                        content: TextField(
+                          autofocus: true,
+                          controller: nameCtrl,
+                          decoration:
+                              const InputDecoration(labelText: '分類名稱'),
+                        ),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.of(dialogCtx).pop(),
+                              child: const Text('取消')),
+                          FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogCtx).pop(nameCtrl.text.trim()),
+                              child: const Text('建立')),
+                        ],
+                      ),
+                    );
+                    if (name == null || name.isEmpty || !mounted) return;
+                    try {
+                      final row = CategoryService(ref.read(dbProvider))
+                          .create(kind: 'expense', name: name, parentId: parentId);
+                      if (!mounted || !context.mounted) return;
+                      setState(() => _categoryId = row.id);
+                    } catch (e) {
+                      if (mounted && context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('$e')));
+                      }
+                    }
+                  default:
+                    break;
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: '分類（點選；MRU 5＋兩層）',
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(expenseCats
+                        .where((c) => c.id == (_categoryId ?? defaultCatId))
+                        .map((c) => c.name)
+                        .firstOrNull ??
+                    '未選擇'),
               ),
-              items: [
-                for (final c in expenseCats)
-                  DropdownMenuItem(
-                    value: c.id,
-                    child: Text(c.parentId == null ? c.name : '　${c.name}'),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _categoryId = v),
             ),
           ],
           const SizedBox(height: 12),

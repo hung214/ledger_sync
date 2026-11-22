@@ -35,19 +35,34 @@ Future<CategoryPick?> showCategoryPicker(
   WidgetRef ref, {
   String kind = 'expense',
   String? selectedId,
+  int recentLimit = 10,
+  bool showAdd = true,
 }) {
   return showDialog<CategoryPick>(
     context: context,
-    builder: (_) =>
-        _CategoryPickerDialog(kind: kind, selectedId: selectedId),
+    builder: (_) => _CategoryPickerDialog(
+        kind: kind,
+        selectedId: selectedId,
+        recentLimit: recentLimit,
+        showAdd: showAdd),
   );
 }
 
 class _CategoryPickerDialog extends ConsumerStatefulWidget {
-  const _CategoryPickerDialog({this.kind = 'expense', this.selectedId});
+  const _CategoryPickerDialog(
+      {this.kind = 'expense',
+      this.selectedId,
+      this.recentLimit = 10,
+      this.showAdd = true});
 
   final String kind;
   final String? selectedId;
+
+  /// 常用（MRU）顯示上限——PM 2026-11-23：預算/明細查詢＝5。
+  final int recentLimit;
+
+  /// 是否顯示「＋新增」（明細查詢＝搜尋場景不新增——false）。
+  final bool showAdd;
 
   @override
   ConsumerState<_CategoryPickerDialog> createState() =>
@@ -79,14 +94,20 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final cats = ref.watch(dbProvider).categoriesByKind(widget.kind);
+    // kind='all'（明細查詢）＝支出＋收入合併（PM 2026-11-23）。
+    final cats = widget.kind == 'all'
+        ? [
+            ...ref.watch(dbProvider).categoriesByKind('expense'),
+            ...ref.watch(dbProvider).categoriesByKind('income'),
+          ]
+        : ref.watch(dbProvider).categoriesByKind(widget.kind);
     final mains = [for (final c in cats) if (c.parentId == null) c];
     final byId = categoryIndex(cats);
-    // 常用（MRU 前 10；只留本模式 kind 之分類，去重由 provider 負責）。
+    // 常用（MRU 前 recentLimit；只留本模式 kind 之分類，去重由 provider 負責）。
     final recent = [
       for (final id in ref.watch(recentCategoryIdsProvider))
         if (byId[id] != null) byId[id]!,
-    ];
+    ].take(widget.recentLimit).toList();
     // 有效主欄：使用者選擇 ??
     //   有常用 → ⭐ 常用類別 : 首個主類別（PM 2026-10-25 預設）。
     final effMain = _mainId ??
@@ -170,17 +191,19 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                             selected: isFreq,
                             onTap: () => setState(() => _mainId = freqId),
                           ),
-                        InkWell(
-                          key: const Key('picker-add-main'),
-                          onTap: () => Navigator.of(context).pop(
-                              const CategoryAddRequested(asSub: false)),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                            child: Text('＋ 新增主類別',
-                                style: text.bodySmall
-                                    ?.copyWith(color: scheme.primary)),
+                        if (widget.showAdd)
+                          InkWell(
+                            key: const Key('picker-add-main'),
+                            onTap: () => Navigator.of(context).pop(
+                                const CategoryAddRequested(asSub: false)),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                              child: Text('＋ 新增主類別',
+                                  style: text.bodySmall
+                                      ?.copyWith(color: scheme.primary)),
+                            ),
                           ),
-                        ),
                         for (final m in mains)
                           row(
                             key: Key('picker-main-${m.name}'),
@@ -216,21 +239,23 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                                 ]
                               : [
                                   head('子類別'),
-                                  InkWell(
-                                    key: const Key('picker-add-sub'),
-                                    onTap: effMain == null
-                                        ? null
-                                        : () => Navigator.of(context).pop(
-                                            CategoryAddRequested(
-                                                asSub: true, parentId: effMain)),
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          10, 8, 10, 8),
-                                      child: Text('＋ 新增子類別',
-                                          style: text.bodySmall?.copyWith(
-                                              color: scheme.primary)),
+                                  if (widget.showAdd)
+                                    InkWell(
+                                      key: const Key('picker-add-sub'),
+                                      onTap: effMain == null
+                                          ? null
+                                          : () => Navigator.of(context).pop(
+                                              CategoryAddRequested(
+                                                  asSub: true,
+                                                  parentId: effMain)),
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            10, 8, 10, 8),
+                                        child: Text('＋ 新增子類別',
+                                            style: text.bodySmall?.copyWith(
+                                                color: scheme.primary)),
+                                      ),
                                     ),
-                                  ),
                                   if (effMain != null)
                                     row(
                                       key: const Key('picker-sub-none'),
