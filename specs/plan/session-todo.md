@@ -9,6 +9,15 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 進行中（PM 2026-11-24：手機版補光開關）
+
+- [ ] **T58 手機 APP 掃描頁補光（手電筒）開關**：
+  ①探查 native 掃描頁＋camera_stream_native（mobile_scanner
+  toggleTorch/torchState）②介面加 torch 能力＋開關按鈕
+  （無補光能力＝隱藏；macOS/桌機不顯示）③測試④驗證
+  ⚠️ 僅行動 APP 線——**PWA 凍結線不動**（web 端 torch 支援度
+  不一，且鏡頭碼凍結中）
+
 ## 🔴 進行中（PM 2026-11-24 回報：0.5.0 相機黑畫面復發）
 
 - [x] **T57-PWA 回退（最優先）**：gh-pages 從 main（0.5.0，含鏡頭
