@@ -50,6 +50,26 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 掃描不到」：舊指紋 total|date|merchant 會把**同店家/同金額/同日期的
   /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
   final Set<String> _seenCodes = <String>{};
+
+  /// **跨 tick 累積窗**（PM 2026-11-23：無法一次掃兩碼 → 各別辨識＋合併——
+  /// 左碼/右碼分 tick 解出，3 秒窗內合併成完整明細；與 APP 累積窗同款）。
+  final Map<String, DateTime> _recentTexts = {};
+
+  /// 已入單的**左碼**（發票身分）——同一張不重複加入；資料對應不起來
+  /// ＝另一張發票（不同左碼）。
+  final Set<String> _committedLeftCodes = <String>{};
+
+  String? _hint; // 畫面提示（只掃到明細碼等）——與 APP 同款
+  Timer? _hintReset;
+
+  void _flashHint(String text) {
+    if (!mounted) return;
+    setState(() => _hint = text);
+    _hintReset?.cancel();
+    _hintReset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _hint = null);
+    });
+  }
   int _addedFromThisSession = 0;
   // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
   int _frames = 0; // 取幀計數
@@ -144,15 +164,49 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     sw.stop();
     _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
-    if (draft == null) return; // 無 QR——繼續取景
-    if (mounted) setState(() => _decodeHits++);
+    // **跨 tick 累積窗**（3 秒）——無法一次掃兩碼 → 各別辨識＋合併
+    // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
+    if (texts.isNotEmpty) {
+      final now2 = DateTime.now();
+      _recentTexts.removeWhere((_, t) =>
+          now2.difference(t) > const Duration(seconds: 3));
+      for (final t in texts) {
+        _recentTexts[t] = now2;
+      }
+    }
+    final accumulated = _recentTexts.keys.toList();
+    if (accumulated.isEmpty) return;
+    if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
-    if (texts.every(_seenCodes.contains)) return; // 同一張還在畫面中
-    for (final t in texts) {
-      _seenCodes.add(t);
+    if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
+    // 累積優先：右碼補齊後合併成完整明細。
+    final merged = ImageQrScanner.draftFromQrTexts(accumulated) ?? draft;
+    if (merged == null) {
+      // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
+      if (accumulated.any((t) => t.startsWith('**'))) {
+        _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票號那格）');
+      }
+      return;
+    }
+    if (mounted) setState(() => _decodeHits++);
+    // 左碼＝發票身分：已入單的發票不重複加入（對應不起來＝另一張）。
+    String? leftCode;
+    for (final t in accumulated) {
+      final l = ImageQrScanner.extractOfficialLeft(t);
+      if (l != null) {
+        leftCode = l;
+        break;
+      }
+    }
+    if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
+      return;
     }
     ref.read(scanDraftsProvider.notifier).add(
-        ScannedItem(draft: draft, photoBytes: photoBytes));
+        ScannedItem(draft: merged, photoBytes: photoBytes));
+    for (final t in accumulated) {
+      _seenCodes.add(t);
+    }
+    if (leftCode != null) _committedLeftCodes.add(leftCode);
     if (mounted) setState(() => _addedFromThisSession++);
     _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
   }
@@ -202,6 +256,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   @override
   void dispose() {
     _loop?.cancel();
+    _hintReset?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -211,8 +266,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 回合重置（暫存清空＝新回合）→ seen 清空（可再掃同一張）；
     // 連續掃描關閉（預設）：掃到第一張 → 自動進確認清單（掃描暫停）。
     ref.listen(scanDraftsProvider, (prev, next) {
-      if (next.isEmpty && _seenCodes.isNotEmpty) {
+      if (next.isEmpty &&
+          (_seenCodes.isNotEmpty ||
+              _committedLeftCodes.isNotEmpty ||
+              _recentTexts.isNotEmpty)) {
         _seenCodes.clear();
+        _committedLeftCodes.clear();
+        _recentTexts.clear();
       }
       if (!ref.read(continuousScanProvider) &&
           (prev == null || prev.isEmpty) &&
@@ -300,6 +360,26 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   color: Colors.white,
                 ),
               ),
+              // 畫面提示（只掃到明細碼等——與 APP 同款）。
+              if (_hint != null)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_hint!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                  ),
+                ),
               // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
               // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
               if (mode == ScanMode.paper)
