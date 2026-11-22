@@ -9,6 +9,15 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 🔴 進行中（PM 2026-11-23：總覽最近交易支出/收入正負反了）
+
+- [x] **T59 總覽最近交易正負號修正**：
+  ①✓找到 bug：_RecentTxRow 以 tx.kind == "expense" 比較，但 tx.kind 是 TxKind enum → 永遠 false → 全部顯示 +
+  ②✓修正為 tx.kind == TxKind.expense（支出 −、收入 ＋）
+  ③✓測試（274 全綠＋analyze 0）
+  ④✓新分支 fix/overview-recent-transactions-sign 已推，待 MR 到 feature/ios-pwa
+  ⚠️ 新工作流程的首個範例：新分支＋MR 到 ios-pwa，不直接合併 main
+
 ## 📋 工作流程修正（PM 2026-11-23 指示）
 
 - [x] **W1 工作流程規則（PM 2026-11-23 指示）**：每項修改/功能都建立**新分支**，完成後一次 MR 到 `feature/ios-pwa`
