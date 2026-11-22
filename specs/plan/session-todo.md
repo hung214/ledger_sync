@@ -15,10 +15,11 @@
 - [x] **T51 資料管理移除「輸入確認文字」**（PM 指示）：警告→PIN（有設）
   →直接執行；無 PIN→直接執行；回系統預設值保留雲端加驗（S9.2）。
   測試更新＋270 全綠
-- [ ] **T52 PWA 分支補移植明細頁修改**（PM 指出「這邊你沒有做」——
+- [x] **T52 PWA 分支補移植明細頁修改**（PM 指出「這邊你沒有做」——
   查詢按鈕/待確認移除/搜尋擴大只在 APP 線，PWA 凍結版沒有）：
-  worktree pwa-accumulate → checkout ledger/search 檔案 → full test
-  → build → 部署 0.5.0-pwa.20261124d
+  worktree pwa-accumulate → 移植 ledger_page/search_service/main_shell/
+  quick_entry（掃描按鈕）→ full test 260 全綠（含搜尋範圍驗證）→
+  部署 0.5.0-pwa.20261124d ✓（PM 重整兩次即可見）
 - [ ] **T53 鏡頭凍結**（PM：先不要動，獨立分支處理）：
   camera-improvements 分支已建立（保留 parked 實驗）；
   main/PWA 線不再有鏡頭變更
