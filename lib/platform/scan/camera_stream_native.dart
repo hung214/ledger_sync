@@ -45,6 +45,9 @@ class _NativeCameraController implements CameraStreamController {
   Future<void> setZoom(double normalized) async {}
 
   @override
+  Future<void> setFocusPoint(Offset normalized) async {}
+
+  @override
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
 
 

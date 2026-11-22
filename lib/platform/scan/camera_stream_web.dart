@@ -89,6 +89,35 @@ class WebCameraStreamController implements CameraStreamController {
   bool get zoomSupported => _maxZoom != null && _maxZoom! > 1;
 
   @override
+  Future<void> setFocusPoint(Offset normalized) async {
+    try {
+      final tracks = _stream?.getVideoTracks().toDart;
+      if (tracks == null || tracks.isEmpty) return;
+      final track = tracks.first;
+      // pointsOfInterest（ImageCapture 規格：正規化 0~1，top-left 原點）——
+      // package:web 無此型別，走 js_interop_unsafe 動態呼叫。
+      final constraintsJs = ({
+        'advanced': [
+          {
+            'pointsOfInterest': [
+              {
+                'x': normalized.dx.clamp(0.0, 1.0),
+                'y': normalized.dy.clamp(0.0, 1.0),
+              },
+            ],
+          },
+        ],
+      }).jsify();
+      final promise = track
+          .callMethod('applyConstraints'.toJS, constraintsJs)
+          as JSPromise<JSAny?>;
+      await promise.toDart;
+    } catch (_) {
+      // 瀏覽器/裝置不支援對焦控制（Mac 內建鏡頭固定對焦）——靜默。
+    }
+  }
+
+  @override
   Future<void> setZoom(double normalized) async {
     try {
       final tracks = _stream?.getVideoTracks().toDart;

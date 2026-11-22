@@ -56,6 +56,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
   double _zoom = 0; // 0=1×、0.5=2×、1.0=3×（正規化變焦——PM：不用靠近）
+  Offset? _focusIndicator; // 點擊對焦回饋（preview 座標）
+  Timer? _focusIndicatorReset;
   // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
   // 400ms 內無新偵測即清空——對準時 unrestricted 連續回呼，框持續顯示。
   List<List<Offset>> _boxes = const [];
@@ -99,6 +101,24 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
     // 時舊 release 與新 start 競態 → texture 沒幀＝黑畫面。
     _startTimer = Timer(const Duration(milliseconds: 300), () {
       _startCamera(gen, attempt: 0);
+    });
+  }
+
+  /// **點擊對焦**（PM 2026-11-24）：tap 位置正規化 → setFocusPoint
+  /// （iOS＝focusPointOfInterest＋autoFocus；macOS 內建鏡頭固定對焦——
+  /// 呼叫靜默失敗）＋黃圈回饋 700ms。
+  void _onPreviewTap(Offset local, Size widgetSize) {
+    if (widgetSize.isEmpty) return;
+    final normalized = Offset(
+      (local.dx / widgetSize.width).clamp(0.0, 1.0),
+      (local.dy / widgetSize.height).clamp(0.0, 1.0),
+    );
+    unawaited(
+        _controller.setFocusPoint(normalized).catchError((Object _) {}));
+    _focusIndicatorReset?.cancel();
+    setState(() => _focusIndicator = local);
+    _focusIndicatorReset = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _focusIndicator = null);
     });
   }
 
@@ -395,6 +415,32 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                     builder: (_) => const ImportPage()));
               }),
             ),
+            // **點擊對焦**（PM 2026-11-24）：tap → 正規化座標 →
+            // setFocusPoint（iOS＝focusPointOfInterest；macOS 固定對焦
+            // 硬體無效——plugin 僅 iOS 分支）＋黃圈視覺回饋。
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapUp: (d) => _onPreviewTap(d.localPosition, constraints.biggest),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            if (_focusIndicator != null)
+              Positioned(
+                left: _focusIndicator!.dx - 28,
+                top: _focusIndicator!.dy - 28,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.yellowAccent, width: 2.5),
+                    ),
+                  ),
+                ),
+              ),
             // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
             Positioned.fill(
               child: IgnorePointer(

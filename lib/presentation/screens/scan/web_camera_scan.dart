@@ -82,6 +82,25 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
   double _zoom = 0; // 0=1×、0.5=2×、1.0=3×
   bool _zoomSupported = false;
+  Offset? _focusIndicator; // 點擊回饋
+  Timer? _focusIndicatorReset;
+
+  /// **點擊對焦嘗試**（PM 2026-11-24）：tap 正規化 → pointsOfInterest
+  /// constraint（瀏覽器/裝置支援有限——靜默失敗）＋黃圈回饋 700ms。
+  void _onPreviewTap(Offset local, Rect videoRect) {
+    if (videoRect.width == 0 || videoRect.height == 0) return;
+    // 相對 videoRect 正規化（0~1——pointsOfInterest 規格座標）。
+    final normalized = Offset(
+      ((local.dx - videoRect.left) / videoRect.width).clamp(0.0, 1.0),
+      ((local.dy - videoRect.top) / videoRect.height).clamp(0.0, 1.0),
+    );
+    unawaited(_controller.setFocusPoint(normalized).catchError((Object _) {}));
+    _focusIndicatorReset?.cancel();
+    setState(() => _focusIndicator = local);
+    _focusIndicatorReset = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _focusIndicator = null);
+    });
+  }
 
   /// 原生偵測器命中的條碼框（正規化——綠框高亮）。
   final ValueNotifier<({List<Rect> boxes, Size frameSize})?>
@@ -396,6 +415,31 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                     color: Colors.white,
                   ),
                 ),
+                // **點擊對焦嘗試**（PM 2026-11-24）：瀏覽器對焦控制支援
+                // 有限（多半靜默無效）——仍提供點擊回饋＋constraint 嘗試。
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapUp: (d) => _onPreviewTap(d.localPosition, videoRect),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+                if (_focusIndicator != null)
+                  Positioned(
+                    left: _focusIndicator!.dx - 28,
+                    top: _focusIndicator!.dy - 28,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.yellowAccent, width: 2.5),
+                        ),
+                      ),
+                    ),
+                  ),
                 // 辨識區域引導框（四角括號——與 APP 同款；純視覺）。
                 Positioned.fromRect(
                   rect: aimRect,

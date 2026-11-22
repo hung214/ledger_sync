@@ -71,6 +71,10 @@ abstract interface class CameraStreamController {
   /// 相機**變焦**支援？（web：track capabilities 有 zoom）。
   bool get zoomSupported;
 
+  /// **點擊對焦**（正規化 0~1，top-left 原點——web：pointsOfInterest
+  /// constraint；支援有限的裝置靜默失敗。PM 2026-11-24）。
+  Future<void> setFocusPoint(Offset normalized);
+
   /// 設定變焦（正規化 0~1；web：track zoom constraint）。
   Future<void> setZoom(double normalized);
 

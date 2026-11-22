@@ -10,6 +10,16 @@
   **PWA 維持此版穩定運行**； parked 項目（T45 黑畫面離線診斷、
   雙碼聯集、Big5、OCR 文字框）未經 PM 同意不再部署。
 
+## 進行中（PM 2026-11-24：點擊對焦）
+
+- [x] **T49 點擊鏡頭畫面對焦**（PM：可以點選鏡頭畫面對焦嗎）：
+  ①原生（iOS/macOS）掃描預覽 GestureDetector → setFocusPoint
+  （iOS＝focusPointOfInterest ✓；macOS 內建鏡頭固定對焦硬體→
+  嘗試 exposurePointOfInterest 效果有限——Plugin 僅 iOS 分支）
+  ②PWA：pointsOfInterest constraint 嘗試（瀏覽器支援有限，
+  try/catch 靜默）③點擊視覺回饋（圓圈動畫）
+- [x] **T50 full suite＋build＋部署＋提交**
+
 ## 進行中（PM 2026-11-24：鍵盤遮擋修正）
 
 - [x] **T46 商家/備註聚焦時隱藏計算機鍵盤**（PM：避免遮擋畫面）：
