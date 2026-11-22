@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
 
 import '../../application/scan/scan_state.dart';
+import '../ocr/text_ocr.dart';
 import '../../domain/entities/transaction_draft.dart';
 import '../../domain/services/invoice_qr_parser.dart';
 
@@ -21,17 +22,48 @@ import '../../domain/services/invoice_qr_parser.dart';
 class ImageQrScanner {
   const ImageQrScanner();
 
-  /// 生產用管線（注入 `importPipelineProvider`）。
-  Future<ScannedItem?> pickAndScan() async {
+  /// 選檔 → bytes（共用；HEIC 由系統 Vision 直接支援）。
+  Future<Uint8List?> _pickBytes() async {
     final file = await openFile(acceptedTypeGroups: [
       const XTypeGroup(
         label: '發票／收據圖片',
-        extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'],
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic'],
       ),
     ]);
     if (file == null) return null; // 使用者取消
-    final bytes = await file.readAsBytes();
+    return file.readAsBytes();
+  }
+
+  /// **電子發票匯入**（PM 2026-11-22：**只走 QR——不用文字辨識**）。
+  /// 無 QR → 空白卡（手動補）。
+  Future<ScannedItem?> pickAndScan() async {
+    final bytes = await _pickBytes();
+    if (bytes == null) return null;
     return itemFromImage(bytes);
+  }
+
+  /// **紙本發票匯入**（PM 2026-11-22：紙本**無條碼、只有印刷發票號碼**）
+  /// → **OCR 優先**（Apple Vision 文字辨識；iOS/macOS）：
+  /// 發票號（分行配對）＋印刷日期帶入；OCR 無結果 → 回退 QR → 空白卡。
+  Future<ScannedItem?> pickAndScanPaper() async {
+    final bytes = await _pickBytes();
+    if (bytes == null) return null;
+    final now = DateTime.now();
+    final lines = await recognizeInvoiceText(createTextOcrService(), bytes);
+    final invoiceNo = findInvoiceNo(lines);
+    if (invoiceNo != null) {
+      final date = findPrintedDate(lines) ?? DateTime(now.year, now.month, now.day);
+      return ScannedItem(
+        draft: TransactionDraft(
+          merchant: const DraftField.none(),
+          totalMinor: const DraftField.none(),
+          date: DraftField(date, 0.5),
+          invoiceNo: invoiceNo,
+        ),
+        photoBytes: bytes,
+      );
+    }
+    return itemFromImage(bytes); // OCR 無號碼 → QR 嘗試 → 空白卡
   }
 
   /// 由影像位元組建立掃描項（可單獨測試；不經檔案對話框）。
@@ -65,36 +97,49 @@ class ImageQrScanner {
     return null;
   }
 
-  /// 相機幀解碼（web/PWA 迴圈）——**中央裁切變焦分層重試**（T1，
-  /// PM 2026-11-22「MAC PWA 還是掃描不到」）：
-  /// ①輕量 3 區（整張＋左右半，各自含降採樣後備）→ ②未命中時中央 70% →
-  /// ③中央 50%。Mac/桌面 webcam 遠距小 QR 在整張幀裡特徵太弱——
-  /// 裁切＝數位變焦，QR 佔分析區比例放大後可解（每區 ≤800px，耗時有界）。
-  TransactionDraft? draftFromCameraFrame(Uint8List bytes, {DateTime? now}) {
-    final draft = draftFromQrTexts(decodeQrTexts(bytes, fullScan: false));
-    if (draft != null) return draft;
-    for (final fraction in const [0.7, 0.5]) {
-      final d =
-          draftFromQrTexts(decodeQrTextsCenterCrop(bytes, fraction));
-      if (d != null) return d;
+  /// 相機幀解碼（web/PWA 迴圈）——**分層重試＋回傳原始文字**（去重 key 用）：
+  /// ①輕量 3 區（整張＋左右半，含降採樣後備）→ ②中央 70%/50%（變焦——
+  /// 遠距小 QR）→ ③四象限（角落——PM 2026-11-22「條碼不限中央」）。
+  /// 每區含降採樣＋透印去除變體（≤800px，耗時有界）。
+  ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrame(
+      Uint8List bytes,
+      {DateTime? now}) {
+    var texts = decodeQrTexts(bytes, fullScan: false);
+    var draft = draftFromQrTexts(texts);
+    if (draft != null) return (draft: draft, texts: texts);
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return null;
+    for (final region in _escalationRegions(decoded)) {
+      texts = _decodeSingleRegion(region);
+      draft = draftFromQrTexts(texts);
+      if (draft != null) return (draft: draft, texts: texts);
     }
     return null;
   }
 
-  /// 中央 [fraction]（0~1）裁切之單區解碼（含降採樣後備）。
-  static List<String> decodeQrTextsCenterCrop(
-      Uint8List bytes, double fraction) {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return const [];
-    final w = decoded.width;
-    final h = decoded.height;
-    final cw = (w * fraction).round();
-    final ch = (h * fraction).round();
-    final crop = img.copyCrop(decoded,
-        x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
-    final text = _decodeRegion(crop) ??
-        _decodeDownscaled(crop) ??
-        _decodeShowThrough(crop);
+  /// 分層重試區域：中央 70% → 中央 50%（變焦——遠距）→ 四象限（角落）。
+  static Iterable<img.Image> _escalationRegions(img.Image src) sync* {
+    final w = src.width;
+    final h = src.height;
+    for (final f in const [0.7, 0.5]) {
+      final cw = (w * f).round();
+      final ch = (h * f).round();
+      yield img.copyCrop(src,
+          x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
+    }
+    final hw = w ~/ 2;
+    final hh = h ~/ 2;
+    yield img.copyCrop(src, x: 0, y: 0, width: hw, height: hh);
+    yield img.copyCrop(src, x: hw, y: 0, width: w - hw, height: hh);
+    yield img.copyCrop(src, x: 0, y: hh, width: hw, height: h - hh);
+    yield img.copyCrop(src, x: hw, y: hh, width: w - hw, height: h - hh);
+  }
+
+  /// 單區解碼（含降採樣＋透印去除變體）。
+  static List<String> _decodeSingleRegion(img.Image region) {
+    final text = _decodeRegion(region) ??
+        _decodeDownscaled(region) ??
+        _decodeShowThrough(region);
     return text == null ? const [] : [text];
   }
 
@@ -148,8 +193,20 @@ class ImageQrScanner {
   /// `fullScan = false` → 只試**整張＋左右半**（相機幀輕量模式——
   /// 行動裝置主執行緒同步解碼，區域數直接決定每幀耗時）。
   static List<String> decodeQrTexts(Uint8List bytes, {bool fullScan = true}) {
-    final decoded = img.decodeImage(bytes);
+    var decoded = img.decodeImage(bytes);
     if (decoded == null) return const [];
+    // 大圖預縮放（T11，PM 2026-11-22 實測：12MP 手機照片 9 區純 Dart
+    // 解碼可達數十秒）：>2400 先縮——發票 QR 佔寬 ≥1/5 時仍有
+    // ~11px/模組，遠高於可解門檻。
+    final maxDim = decoded.width > decoded.height
+        ? decoded.width
+        : decoded.height;
+    if (maxDim > 2400) {
+      final scale = 2400 / maxDim;
+      decoded = img.copyResize(decoded,
+          width: (decoded.width * scale).round(),
+          height: (decoded.height * scale).round());
+    }
     final found = <String>[];
     for (final region in _regions(decoded, fullScan: fullScan)) {
       var text = _decodeRegion(region) ?? _decodeDownscaled(region);

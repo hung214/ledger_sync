@@ -145,6 +145,9 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
         }
       }
       if (raw == null || raw.isEmpty) continue;
+      // **session 級去重**（PM 2026-11-22）：已入單的條碼（原始內容）本回合
+      // 不再入單——同一張在畫面中不重複；**不同發票（不同字串）永不誤擋**。
+      if (_seenCodes.contains(raw)) continue;
       final now = DateTime.now();
       // 同一條碼 1.5s 內重複 → 略過（對準同一張發票會連續回呼）。
       if (raw == _lastRaw &&
@@ -295,108 +298,89 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
 
   @override
   Widget build(BuildContext context) {
-    // 中央 70% 掃描窗＝**視覺引導框**（PM 2026-11-20：聚焦對準）。
-    // 注意：scanWindow 未傳入 MobileScanner——Vision 分析**整個畫面**
-    // （最大化偵測範圍；PM 2026-11-21 回報「要拉很近才掃得到」後不限定區域）。
+    // 回合重置（暫存清空＝新回合）→ seen 集合清空（可再掃同一張）。
+    ref.listen(scanDraftsProvider, (prev, next) {
+      if (next.isEmpty && _seenCodes.isNotEmpty) _seenCodes.clear();
+    });
+    // PM 2026-11-22：**移除中央分析窗**——條碼不限中央（「換一張發票就
+    // 掃描不到」根因：上一批分析窗中途未移除，偏位的發票落在窗外被
+    // Vision 忽略）。全畫面偵測；遠距由相機 1080p preset（plugin patch）
+    // 解決。去重改**條碼原始內容**（_seenCodes）。
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: LayoutBuilder(builder: (context, constraints) {
-        // 中央 60% 分析窗（PM 2026-11-22：QR 佔畫面 1/4~1/5 即可辨識，
-        // 不必貼近鏡頭——Vision regionOfInterest 裁切＝數位變焦；
-        // 框線與分析窗同一 rect——看到框＝掃得到）。
-        final scanWindow = Rect.fromCenter(
-          center: constraints.biggest.center(Offset.zero),
-          width: constraints.biggest.width * 0.6,
-          height: constraints.biggest.height * 0.6,
-        );
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            MobileScanner(
-              controller: _controller,
-              onDetect: _onDetect,
-              scanWindow: scanWindow,
-              errorBuilder: (context, error) => _CameraError(onFallback: () {
-                Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => const ImportPage()));
-              }),
-            ),
-            // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _BarcodeHighlightPainter(
-                    boxes: _boxes,
-                    imageSize: _boxImageSize,
-                  ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+            errorBuilder: (context, error) => _CameraError(onFallback: () {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const ImportPage()));
+            }),
+          ),
+          // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _BarcodeHighlightPainter(
+                  boxes: _boxes,
+                  imageSize: _boxImageSize,
                 ),
               ),
             ),
-            // 掃描窗框線（讓使用者知道對準範圍）
-            Positioned.fromRect(
-              rect: scanWindow,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white70, width: 1.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          ),
+          // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Text('偵測 $_events 次',
+                  style: const TextStyle(color: Colors.white, fontSize: 11)),
             ),
-            // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
-            // 置底部左側：頂部讓位給「對準發票」提示（scan_page 疊層）；
-            // 無偵測時恰無提示浮條遮擋——診斷資訊在最重要時可見。
+          ),
+          // 紙本發票模式：手動開卡入口（PM 2026-11-21；雲端發票不需要
+          // 截圖——即時掃到即顯示，此鈕供無 QR 的紙本發票快速記帳）。
+          if (ref.watch(scanModeProvider) == ScanMode.paper)
             Positioned(
-              left: 8,
-              bottom: 8,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(8),
+              left: 0,
+              right: 0,
+              bottom: 48,
+              child: Center(
+                child: FilledButton.icon(
+                  key: const Key('scan-manual-entry'),
+                  onPressed: _addBlankDraft,
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('手動開一筆'),
                 ),
-                child: Text('偵測 $_events 次',
-                    style: const TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ),
-            // 紙本發票模式：手動開卡入口（PM 2026-11-21；雲端發票不需要
-            // 截圖——即時掃到即顯示，此鈕供無 QR 的紙本發票快速記帳）。
-            if (ref.watch(scanModeProvider) == ScanMode.paper)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 48,
-                child: Center(
-                  child: FilledButton.icon(
-                    key: const Key('scan-manual-entry'),
-                    onPressed: _addBlankDraft,
-                    icon: const Icon(Icons.receipt_long),
-                    label: const Text('手動開一筆'),
+          if (_hint != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(20),
                   ),
+                  child: Text(_hint!,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12)),
                 ),
               ),
-            if (_hint != null)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(_hint!,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12)),
-                  ),
-                ),
-              ),
-          ],
-        );
-      }),
+            ),
+        ],
+      ),
     );
   }
 }

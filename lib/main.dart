@@ -73,9 +73,19 @@ Future<void> main() async {
         oauthProvider.overrideWithValue(googleOAuthSignIn(cloud)),
         syncCoordinatorProvider.overrideWithValue(SyncCoordinator(db, cloud,
             deviceId: deviceId, blobs: newBlobStore(dirPath: blobsDir.path))),
-        // PC／桌面掃描（PM 2026-10-29）：檔案對話框選圖 → 圖片解 QR → 確認頁；
-        // 找不到可辨識 QR → 空白確認卡（FR-S2）。行動版仍走相機（ScanPage）。
-        importPipelineProvider.overrideWithValue(const ImageQrScanner().pickAndScan),
+        // PC／桌面掃描（PM 2026-10-29）：檔案對話框選圖 → 確認頁。
+        // **模式分流**（PM 2026-11-22）：電子發票＝**只走 QR**（不用文字
+        // 辨識）；紙本發票＝**OCR 抓印刷發票號碼**（無條碼——Apple Vision，
+        // iOS/macOS；其他平台回退 QR→空白卡）。
+        importPipelineProvider.overrideWith((ref) {
+          final scanner = const ImageQrScanner();
+          return () async {
+            final mode = ref.read(scanModeProvider);
+            return mode == ScanMode.paper
+                ? scanner.pickAndScanPaper()
+                : scanner.pickAndScan();
+          };
+        }),
         // App 鎖接線（PM 2026-11-19 修復：清空資料/設定 PIN 讀此 provider
         // 時拋 UnimplementedError → 靜默無反應）。生物辨識 M2 才接 local_auth
         // ——先恆 false（鎖屏直接走 PIN）。

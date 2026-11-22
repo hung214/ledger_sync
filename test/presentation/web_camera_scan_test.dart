@@ -24,7 +24,9 @@ void main() {
   Future<ProviderContainer> pumpPage(
     WidgetTester tester, {
     required CameraStreamController controller,
-    required TransactionDraft? Function(Uint8List) decode,
+    required ({TransactionDraft? draft, List<String> texts})? Function(
+            Uint8List)
+        decode,
   }) async {
     final db = DbFixture.create();
     addTearDown(db.close);
@@ -54,7 +56,7 @@ void main() {
   testWidgets('相機不可用 → 顯示回退「改用檔案匯入」→ 開啟檔案匯入頁', (tester) async {
     await pumpPage(tester,
         controller: _FakeController(throwOnStart: true),
-        decode: (_) => null);
+        decode: (_) => null); // 無命中
     expect(find.text('相機無法使用'), findsOneWidget);
     expect(find.byKey(const Key('webcam-fallback-file')), findsOneWidget);
 
@@ -71,20 +73,24 @@ void main() {
         controller: _FakeController(),
         decode: (_) {
           calls++;
-          return calls == 1 ? draft : null; // 第一幀命中、之後沒有新 QR
+          return calls == 1
+              ? (draft: draft, texts: const ['TEST'])
+              : null; // 第一幀命中、之後沒有新 QR
         });
     expect(find.byKey(const Key('webcam-preview')), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1300)); // 解碼迴圈第一輪
     expect(find.byKey(const Key('webcam-count')), findsOneWidget);
-    expect(find.textContaining('已掃 1 張'), findsOneWidget);
+    expect(find.textContaining('已掃 1 張'), findsWidgets,
+        reason: 'APP 欄＋列各一（新增的連續掃描列）');
     expect(container.read(scanDraftsProvider).length, 1);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('同張去重：同簽名不重複加入', (tester) async {
+  testWidgets('同張去重：同條碼內容不重複加入', (tester) async {
     final draft = TransactionDraft.blank(DateTime(2026, 11, 17));
     final container = await pumpPage(tester,
-        controller: _FakeController(), decode: (_) => draft); // 每幀都回同一張
+        controller: _FakeController(),
+        decode: (_) => (draft: draft, texts: const ['SAME'])); // 每幀同一張
     await tester.pump(const Duration(milliseconds: 1300));
     await tester.pump(const Duration(milliseconds: 1300));
     expect(container.read(scanDraftsProvider).length, 1,
@@ -95,7 +101,12 @@ void main() {
   testWidgets('完成掃描 → 確認清單（ReviewPage）＋草稿清空', (tester) async {
     final draft = TransactionDraft.blank(DateTime(2026, 11, 17));
     final container = await pumpPage(tester,
-        controller: _FakeController(), decode: (_) => draft);
+        controller: _FakeController(),
+        decode: (_) => (draft: draft, texts: const ['DONE']));
+    // 連續掃描預設關閉（PM 2026-11-22）——第一幀即自動進確認清單；
+    // 本測試驗「完成掃描」路徑 → 先開啟連續掃描（累積）。
+    await tester.tap(find.byKey(const Key('scan-continuous-toggle')));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 1300));
     await tester.tap(find.byKey(const Key('webcam-done')));
     await tester.pumpAndSettle();

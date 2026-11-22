@@ -103,11 +103,15 @@ void main() {
     expect(texts, contains(InvoiceQrFixtures.leftQr77), reason: '左碼（整張或左半）');
     expect(texts, contains(InvoiceQrFixtures.rightQr), reason: '右碼（右半解出）');
 
-    final draft = const ImageQrScanner().draftFromCameraFrame(png);
-    expect(draft, isNotNull);
+    final result = const ImageQrScanner().draftFromCameraFrame(png);
+    expect(result, isNotNull);
+    final draft = result!.draft;
     expect(draft!.invoiceNo, InvoiceQrFixtures.expected.invoiceNo);
     expect(draft.merchant.value, '測試超商', reason: '商家來自右碼');
     expect(draft.lineItems.length, 2, reason: '明細 2 項');
+    expect(result.texts, containsAll(
+        [InvoiceQrFixtures.leftQr77, InvoiceQrFixtures.rightQr]),
+        reason: '回傳原始文字（去重 key 用）');
   });
 
   test('草稿組裝：僅左碼 → 商家留空（舊式單碼發票；S3.2）', () {

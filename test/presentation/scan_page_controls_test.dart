@@ -77,10 +77,9 @@ void main() {
     expect(find.textContaining('已掃 1 張'), findsOneWidget);
   });
 
-  testWidgets('連續掃描關閉：注入草稿 → 自動進確認清單（ReviewPage）', (tester) async {
+  testWidgets('連續掃描預設關（PM 2026-11-22）：注入草稿 → 自動進確認清單',
+      (tester) async {
     final container = await pumpPage(tester);
-    await tester.tap(find.byKey(const Key('scan-continuous-toggle')));
-    await tester.pump();
     expect(container.read(continuousScanProvider), isFalse);
 
     container.read(scanDraftsProvider.notifier).add(
@@ -89,8 +88,10 @@ void main() {
     expect(find.byType(ReviewPage), findsOneWidget);
   });
 
-  testWidgets('連續掃描預設開：注入草稿不自動跳頁（累積待「完成掃描」）', (tester) async {
+  testWidgets('連續掃描開啟：注入草稿不自動跳頁（累積待「完成掃描」）', (tester) async {
     final container = await pumpPage(tester);
+    await tester.tap(find.byKey(const Key('scan-continuous-toggle')));
+    await tester.pump();
     expect(container.read(continuousScanProvider), isTrue);
 
     container.read(scanDraftsProvider.notifier).add(

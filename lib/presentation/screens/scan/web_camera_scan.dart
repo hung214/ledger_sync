@@ -11,9 +11,10 @@ import '../../../platform/scan/image_qr_scan.dart';
 import 'import_page.dart';
 import 'review_page.dart';
 
-/// 解碼函式 provider（測試可覆寫；預設＝**相機幀輕量解碼**——只解整張＋
-/// 左右半 3 區；完整 9 區掃描在行動裝置主執行緒上每幀可達數秒，塞死 UI）。
-final webCameraDecodeProvider = Provider<TransactionDraft? Function(Uint8List)>(
+/// 解碼函式 provider（測試可覆寫；預設＝**相機幀分層解碼**——輕量 3 區 →
+/// 中央變焦 → 四象限，回傳草稿＋**解出的原始文字**（去重 key 用））。
+final webCameraDecodeProvider = Provider<
+        ({TransactionDraft? draft, List<String> texts})? Function(Uint8List)>(
     (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
 
 /// 相機控制器 provider（測試可覆寫 fake）。
@@ -45,7 +46,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   late final CameraStreamController _controller =
       ref.read(webCameraControllerProvider);
   Timer? _loop;
-  final Set<String> _seenSignatures = <String>{};
+  /// **session 級去重＝條碼原始內容**（PM 2026-11-22 修「換一張發票就
+  /// 掃描不到」：舊指紋 total|date|merchant 會把**同店家/同金額/同日期的
+  /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
+  final Set<String> _seenCodes = <String>{};
   int _addedFromThisSession = 0;
   // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
   int _frames = 0; // 取幀計數
@@ -105,11 +109,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final sw = Stopwatch()..start();
     Uint8List? photoBytes;
     TransactionDraft? draft;
+    var texts = const <String>[];
     // **瀏覽器原生偵測器優先**（T10，PM 2026-11-22「Mac PWA 還是無法讀取」
     // 主修法）：BarcodeDetector API 直接吃 video 全解析度幀——無 canvas/
     // JPEG 轉檔損耗、品質遠勝 zxing2；不支援的瀏覽器 → 既有 zxing2 後備。
     if (_controller.hasNativeBarcodeDetector) {
-      final texts = await _controller.detectNativeBarcodes();
+      texts = await _controller.detectNativeBarcodes();
       if (mounted) {
         setState(() {
           _frames++;
@@ -131,7 +136,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       }
       if (bytes != null) {
         photoBytes = bytes;
-        draft = ref.read(webCameraDecodeProvider)(bytes);
+        final result = ref.read(webCameraDecodeProvider)(bytes);
+        draft = result?.draft;
+        texts = result?.texts ?? const [];
       }
     }
     sw.stop();
@@ -139,27 +146,40 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     if (draft == null) return; // 無 QR——繼續取景
     if (mounted) setState(() => _decodeHits++);
-    final sig = '${draft.totalMinor.value}|${draft.date.value}'
-        '|${draft.merchant.value ?? ''}';
-    if (!_seenSignatures.add(sig)) return; // 同張去重（QR 還在畫面中）
+    // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
+    if (texts.every(_seenCodes.contains)) return; // 同一張還在畫面中
+    for (final t in texts) {
+      _seenCodes.add(t);
+    }
     ref.read(scanDraftsProvider.notifier).add(
         ScannedItem(draft: draft, photoBytes: photoBytes));
     if (mounted) setState(() => _addedFromThisSession++);
     _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
   }
 
+  bool _navigating = false;
+
+  /// 推入確認清單：**掃描暫停**（確認期間不得繼續偵測），返回後恢復。
+  Future<void> _openReview(List<ScannedItem> items) async {
+    if (_navigating) return;
+    _navigating = true;
+    ref.read(scanPausedProvider.notifier).set(true);
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ReviewPage(items: List.of(items))));
+    if (!mounted) return;
+    ref.read(scanPausedProvider.notifier).set(false);
+    _navigating = false;
+  }
+
   Future<void> _finish() async {
     _loop?.cancel();
-    ref.read(scanPausedProvider.notifier).set(true);
     final items = ref.read(scanDraftsProvider).toList();
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => ReviewPage(items: items)));
-    ref.read(scanPausedProvider.notifier).set(false);
+    await _openReview(items);
     if (!mounted) return;
     ref.read(scanDraftsProvider.notifier).reset();
     setState(() {
       _addedFromThisSession = 0;
-      _seenSignatures.clear();
+      _seenCodes.clear();
     });
     _loop = Timer.periodic(
         const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
@@ -188,6 +208,18 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 回合重置（暫存清空＝新回合）→ seen 清空（可再掃同一張）；
+    // 連續掃描關閉（預設）：掃到第一張 → 自動進確認清單（掃描暫停）。
+    ref.listen(scanDraftsProvider, (prev, next) {
+      if (next.isEmpty && _seenCodes.isNotEmpty) {
+        _seenCodes.clear();
+      }
+      if (!ref.read(continuousScanProvider) &&
+          (prev == null || prev.isEmpty) &&
+          next.isNotEmpty) {
+        _openReview(next);
+      }
+    });
     final drafts = ref.watch(scanDraftsProvider);
     final count = drafts.length;
     return Scaffold(
@@ -215,6 +247,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   Widget _buildLive(BuildContext context) {
     final drafts = ref.watch(scanDraftsProvider);
+    final count = drafts.length;
     final mode = ref.watch(scanModeProvider);
     return Column(
       children: [
@@ -304,6 +337,21 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
               ),
             ],
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [
+            Text('已掃 $count 張',
+                style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            const Text('連續掃描', style: TextStyle(fontSize: 13)),
+            Switch(
+              key: const Key('scan-continuous-toggle'),
+              value: ref.watch(continuousScanProvider),
+              onChanged: (v) =>
+                  ref.read(continuousScanProvider.notifier).set(v),
+            ),
+          ]),
         ),
         SafeArea(
           child: Padding(

@@ -109,7 +109,7 @@ final scanModeProvider =
 /// 統一進確認清單）；關＝掃到一張自動進確認清單。
 class ContinuousScanNotifier extends Notifier<bool> {
   @override
-  bool build() => true;
+  bool build() => false; // PM 2026-11-22：預設關閉（掃到一張自動進確認清單）
 
   void set(bool value) => state = value;
 }
