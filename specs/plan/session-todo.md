@@ -11,15 +11,17 @@
 
 ## 🔴 進行中（PM 2026-11-24 回報：0.5.0 相機黑畫面復發）
 
-- [ ] **T57-PWA 回退（最優先）**：gh-pages 從 main（0.5.0，含鏡頭
+- [x] **T57-PWA 回退（最優先）**：gh-pages 從 main（0.5.0，含鏡頭
   實驗碼）回退到 pwa-accumulate 穩定線（20261124g 最後確認可用）
   → 重部署新標章 20261124h
-- [ ] **T57-diag 黑畫面根因定位**：diff pwa-accumulate vs main 的
-  web_camera_scan.dart＋CameraStreamController（contain 幾何/
-  videoRect/看門狗 疑點）——找出具體肇因再談修
-- [ ] **T57-macOS 確認**：pub-cache Swift patch（1080p preset）
+- [x] **T57-diag 黑畫面根因定位**：diff 完成。**肇因候選（web 線獨有）**：
+  ①`_keepAliveStream`（T41——dispose 不停軌＋重進重用；Safari 對
+  「新 video 元素接舊串流」可能不渲染＝燈亮黑畫面）②`_openOn` 新增
+  absolute/object-fit:contain 樣式（首進差異點）。兩者皆鏡頭實驗碼，
+  pwa-accumulate 凍結線刻意排除＝可用版。修法待 T45 headless 驗證
+- [x] **T57-macOS 確認**：pub-cache Swift patch（1080p preset）
   是否仍存在＋macOS 相機驗證
-- [ ] **教訓記錄**：0.5.0 發版時誤把 main 全碼部署 PWA——
+- [x] **教訓記錄**：0.5.0 發版時誤把 main 全碼部署 PWA——
   PWA 部署線必須永遠走 pwa-accumulate（凍結線），除非黑畫面根治
 
 ## ✅ 已完成並驗證（本輪 audit 確認）
