@@ -72,8 +72,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('手機殼（窄視窗）：**掃描 FAB 可見且開啟匯入頁**（PM 2026-11-16：'
-      '窄窗原本無掃描入口）', (tester) async {
+  testWidgets('手機殼（窄視窗）：**掃描 FAB 已移除**（PM 2026-11-23：'
+      '掃描入口統一於快速記帳右上角）', (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await FirstRunBootstrap.seedIfNeeded(db);
@@ -94,14 +94,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('fab-scan')), findsOneWidget,
-        reason: '窄視窗應有掃描 FAB');
-    await tester.ensureVisible(find.byKey(const Key('fab-scan')));
-    await tester.tap(find.byKey(const Key('fab-scan')));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ImportPage), findsOneWidget,
-        reason: '無相機（web/桌面）→ 匯入圖片頁');
+    expect(find.byKey(const Key('fab-scan')), findsNothing,
+        reason: '掃描 FAB 已移除（PM 2026-11-23）');
+    expect(find.byKey(const Key('fab-quick-entry')), findsOneWidget,
+        reason: '快記 FAB 保留');
     expect(tester.takeException(), isNull);
   });
 }
