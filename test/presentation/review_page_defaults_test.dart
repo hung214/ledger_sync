@@ -24,8 +24,8 @@ ProviderContainer _container(dynamic db) => ProviderContainer(overrides: [
 
 /// 確認清單＝**快記同款**（PM 2026-11-22）＋**掃描預設帳戶**（PM 2026-11-22）：
 /// 帳戶預設＝最後一次掃描入帳的帳戶 → 第一個現金帳戶；入帳即記住（跨回合）。
-/// 舊日期防呆：日期距今 >90 天 → 「請確認日期」高亮（民國 112 年 ibon 收據
-/// 存進 2023 → 明細當月看不到＝誤為「沒有儲存」之根因）。
+/// 日期＝掃到即用（**無確認閘**——PM 2026-11-22 移除「已確認」按鈕，手動調整）；
+/// 發票號碼自動寫入**備註欄**（PM 2026-11-22）。
 void main() {
   group('resolveScanDefaultAccount（純函式）', () {
     final accounts = [
@@ -69,6 +69,7 @@ void main() {
       merchant: const DraftField('測試超商', 1.0),
       totalMinor: const DraftField(195, 1.0),
       date: DraftField(DateTime(2026, 10, 18), 1.0),
+      invoiceNo: 'SR30393603',
     );
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
@@ -81,11 +82,14 @@ void main() {
 
     expect(find.text('帳戶：現金（Sticky）'), findsOneWidget,
         reason: '預設帳戶＝第一個現金帳戶');
+    expect(find.text('發票號 SR30393603'), findsOneWidget,
+        reason: '發票號碼自動寫入備註欄');
     expect(find.byKey(const Key('amount-keypad')), findsOneWidget,
         reason: '快記同款：常駐計算機');
     expect(find.text('第 1 張 / 共 1 張'), findsOneWidget,
         reason: '進度列');
-    expect(find.text('發票：測試超商'), findsOneWidget);
+    expect(find.text('測試超商'), findsOneWidget,
+        reason: '商家欄帶入（快記同款輸入欄）');
     expect(tester.takeException(), isNull);
   });
 
@@ -141,7 +145,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('舊日期防呆：日期距今 >90 天 → 「請確認日期」高亮（民國 112 年 ibon 情境）',
+  testWidgets('日期＝掃到即用（無確認閘）：2023 舊日期直接入帳＋發票號入備註',
       (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
@@ -152,10 +156,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    // 民國 112 年 ibon 收據（官方 QR 帶入 2023-10-17＋發票號）。
     final draft = TransactionDraft(
       merchant: const DraftField.none(),
       totalMinor: const DraftField(21, 1.0),
-      date: DraftField(DateTime(2023, 10, 17), 1.0), // 官方 QR 帶入舊日期
+      date: DraftField(DateTime(2023, 10, 17), 1.0),
+      invoiceNo: 'SR30393603',
     );
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
@@ -166,14 +172,21 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('review-highlight-日期')), findsOneWidget,
-        reason: '2023 年的日期須人工確認——一眼看到存進過去');
-    expect(find.text('請確認日期'), findsOneWidget);
+    expect(find.text('請確認日期'), findsNothing,
+        reason: 'PM 2026-11-22：不需要確認時間按鈕——掃到即用，手動調整');
+    expect(find.text('發票號 SR30393603'), findsOneWidget,
+        reason: '發票號寫入備註欄');
 
-    // 點「已確認」→ 高亮解除 → 可入帳。
-    await tester.tap(find.byKey(const Key('review-confirm-日期')));
+    // 直接 OK 入帳（無閘）→ 交易 note＝發票號、日期＝掃描值。
+    await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('review-highlight-日期')), findsNothing);
+    final txs = db.allTransactions();
+    expect(txs, isNotEmpty);
+    expect(txs.first.note, '發票號 SR30393603');
+    expect(txs.first.amountMinor, 21);
+    expect(DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt),
+        DateTime(2023, 10, 17));
+    expect(txs.first.source, 'scan');
     expect(tester.takeException(), isNull);
   });
 }

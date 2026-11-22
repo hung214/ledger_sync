@@ -134,6 +134,21 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
   }
 
+  /// 紙本發票（PWA）：web 無線性條碼解碼（scan_policy 平台分流）→
+  /// **手動開卡**（金額/日期/商家/發票號皆手動；PM 2026-11-22）。
+  Future<void> _openPaperManual() async {
+    _loop?.cancel();
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ReviewPage(items: [
+              ScannedItem(draft: TransactionDraft.blank(DateTime.now())),
+            ])));
+    if (!mounted) return;
+    ref.read(scanDraftsProvider.notifier).reset();
+    setState(() => _addedFromThisSession = 0);
+    _loop = Timer.periodic(
+        const Duration(milliseconds: 1200), (_) => _tryDecode());
+  }
+
   void _fallbackToFile() {
     _loop?.cancel();
     _controller.dispose();
@@ -233,6 +248,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
+              TextButton(
+                key: const Key('webcam-paper-manual'),
+                onPressed: _openPaperManual,
+                child: const Text('紙本發票（手動）'),
+              ),
               TextButton(
                 key: const Key('webcam-fallback-file'),
                 onPressed: _fallbackToFile,

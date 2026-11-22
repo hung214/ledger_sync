@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../application/scan/paper_barcode.dart';
 import '../../../application/scan/scan_state.dart';
+import '../../../platform/scan/scan_policy.dart';
 import '../../../domain/entities/transaction_draft.dart';
 import '../../../domain/services/invoice_qr_parser.dart';
 import '../../../platform/scan/image_qr_scan.dart';
@@ -57,7 +59,9 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       autoStart: true,
       // PM 2026-11-21：只掃 QR（發票左右碼）——排除底部一維條碼（Code 39）
       // 被誤判「非發票格式」的雜訊（PM 實測：拿雲端發票掃描誤中一維碼）。
-      formats: const [BarcodeFormat.qrCode],
+      // 平台策略（scan_policy.dart）：QR（電子發票）＋Code39/128（紙本一維
+      // 條碼）同時開啟——模式分流在 _onDetect（不隨模式重建 controller）。
+      formats: cameraFormats(detectScanPlatform()),
       // 辨識距離（PM 2026-11-21：「要拉到很近才掃得到」）——提高分析解析度
       // ＋條碼過小自動變焦。mobile_scanner 7.5 文件明載**僅 Android 支援**，
       // iOS/macOS 忽略（上游未開參數；距離天花板屬外掛限制）。
@@ -152,6 +156,20 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
             'head=${raw.substring(0, raw.length > 20 ? 20 : raw.length)}');
       }
 
+      // 模式分流（PM 2026-11-22：電子發票＝QR 配對；紙本發票＝一維條碼
+      // 帶發票號碼。平台差異見 scan_policy.dart——各平台成功條件不同，
+      // 代碼明確區隔）。
+      final mode = ref.read(scanModeProvider);
+      if (mode == ScanMode.paper) {
+        _handlePaperBarcode(barcode, raw);
+        continue;
+      }
+      if (barcode.format != BarcodeFormat.qrCode) {
+        // 電子發票模式掃到一維條碼——引導切模式（不進 _recent 毒害配對）。
+        _flashHint('這是一維條碼——紙本發票請切換到「紙本發票」模式');
+        continue;
+      }
+
       // 收集近 3 秒條碼（左右兩碼常分幀出現）。
       final now2 = DateTime.now();
       _recent.removeWhere(
@@ -209,6 +227,31 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     }
   }
 
+  /// 紙本發票模式：官方一維條碼（Code 39）→ **發票號碼**（2 碼英文＋8 數字）
+  /// ＋**年月提示**（期別首月 1 日）；金額/商家由使用者手動輸入
+  /// （PM 2026-11-22。macOS 內建相機對紙本小 QR 是光學極限——一維條碼
+  /// 較大、Vision 可讀；web 無線性解碼＝scan_policy 分流，走手動開卡）。
+  void _handlePaperBarcode(Barcode barcode, String raw) {
+    if (barcode.format == BarcodeFormat.qrCode) {
+      _flashHint('紙本發票模式：請對準發票下方的一維條碼（數字條碼）');
+      return;
+    }
+    final parsed = parsePaperBarcode(raw);
+    if (parsed == null) {
+      _flashHint('一維條碼無法辨識（${raw.length} 字）——請靠近重掃或「手動開一筆」');
+      return;
+    }
+    _commitDraft(
+      TransactionDraft(
+        merchant: const DraftField.none(),
+        totalMinor: const DraftField.none(),
+        date: DraftField(parsed.dateHint, 0.5),
+        invoiceNo: parsed.invoiceNo,
+      ),
+      '✓ 已讀取發票號碼 ${parsed.invoiceNo}',
+    );
+  }
+
   /// 左碼單獨入單（右碼未現）。
   void _commitLeft(String left) {
     final draft = InvoiceQrParser.parseOfficial(left);
@@ -220,9 +263,10 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
     _recent.clear();
     _pendingLeft = null;
-    _flashHint('$note：${draft.merchant.value ?? '（未辨識商家）'}'
-        '${draft.totalMinor.value != null ? ' ${draft.totalMinor.value} 元' : ''}'
-        '——請按「完成掃描」確認');
+    final detail = draft.totalMinor.value != null
+        ? '${draft.merchant.value ?? '（未辨識商家）'} ${draft.totalMinor.value} 元'
+        : '';
+    _flashHint('$note${detail.isEmpty ? '' : '：$detail'}——請按「完成掃描」確認');
   }
 
   /// 紙本發票模式（PM 2026-11-21）：快速手動開一筆——空白確認卡進列，

@@ -7,7 +7,6 @@ import '../../../application/providers.dart';
 import '../../../application/scan/scan_defaults.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../core/clock.dart';
-import '../../../domain/entities/transaction_draft.dart';
 import '../../category_display.dart';
 import '../quick_entry/amount_keypad.dart';
 import '../quick_entry/category_picker_dialog.dart';
@@ -19,7 +18,8 @@ import '../quick_entry/quick_date_time_picker.dart';
 ///
 /// 帳戶預設（PM 2026-11-22）：**最後一次掃描發票入帳的帳戶** → 無則
 /// **第一個現金帳戶**（[resolveScanDefaultAccount]；入帳即記住，跨回合生效）。
-/// 保留 FR-S5：低信賴日期高亮需「已確認」後始可入帳。
+/// 日期＝**掃到即用**，不做確認閘（PM 2026-11-22：移除「已確認」按鈕——
+/// 使用者自行以 ◀▶／picker 調整）；發票號碼自動寫入**備註欄**。
 /// 全數完成清掃描暫存返回（acceptance S3.7）。
 class ReviewPage extends ConsumerStatefulWidget {
   const ReviewPage({super.key, required this.items});
@@ -46,13 +46,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   /// 使用者選過分類 → 之後的卡片沿用（Sticky；快記同款）。
   bool _categoryTouched = false;
 
-  /// 舊發票防呆（PM 2026-11-22 實測：民國 112 年 ibon 收據存進 2023/10 →
-  /// 明細當月看不到＝誤以為「沒有儲存」）：日期距今 >90 天 → 視同需確認。
-  bool _dateFar = false;
-  final _confirmedFields = <String>{};
   String? _blockedMessage;
-
-  TransactionDraft get _draft => widget.items[_index].draft;
 
   @override
   void initState() {
@@ -77,7 +71,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     _amountCtrl.text = _expr;
     _date = draft.date.value ?? Clock.now();
     _merchantCtrl.text = draft.merchant.value ?? '';
-    _noteCtrl.clear();
+    // 發票號碼寫入備註欄（PM 2026-11-22：掃描帶金額/時間，發票號入備註）。
+    _noteCtrl.text = draft.invoiceNo == null ? '' : '發票號 ${draft.invoiceNo}';
     if (!_categoryTouched || _categoryId == null) {
       final cats = ref.read(expenseCategoriesProvider);
       _categoryId = cats
@@ -94,18 +89,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
           ],
           last);
     }
-    _dateFar = draft.date.value != null &&
-        Clock.now().difference(draft.date.value!).abs() >
-            const Duration(days: 90);
-    _confirmedFields.clear();
     _blockedMessage = null;
   }
-
-  /// 未處理之待確認欄位（FR-S5 低信賴＋**舊日期防呆**——未點「已確認」/
-  /// 未修改日期）。
-  bool get _hasBlockingHighlight =>
-      (_draft.date.needsReview || _dateFar) &&
-      !_confirmedFields.contains('日期');
 
   /// 計算機輸入（快記同款：運算式即時顯示於金額欄）。
   void _onKeypadExpr(String expr) {
@@ -124,11 +109,6 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     if (total <= 0) {
       // FR-S4：不存在 0 元或空白總額交易（acceptance S3.4）。
       setState(() => _blockedMessage = '請確認總金額');
-      return;
-    }
-    if (_hasBlockingHighlight) {
-      // FR-S5：高亮欄位未處理前不可繞過（acceptance S3.5）。
-      setState(() => _blockedMessage = '請先確認高亮欄位');
       return;
     }
     if (_accountId == null) {
@@ -202,44 +182,6 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   Text('第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
                       key: const Key('review-progress'),
                       style: Theme.of(context).textTheme.titleMedium),
-                  // 發票資訊（商家／發票號——QR 帶入）。
-                  if (_draft.merchant.value != null ||
-                      _draft.invoiceNo != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                        '發票：${_draft.merchant.value ?? '（未辨識商家）'}'
-                        '${_draft.invoiceNo != null ? ' · ${_draft.invoiceNo}' : ''}',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.outline)),
-                  ],
-                  // 日期（低信賴時高亮＋「已確認」——FR-S5；官方 QR 為高信賴不出現）。
-                  if (_hasBlockingHighlight)
-                    Container(
-                      key: const Key('review-highlight-日期'),
-                      margin: const EdgeInsets.only(top: 6),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: _confirmedFields.contains('日期')
-                            ? null
-                            : Theme.of(context).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Text('請確認日期'),
-                          const Spacer(),
-                          if (!_confirmedFields.contains('日期'))
-                            TextButton(
-                              key: const Key('review-confirm-日期'),
-                              onPressed: () => setState(
-                                  () => _confirmedFields.add('日期')),
-                              child: const Text('已確認'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 4),
                   // 金額（快記同款：**置中大字**）＋下方小字＝帳戶（Sticky）。
                   TextField(
                     key: const Key('review-total'),
@@ -271,10 +213,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                           key: const Key('review-date-prev'),
                           iconSize: 30,
                           tooltip: '前一天',
-                          onPressed: () => setState(() {
-                            _date = _date.subtract(const Duration(days: 1));
-                            _confirmedFields.add('日期'); // 動過日期＝已確認
-                          }),
+                          onPressed: () => setState(
+                              () => _date = _date.subtract(const Duration(days: 1))),
                           icon: const Icon(Icons.chevron_left),
                         ),
                         TextButton(
@@ -292,10 +232,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                               isScrollControlled: true,
                               builder: (_) => QuickDateTimePicker(
                                 initial: _date,
-                                onSelected: (dt) => setState(() {
-                                  _date = dt;
-                                  _confirmedFields.add('日期');
-                                }),
+                                onSelected: (dt) =>
+                                    setState(() => _date = dt),
                               ),
                             );
                           },
@@ -311,10 +249,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                           key: const Key('review-date-next'),
                           iconSize: 30,
                           tooltip: '後一天',
-                          onPressed: () => setState(() {
-                            _date = _date.add(const Duration(days: 1));
-                            _confirmedFields.add('日期');
-                          }),
+                          onPressed: () => setState(
+                              () => _date = _date.add(const Duration(days: 1))),
                           icon: const Icon(Icons.chevron_right),
                         ),
                       ],
