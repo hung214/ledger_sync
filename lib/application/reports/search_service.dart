@@ -50,8 +50,10 @@ class SearchService {
         for (final e in accNames.entries)
           if (e.value.contains(kw)) e.key,
       };
+      // 金額（元；整數或小數——UI 顯示元，1.2 → 120 minor）。
+      final amountValue = double.tryParse(kw);
       final amountMinor =
-          int.tryParse(kw) == null ? null : int.parse(kw) * 100;
+          amountValue == null ? null : (amountValue * 100).round();
       if (catIds.isNotEmpty || accIds.isNotEmpty || amountMinor != null) {
         final byId = {for (final r in rows) r.id: r};
         for (final t in _db
