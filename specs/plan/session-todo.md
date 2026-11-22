@@ -9,6 +9,19 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 🔴 進行中（PM 2026-11-24 回報：0.5.0 相機黑畫面復發）
+
+- [ ] **T57-PWA 回退（最優先）**：gh-pages 從 main（0.5.0，含鏡頭
+  實驗碼）回退到 pwa-accumulate 穩定線（20261124g 最後確認可用）
+  → 重部署新標章 20261124h
+- [ ] **T57-diag 黑畫面根因定位**：diff pwa-accumulate vs main 的
+  web_camera_scan.dart＋CameraStreamController（contain 幾何/
+  videoRect/看門狗 疑點）——找出具體肇因再談修
+- [ ] **T57-macOS 確認**：pub-cache Swift patch（1080p preset）
+  是否仍存在＋macOS 相機驗證
+- [ ] **教訓記錄**：0.5.0 發版時誤把 main 全碼部署 PWA——
+  PWA 部署線必須永遠走 pwa-accumulate（凍結線），除非黑畫面根治
+
 ## ✅ 已完成並驗證（本輪 audit 確認）
 
 | 項目 | 驗證方式 | 狀態 |
