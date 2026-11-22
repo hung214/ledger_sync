@@ -1,7 +1,7 @@
 name: ledger_sync
 description: "LedgerSync — 本地優先跨平台記帳 App（規格：SPEC v0.3 / techstack v0.3.1）"
 publish_to: 'none'
-version: 0.5.0+1
+version: 0.5.0+2
 
 environment:
   sdk: ^3.13.5
@@ -38,6 +38,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   file_selector_platform_interface: ^2.7.0
+  flutter_launcher_icons: ^0.14.4 # 圖示產生（LOGO/ICON 換裝 PM 2026-11-21；暫以草稿 A 評估——techstack §2.4）
 
 # 工具鏈註記（research TR-7，S0 實測）：drift/build_runner codegen 與 Dart 3.13.5
 # （Flutter 3.47.7）相容性問題——analyzer 7.x 無法序列化 SDK dot-shorthand、
@@ -55,3 +56,20 @@ flutter:
     # PWA Spike（PM 2026-11-16）：sqlite3 wasm（與 sqlite3 套件同版本；
     # Web 執行時另由 web/sqlite3.wasm 以 URL 載入，此處供測試以 asset 讀取）。
     - web/sqlite3.wasm
+
+# 圖示產生（LOGO/ICON 換裝 PM 2026-11-21；**暫以草稿 A 評估**——
+# 定稿後換 assets/icon/app_icon.png 重跑 `dart run flutter_launcher_icons`）。
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  ios: true
+  remove_alpha_ios: true
+  android: true
+  adaptive_icon_background: "#1D3557"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  macos:
+    generate: true
+  windows:
+    generate: true
+  web:
+    generate: true
+    favicon: true
