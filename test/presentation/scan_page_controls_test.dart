@@ -100,4 +100,14 @@ void main() {
     expect(find.byType(ReviewPage), findsNothing);
     expect(find.textContaining('已掃 1 張'), findsOneWidget);
   });
+
+  testWidgets('補光開關：點按不拋例外（行動平台手電筒＝靜默失敗）', (tester) async {
+    final container = await pumpPage(tester);
+    final torchFinder = find.byKey(const Key('scan-torch-toggle'));
+    if (torchFinder.evaluate().isNotEmpty) {
+      await tester.tap(torchFinder);
+      await tester.pump();
+    }
+    expect(find.byType(ScanPage), findsOneWidget);
+  });
 }
