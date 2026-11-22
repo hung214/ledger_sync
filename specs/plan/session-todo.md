@@ -9,6 +9,15 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 📋 工作流程修正（PM 2026-11-23 指示）
+
+- [x] **W1 工作流程規則**：每項修改/功能都建立**新分支**，完成後一次 MR 到 main
+  ❌ 錯誤做法：直接在 feature/ios-pwa 修改＋推送（已發生 T21/T23/T57/T58）
+  ✅ 正確做法：`git checkout -b feat/xxx` → 修改＋commit → `git push origin feat/xxx` → MR 到 main
+  ⚠️ 現狀：feature/ios-pwa 已累積多筆 commit（T21 OCR 框、T23-diag、查詢面板同步、
+  0.5.0 版本 bump、T57 PWA 回退、T58 補光開關）——這些已在遠端，不再回滾，
+  僅作為歷史參考；未來工作一律新分支
+
 ## 進行中（PM 2026-11-24：PWA 補光開關——原推原生APP，現改 PWA）
 
 - [x] **T58-PWA PWA 掃描頁補光（手電筒）開關**：
