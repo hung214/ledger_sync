@@ -1,6 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:file_selector/file_selector.dart';
+import 'package:mobile_scanner/mobile_scanner.dart' show MobileScannerPlatform;
+
+import '../../application/scan/paper_barcode.dart';
 import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
 
@@ -22,37 +27,83 @@ import '../../domain/services/invoice_qr_parser.dart';
 class ImageQrScanner {
   const ImageQrScanner();
 
-  /// 選檔 → bytes（共用；HEIC 由系統 Vision 直接支援）。
-  Future<Uint8List?> _pickBytes() async {
-    final file = await openFile(acceptedTypeGroups: [
+  /// 選檔（共用；HEIC 由系統引擎直接支援）。
+  Future<XFile?> _pickFile() async {
+    return openFile(acceptedTypeGroups: [
       const XTypeGroup(
         label: '發票／收據圖片',
         extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic'],
       ),
     ]);
-    if (file == null) return null; // 使用者取消
-    return file.readAsBytes();
+  }
+
+  /// **原生引擎靜態圖分析**（T22，PM 2026-11-23「2077 基準照」主修法）：
+  /// Vision（iOS/macOS）/ML Kit（Android）對照片的辨識力**遠勝 zxing2**——
+  /// 實測 8 張真實照片：Vision 全數命中（2077 距離基準 ✓、一維條碼 ✓），
+  /// zxing2 僅 1/7。回傳 rawValue 清單（含 QR 左右碼＋Code39 一維）；
+  /// 不支援（web/Windows）或失敗 → 空（呼叫端回退 zxing2）。
+  Future<List<String>> analyzeImageTexts(String path) async {
+    if (kIsWeb) return const [];
+    try {
+      final capture = await MobileScannerPlatform.instance.analyzeImage(path);
+      return [
+        for (final b in capture?.barcodes ?? const [])
+          if ((b.rawValue ?? '').isNotEmpty) b.rawValue!,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// 由原生引擎解出的文字組草稿：官方 QR 左右碼 → 紙本一維條碼（Code39
+  /// 19 碼 → 發票號＋年月）→ null（交還呼叫端：紙本走 OCR／電子走空白卡）。
+  TransactionDraft? draftFromEngineTexts(List<String> texts, {DateTime? now}) {
+    final qrDraft = draftFromQrTexts(texts);
+    if (qrDraft != null) return qrDraft;
+    for (final t in texts) {
+      final paper = parsePaperBarcode(t);
+      if (paper != null) {
+        return TransactionDraft(
+          merchant: const DraftField.none(),
+          totalMinor: const DraftField.none(),
+          date: DraftField(paper.dateHint, 0.5),
+          invoiceNo: paper.invoiceNo,
+        );
+      }
+    }
+    return null;
   }
 
   /// **電子發票匯入**（PM 2026-11-22：**只走 QR——不用文字辨識**）。
-  /// 無 QR → 空白卡（手動補）。
+  /// 原生引擎（Vision/ML Kit）→ zxing2 → 空白卡（手動補）。
   Future<ScannedItem?> pickAndScan() async {
-    final bytes = await _pickBytes();
-    if (bytes == null) return null;
+    final file = await _pickFile();
+    if (file == null) return null; // 使用者取消
+    final bytes = await file.readAsBytes();
+    // ① 原生引擎（多格式：QR 左右碼＋一維）。
+    final engineTexts = await analyzeImageTexts(file.path);
+    final engineDraft = draftFromEngineTexts(engineTexts);
+    if (engineDraft != null) {
+      return ScannedItem(draft: engineDraft, photoBytes: bytes);
+    }
+    // ② zxing2 後備（web/未支援/引擎無命中）。
     return itemFromImage(bytes);
   }
 
   /// **紙本發票匯入**（PM 2026-11-22：紙本**無條碼、只有印刷發票號碼**）
   /// → **OCR 優先**（Apple Vision 文字辨識；iOS/macOS）：
-  /// 發票號（分行配對）＋印刷日期帶入；OCR 無結果 → 回退 QR → 空白卡。
+  /// 發票號（分行配對）＋印刷日期帶入；OCR 無結果 → 原生條碼 → QR → 空白卡。
   Future<ScannedItem?> pickAndScanPaper() async {
-    final bytes = await _pickBytes();
-    if (bytes == null) return null;
+    final file = await _pickFile();
+    if (file == null) return null; // 使用者取消
+    final bytes = await file.readAsBytes();
     final now = DateTime.now();
+    // ① OCR（紙本無條碼——印刷發票號碼＋印刷日期）。
     final lines = await recognizeInvoiceText(createTextOcrService(), bytes);
     final invoiceNo = findInvoiceNo(lines);
     if (invoiceNo != null) {
-      final date = findPrintedDate(lines) ?? DateTime(now.year, now.month, now.day);
+      final date =
+          findPrintedDate(lines) ?? DateTime(now.year, now.month, now.day);
       return ScannedItem(
         draft: TransactionDraft(
           merchant: const DraftField.none(),
@@ -63,7 +114,14 @@ class ImageQrScanner {
         photoBytes: bytes,
       );
     }
-    return itemFromImage(bytes); // OCR 無號碼 → QR 嘗試 → 空白卡
+    // ② 原生引擎（部分紙本有一維條碼）。
+    final engineTexts = await analyzeImageTexts(file.path);
+    final engineDraft = draftFromEngineTexts(engineTexts);
+    if (engineDraft != null) {
+      return ScannedItem(draft: engineDraft, photoBytes: bytes);
+    }
+    // ③ zxing2 後備 → 空白卡。
+    return itemFromImage(bytes);
   }
 
   /// 由影像位元組建立掃描項（可單獨測試；不經檔案對話框）。
@@ -117,22 +175,23 @@ class ImageQrScanner {
     return null;
   }
 
-  /// 分層重試區域：中央 70% → 中央 50%（變焦——遠距）→ 四象限（角落）。
+  /// 分層重試區域（PM 2026-11-23：**四象限提前**——角落條碼更快命中，
+  /// 「必須拉到中間」的體感修正）：四象限 → 中央 70% → 中央 50%（變焦）。
   static Iterable<img.Image> _escalationRegions(img.Image src) sync* {
     final w = src.width;
     final h = src.height;
-    for (final f in const [0.7, 0.5]) {
-      final cw = (w * f).round();
-      final ch = (h * f).round();
-      yield img.copyCrop(src,
-          x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
-    }
     final hw = w ~/ 2;
     final hh = h ~/ 2;
     yield img.copyCrop(src, x: 0, y: 0, width: hw, height: hh);
     yield img.copyCrop(src, x: hw, y: 0, width: w - hw, height: hh);
     yield img.copyCrop(src, x: 0, y: hh, width: hw, height: h - hh);
     yield img.copyCrop(src, x: hw, y: hh, width: w - hw, height: h - hh);
+    for (final f in const [0.7, 0.5]) {
+      final cw = (w * f).round();
+      final ch = (h * f).round();
+      yield img.copyCrop(src,
+          x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
+    }
   }
 
   /// 單區解碼（含降採樣＋透印去除變體）。
