@@ -292,6 +292,11 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   static int _seq = 0;
+
+  /// **全域 keep-alive 串流**（T41：退出重進黑畫面根治——「完成掃描→
+  /// 確認→返回」不停止相機就正常＝串流活著就沒事。退出掃描頁**不停止
+  /// 軌道**，重進直接重用活著的串流；代價＝離開掃描頁後相機燈仍亮）。
+  static web.MediaStream? _keepAliveStream;
   late final String _viewType = 'webcam-${_seq++}';
   static DateTime? _lastDisposeAt; // 跨實例：退出重進的釋放等待基準
 
@@ -316,6 +321,20 @@ class WebCameraStreamController implements CameraStreamController {
         }
       }
       _lastDisposeAt = null;
+      // **重用活串流**（T41：退出不停止——重進直接接回，與疊頁路徑
+      // 同狀態＝黑畫面根治）。
+      final keep = _keepAliveStream;
+      if (keep != null) {
+        final tracks = keep.getVideoTracks().toDart;
+        final live = tracks.isNotEmpty &&
+            tracks.every((t) => t.readyState == 'live');
+        if (live) {
+          _stream = keep;
+          await _openOn(video);
+          return HtmlElementView(viewType: _viewType);
+        }
+        _keepAliveStream = null;
+      }
       final md = web.window.navigator.mediaDevices;
       try {
         final warm = await md
@@ -330,6 +349,7 @@ class WebCameraStreamController implements CameraStreamController {
       // 暖機停止後給 OS 300ms 釋放（重進黑畫面保險——T38）。
       await Future.delayed(const Duration(milliseconds: 300));
       await _openOn(video);
+      _keepAliveStream = _stream; // 保留供重進重用（T41）
     } catch (e) {
       dispose();
       throw _classify(e);
@@ -464,6 +484,7 @@ class WebCameraStreamController implements CameraStreamController {
         _switchNote = '✓ideal→$target';
       }
       _stream = stream;
+      _keepAliveStream = stream;
       _facing = target;
       video.srcObject = stream;
       // 前鏡頭鏡像（自拍慣例；擷取幀不鏡像——解碼不受影響）。
@@ -574,14 +595,10 @@ class WebCameraStreamController implements CameraStreamController {
   void dispose() {
     web.document.removeEventListener('visibilitychange', _visibilityHandler);
     _visibilityHandler = null;
-    // iOS：先分離串流再停止軌跡——退出重進的黑畫面
-    // 多為相機 session 未完全釋放。
+    // **不停止軌道**（T41：串流全域 keep-alive——重進重用活串流＝
+    // 黑畫面根治；只分離 video 元素）。切換鏡頭/檔案匯入才會重建。
     _video?.srcObject = null;
-    if (_stream != null) {
-      for (final t in _stream!.getTracks().toDart) {
-        t.stop();
-      }
-    }
+    if (_stream != null) _keepAliveStream = _stream;
     _stream = null;
     _video = null;
     _lastDisposeAt = DateTime.now();
