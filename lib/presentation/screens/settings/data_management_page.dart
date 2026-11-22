@@ -38,7 +38,7 @@ class DataManagementPage extends ConsumerStatefulWidget {
   ConsumerState<DataManagementPage> createState() => _DataManagementPageState();
 }
 
-enum _WipeStep { idle, scope, warning, pin, confirm, oauth, done }
+enum _WipeStep { idle, scope, warning, pin, oauth, done }
 
 class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   _WipeStep _step = _WipeStep.idle;
@@ -156,14 +156,9 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   }
 
   bool _pinError = false;
-  bool _confirmError = false;
   bool _oauthError = false;
 
-  /// 確認文字（驗收 S9.1 #3：「我要清除所有資料」）。
-  static const _confirmPhrase = '我要清除所有資料';
-
   final _pinController = TextEditingController();
-  final _confirmController = TextEditingController();
 
   /// 勾選之刪除範圍（PM 2026-10-24；預設全選）。
   final Set<WipeScope> _scopes = {
@@ -182,7 +177,6 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   @override
   void dispose() {
     _pinController.dispose();
-    _confirmController.dispose();
     super.dispose();
   }
 
@@ -274,18 +268,6 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     }
   }
 
-  void _onConfirmSubmit() {
-    final ok = _confirmController.text.trim() == _confirmPhrase;
-    // 局部刪除走 oplog 墓標（隨同步傳播）→ 不需「重新登入雲端帳號」加驗；
-    // 「回到系統預設值」（全清空＋雲端資料夾刪除）維持加驗身分（S9.2）。
-    final needOauth = _factoryReset && _linked;
-    setState(() {
-      _confirmError = !ok;
-      if (ok && needOauth) _step = _WipeStep.oauth;
-    });
-    if (ok && !needOauth) _executeWipe(); // 三重防護後直接執行
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -297,7 +279,6 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
               _WipeStep.scope => _buildScope(context),
               _WipeStep.warning => _buildWarning(context),
               _WipeStep.pin => _buildPin(context),
-              _WipeStep.confirm => _buildConfirm(context),
               _WipeStep.oauth => _buildOauth(context),
               _WipeStep.done => _buildDone(context),
             },
@@ -514,10 +495,14 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
             key: const Key('wipe-warning-continue'),
             // 未設定 PIN → 跳過 PIN 步驟（PM 2026-10-23 修復：null 比對恆
             // false 會把沒設過 PIN 的使用者鎖死在 PIN 關卡）。
-            onPressed: () => setState(
-                () => _step = ref.read(appLockControllerProvider).hasPin
-                    ? _WipeStep.pin
-                    : _WipeStep.confirm),
+            onPressed: () {
+              // PM 2026-11-23：移除「輸入確認文字」步驟——PIN（有設）後直接執行。
+              if (ref.read(appLockControllerProvider).hasPin) {
+                setState(() => _step = _WipeStep.pin);
+              } else {
+                _executeWipe(); // 無 PIN → 直接清空
+              }
+            },
             child: const Text('下一步'),
           ),
         ],
@@ -550,38 +535,17 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
                   .read(appLockControllerProvider)
                   .verifyPin(_pinController.text);
               if (!mounted) return;
-              setState(() {
-                _pinError = !ok;
-                if (ok) _step = _WipeStep.confirm;
-              });
+              setState(() => _pinError = !ok);
+              if (ok) {
+                final needOauth = _factoryReset && _linked;
+                if (needOauth) {
+                  setState(() => _step = _WipeStep.oauth);
+                } else {
+                  await _executeWipe(); // PIN 後直接執行（無確認文字）
+                }
+              }
             },
             child: const Text('驗證'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConfirm(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('輸入確認文字：$_confirmPhrase'),
-          const SizedBox(height: 8),
-          TextField(
-            key: const Key('wipe-confirm-input'),
-            controller: _confirmController,
-          ),
-          if (_confirmError)
-            Text('確認文字不符',
-                style: TextStyle(color: AppTokens.of(context).danger)),
-          const SizedBox(height: 12),
-          FilledButton(
-            key: const Key('wipe-confirm-submit'),
-            onPressed: _onConfirmSubmit,
-            child: const Text('繼續'),
           ),
         ],
       ),
