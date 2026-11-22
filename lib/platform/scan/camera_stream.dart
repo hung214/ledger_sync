@@ -55,4 +55,14 @@ abstract interface class CameraStreamController {
 
   /// 以原生偵測器掃描目前畫面 → rawValue 清單（不支援/無結果/錯誤 → 空）。
   Future<List<String>> detectNativeBarcodes();
+
+  /// 相機**補光（手電筒）**是否可用？（web：track capabilities 有 torch；
+  /// native：mobile_scanner torch）。無能力 → 開關隱藏。
+  bool get torchSupported;
+
+  /// 切換補光開啟/關閉。（無能力或相機未啟動 → 靜默失敗。）
+  Future<void> toggleTorch();
+
+  /// 補光目前狀態（on/off）。UI 按鈕顏色依此顯示。
+  bool get torchOn;
 }

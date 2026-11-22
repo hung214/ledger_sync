@@ -30,6 +30,15 @@ class _StubCameraController implements CameraStreamController {
   Future<List<String>> detectNativeBarcodes() async => const [];
 
   @override
+  bool get torchSupported => false;
+
+  @override
+  Future<void> toggleTorch() async {}
+
+  @override
+  bool get torchOn => false;
+
+  @override
   void dispose() {}
 }
 

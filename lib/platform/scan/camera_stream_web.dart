@@ -44,6 +44,7 @@ class WebCameraStreamController implements CameraStreamController {
   web.EventHandler? _visibilityHandler;
   String _facing = 'environment'; // 目前鏡頭朝向（切換按鈕用）
   String? _switchNote; // 診斷：最近一次切換的結果（面板顯示）
+  bool _torchOn = false; // 補光狀態
 
   @override
   String get diagInfo =>
@@ -85,6 +86,32 @@ class WebCameraStreamController implements CameraStreamController {
       ].where((t) => t.isNotEmpty).toList();
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
+    }
+  }
+
+  @override
+  bool get torchSupported => true; // 先顯示開關；toggleTorch 內靜默處理不支援情況
+
+  @override
+  bool get torchOn => _torchOn;
+
+  @override
+  Future<void> toggleTorch() async {
+    try {
+      final tracks = _stream?.getVideoTracks().toDart;
+      if (tracks == null || tracks.isEmpty) return;
+      final track = tracks.first;
+      // 嘗試切換 torch：applyConstraints advanced [{torch: !_torchOn}]
+      // 無補光能力或相機未啟動 → applyConstraints 拋錯 → 靜默。
+      final advanced = <web.MediaTrackConstraintSet>[
+        web.MediaTrackConstraintSet(torch: (!_torchOn).toJS),
+      ].toJS;
+      await track
+          .applyConstraints(web.MediaTrackConstraints(advanced: advanced))
+          .toDart;
+      _torchOn = !_torchOn;
+    } catch (_) {
+      // 無補光能力或相機未啟動——靜默。
     }
   }
 

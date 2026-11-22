@@ -82,6 +82,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
   bool _diagExpanded = false; // 診斷行展開（PM：預設短格式）
+  bool _torchOn = false; // 補光開關狀態
+  bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
 
   @override
   void initState() {
@@ -102,6 +104,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       setState(() {
         _preview = preview;
         _state = _CamState.live;
+        _torchSupported = _controller.torchSupported;
       });
       _loop = Timer.periodic(
           const Duration(milliseconds: 1200), (_) => _tryDecode());
@@ -117,6 +120,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _state = _CamState.failed;
         _error = '相機啟動失敗：$e';
       });
+    }
+  }
+
+  /// 補光（手電筒）開關：web MediaStreamTrack.applyConstraints torch，
+  /// 無能力或相機未啟動 → 靜默失敗。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() => _torchOn = _controller.torchOn);
     }
   }
 
@@ -361,6 +373,32 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   color: Colors.white,
                 ),
               ),
+              // 補光開關（web：MediaStreamTrack.applyConstraints torch；
+              // 支援度有限——無能力則隱藏）。
+              if (_torchSupported)
+                Positioned(
+                  right: 72,
+                  top: 12,
+                  child: GestureDetector(
+                    key: const Key('webcam-torch-toggle'),
+                    onTap: () => unawaited(_toggleTorch()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _torchOn
+                            ? Colors.white
+                            : Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        _torchOn ? Icons.flash_on : Icons.flash_off,
+                        color: _torchOn ? Colors.black : Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
               // 畫面提示（只掃到明細碼等——與 APP 同款）。
               if (_hint != null)
                 Positioned(
