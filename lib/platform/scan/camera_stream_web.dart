@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/foundation.dart';
@@ -22,6 +23,12 @@ extension type _BarcodeDetector._(JSObject _) implements JSObject {
 
 extension type _BarcodeResultJS._(JSObject _) implements JSObject {
   external JSString? get rawValue;
+  external JSArray<_BarcodePointJS>? get cornerPoints;
+}
+
+extension type _BarcodePointJS._(JSObject _) implements JSObject {
+  external JSNumber? get x;
+  external JSNumber? get y;
 }
 
 /// web（PWA）相機控制器：`getUserMedia`（後鏡頭）＋`<video>` 預覽＋canvas 取幀。
@@ -61,6 +68,111 @@ class WebCameraStreamController implements CameraStreamController {
   @override
   bool get hasNativeBarcodeDetector => _barcodeDetectorCtor != null;
 
+  double? _maxZoom;
+
+  @override
+  bool get zoomSupported => _maxZoom != null && _maxZoom! > 1;
+
+  @override
+  Future<void> setZoom(double normalized) async {
+    try {
+      final tracks = _stream?.getVideoTracks().toDart;
+      if (tracks == null || tracks.isEmpty) return;
+      final track = tracks.first;
+      final maxZoom = _readMaxZoom(track);
+      if (maxZoom == null || maxZoom <= 1) return;
+      final target = 1.0 + normalized.clamp(0.0, 1.0) * (maxZoom - 1.0);
+      final advanced = <web.MediaTrackConstraintSet>[
+        web.MediaTrackConstraintSet(zoom: target.toJS),
+      ].toJS;
+      await track
+          .applyConstraints(web.MediaTrackConstraints(advanced: advanced))
+          .toDart;
+    } catch (_) {
+      // 裝置不支援變焦——靜默。
+    }
+  }
+
+  /// 讀取 track 的變焦上限（無 zoom 能力 → null）。
+  double? _readMaxZoom(web.MediaStreamTrack track) {
+    try {
+      final caps = track.getCapabilities();
+      final zoomObj = (caps as JSObject).getProperty('zoom'.toJS) as JSObject?;
+      if (zoomObj == null) return null;
+      return (zoomObj.getProperty('max'.toJS) as JSNumber).toDartDouble;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Duration get decodeInterval => hasNativeBarcodeDetector
+      ? const Duration(milliseconds: 700)
+      : const Duration(milliseconds: 1200);
+
+  /// 影像源（video 或裁切 canvas）→ 偵測 → rawValues＋框（正規化全幀座標）。
+  Future<List<String>> _detectOn(JSObject source, double offsetX,
+      double offsetY, double scaleX, double scaleY) async {
+    final detector = _getNativeDetector();
+    if (detector == null) return const [];
+    final results = await detector.detect(source).toDart;
+    final boxes = <Rect>[];
+    final texts = <String>[];
+    for (final r in results.toDart) {
+      final t = r.rawValue?.toDart ?? '';
+      if (t.isEmpty) continue;
+      texts.add(t);
+      final pts = r.cornerPoints?.toDart ?? const [];
+      if (pts.length >= 4 && _frameW > 0) {
+        var minX = 1 << 30, minY = 1 << 30, maxX = -1 << 30, maxY = -1 << 30;
+        for (final p in pts) {
+          final x = (p.x?.toDartDouble ?? 0).round();
+          final y = (p.y?.toDartDouble ?? 0).round();
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+        // 裁切座標 → 全幀正規化（offset 還原＋源尺寸縮放）。
+        boxes.add(Rect.fromLTRB(
+            (offsetX + minX * scaleX) / _frameW,
+            (offsetY + minY * scaleY) / _frameH,
+            (offsetX + maxX * scaleX) / _frameW,
+            (offsetY + maxY * scaleY) / _frameH));
+      }
+    }
+    if (boxes.isNotEmpty) {
+      _lastNativeBoxesData =
+          (boxes: boxes, frameSize: Size(_frameW, _frameH));
+    }
+    return texts;
+  }
+
+  double _frameW = 0;
+  double _frameH = 0;
+  ({List<Rect> boxes, Size frameSize})? _lastNativeBoxesData;
+
+  @override
+  ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes =>
+      _lastNativeBoxesData;
+
+  /// 裁切 canvas（**每階段獨立暫存**——並行偵測不互相覆蓋）。
+  final Map<String, web.HTMLCanvasElement> _cropCanvases = {};
+
+  web.HTMLCanvasElement _cropCanvas(
+      web.HTMLVideoElement v, String key, double f, double ox, double oy) {
+    final canvas = _cropCanvases[key] ??=
+        (web.document.createElement('canvas') as web.HTMLCanvasElement);
+    final cw = (v.videoWidth * f).round();
+    final ch = (v.videoHeight * f).round();
+    canvas.width = cw;
+    canvas.height = ch;
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+    ctx.drawImage(v, ox * v.videoWidth, oy * v.videoHeight, cw, ch, 0, 0,
+        cw, ch);
+    return canvas;
+  }
+
   _BarcodeDetector? _getNativeDetector() {
     if (!hasNativeBarcodeDetector) return null;
     try {
@@ -75,13 +187,44 @@ class WebCameraStreamController implements CameraStreamController {
   @override
   Future<List<String>> detectNativeBarcodes() async {
     final v = _video;
-    final detector = _getNativeDetector();
-    if (v == null || v.videoWidth == 0 || detector == null) return const [];
+    if (v == null || v.videoWidth == 0 || !hasNativeBarcodeDetector) {
+      return const [];
+    }
+    _frameW = v.videoWidth.toDouble();
+    _frameH = v.videoHeight.toDouble();
     try {
-      final results = await detector.detect(v).toDart;
-      return [
-        for (final r in results.toDart) r.rawValue?.toDart ?? '',
-      ].where((t) => t.isNotEmpty).toList();
+      // **全階段並行＋聯集**（PM 2026-11-23「為什麼不能同時掃兩個 QR」）：
+      // 一幀多碼本來就支援——舊邏輯「一解到就提前返回」把同幀的另一半
+      // 丟掉。整張＋四象限＋中央變焦**同時跑**，全部結果合併去重。
+      final stages = const [
+        ('full', 1.0, 0.0, 0.0),
+        ('q-tl', 0.5, 0.0, 0.0),
+        ('q-tr', 0.5, 0.5, 0.0),
+        ('q-bl', 0.5, 0.0, 0.5),
+        ('q-br', 0.5, 0.5, 0.5),
+        ('c70', 0.7, 0.15, 0.15),
+        ('c50', 0.5, 0.25, 0.25),
+      ];
+      // 先**同步**繪製每個階段各自的 canvas（每階段獨立——並行偵測時
+      // 不會互相覆蓋），再一次並行偵測（單一 region 延遲即整批延遲）。
+      final prepared = <(String, JSObject, double, double)>[
+        for (final (name, f, ox, oy) in stages)
+          (
+            name,
+            f == 1.0
+                ? v as JSObject
+                : _cropCanvas(v, name, f, ox, oy) as JSObject,
+            ox,
+            oy,
+          ),
+      ];
+      final futures = [
+        for (final (_, source, ox, oy) in prepared)
+          _detectOn(source, ox * v.videoWidth, oy * v.videoHeight, 1.0, 1.0),
+      ];
+      final all = await Future.wait(futures);
+      final union = <String>{for (final r in all) ...r};
+      return union.toList();
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
     }
@@ -137,6 +280,15 @@ class WebCameraStreamController implements CameraStreamController {
   Future<void> _openOn(web.HTMLVideoElement video) async {
     _stream = await _acquireRearCamera();
     video.srcObject = _stream;
+    // 變焦能力探測（有 zoom 能力 → 掃描頁顯示變焦按鈕）。
+    try {
+      final tracks = _stream?.getVideoTracks().toDart ?? const [];
+      if (tracks.isNotEmpty) {
+        _maxZoom = _readMaxZoom(tracks.first);
+      }
+    } catch (_) {
+      _maxZoom = null;
+    }
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
     video.style.setProperty('transform', 'none');

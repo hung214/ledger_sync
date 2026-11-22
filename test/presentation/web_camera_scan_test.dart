@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'dart:ui' show Rect;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -151,6 +153,18 @@ class _FakeController implements CameraStreamController {
 
   @override
   Future<List<String>> detectNativeBarcodes() async => const [];
+
+  @override
+  Duration get decodeInterval => const Duration(milliseconds: 1200);
+
+  @override
+  bool get zoomSupported => false;
+
+  @override
+  Future<void> setZoom(double normalized) async {}
+
+  @override
+  ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
 
   @override
   void dispose() {}

@@ -55,6 +55,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
+  double _zoom = 0; // 0=1×、0.5=2×、1.0=3×（正規化變焦——PM：不用靠近）
   // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
   // 400ms 內無新偵測即清空——對準時 unrestricted 連續回呼，框持續顯示。
   List<List<Offset>> _boxes = const [];
@@ -415,6 +416,54 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                 ),
               ),
             ),
+            // 變焦按鈕（PM 2026-11-23：條碼小/遠——變焦取代靠近鏡頭；
+            // setZoomScale 0~1 → videoZoomFactor，Mac/iOS 皆支援）。
+            Positioned(
+              right: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final (label, z) in const [
+                    ('1×', 0.0),
+                    ('2×', 0.5),
+                    ('3×', 1.0),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _zoom = z);
+                          unawaited(_controller
+                              .setZoomScale(z)
+                              .catchError((Object _) {}));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _zoom == z
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(label,
+                              style: TextStyle(
+                                  color: _zoom == z
+                                      ? Colors.black
+                                      : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
             // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
             Positioned(
               left: 8,
@@ -426,7 +475,9 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text('偵測 $_events 次',
+                child: Text(
+                    '偵測 $_events 次'
+                    '${_boxImageSize.isEmpty ? '' : ' · ${_boxImageSize.width.round()}×${_boxImageSize.height.round()}'}',
                     style: const TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ),

@@ -29,6 +29,18 @@ class _NativeCameraController implements CameraStreamController {
   @override
   Future<List<String>> detectNativeBarcodes() async => const [];
 
+  @override
+  Duration get decodeInterval => const Duration(milliseconds: 1200);
+
+  @override
+  bool get zoomSupported => false;
+
+  @override
+  Future<void> setZoom(double normalized) async {}
+
+  @override
+  ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
+
 
   @override
   void dispose() {}

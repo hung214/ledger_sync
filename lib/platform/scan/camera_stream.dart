@@ -54,5 +54,20 @@ abstract interface class CameraStreamController {
   bool get hasNativeBarcodeDetector;
 
   /// 以原生偵測器掃描目前畫面 → rawValue 清單（不支援/無結果/錯誤 → 空）。
+  /// 內含**中央裁切變焦分層**（整張→70%→50%→四象限——PM 2026-11-23：
+  /// 「要喬很久角度距離」的容許度修法）。
   Future<List<String>> detectNativeBarcodes();
+
+  /// 解碼迴圈建議間隔（原生偵測器快→700ms；zxing2 慢→1200ms）。
+  Duration get decodeInterval;
+
+  /// 相機**變焦**支援？（web：track capabilities 有 zoom）。
+  bool get zoomSupported;
+
+  /// 設定變焦（正規化 0~1；web：track zoom constraint）。
+  Future<void> setZoom(double normalized);
+
+  /// 最近一次原生偵測的**條碼區域**（正規化 0~1，top-left 原點；畫綠框用）
+  /// 與參考幀尺寸。null＝無。
+  ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes;
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -50,6 +51,25 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 掃描不到」：舊指紋 total|date|merchant 會把**同店家/同金額/同日期的
   /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
   final Set<String> _seenCodes = <String>{};
+
+  /// **跨 tick 累積窗**（PM 2026-11-23：單碼好辨識、雙碼難——左碼/右碼
+  /// 常分 tick 或分區域解出；APP 有 3 秒累積窗、PWA 原本沒有）。
+  final Map<String, DateTime> _recentTexts = {};
+
+  /// 已入單的**左碼**（發票身分）——同一張不重複加入。
+  final Set<String> _committedLeftCodes = <String>{};
+
+  String? _hint; // 畫面提示（只掃到明細碼等）——與 APP 同款
+  Timer? _hintReset;
+
+  void _flashHint(String text) {
+    if (!mounted) return;
+    setState(() => _hint = text);
+    _hintReset?.cancel();
+    _hintReset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _hint = null);
+    });
+  }
   int _addedFromThisSession = 0;
   // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
   int _frames = 0; // 取幀計數
@@ -61,6 +81,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
+  double _zoom = 0; // 0=1×、0.5=2×、1.0=3×
+  bool _zoomSupported = false;
+
+  /// 原生偵測器命中的條碼框（正規化——綠框高亮）。
+  final ValueNotifier<({List<Rect> boxes, Size frameSize})?>
+      _nativeBoxesNotifier = ValueNotifier(null);
 
   @override
   void initState() {
@@ -78,12 +104,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     try {
       final preview = await _controller.start();
       if (!mounted) return;
-      setState(() {
-        _preview = preview;
-        _state = _CamState.live;
-      });
-      _loop = Timer.periodic(
-          const Duration(milliseconds: 1200), (_) => _tryDecode());
+      _zoomSupported = _controller.zoomSupported;
+      if (mounted) {
+        setState(() {
+          _preview = preview;
+          _state = _CamState.live;
+        });
+      }
+      // 節奏自適應（PM 2026-11-23）：原生偵測器快 → 700ms；zxing2 → 1200ms。
+      _loop = Timer.periodic(_controller.decodeInterval, (_) => _tryDecode());
     } on CameraUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -121,6 +150,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           _frameInfo = _controller.resolutionInfo;
         });
       }
+      _nativeBoxesNotifier.value = _controller.lastNativeBoxes;
       if (texts.isNotEmpty) {
         draft = ImageQrScanner.draftFromQrTexts(texts);
       }
@@ -144,15 +174,48 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     sw.stop();
     _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
-    if (draft == null) return; // 無 QR——繼續取景
-    if (mounted) setState(() => _decodeHits++);
+    // **跨 tick 累積窗**（3 秒）——雙碼常分 tick 解出（PM 2026-11-23）。
+    if (texts.isNotEmpty) {
+      final now2 = DateTime.now();
+      _recentTexts.removeWhere((_, t) =>
+          now2.difference(t) > const Duration(seconds: 3));
+      for (final t in texts) {
+        _recentTexts[t] = now2;
+      }
+    }
+    final accumulated = _recentTexts.keys.toList();
+    if (accumulated.isEmpty) return;
+    if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
-    if (texts.every(_seenCodes.contains)) return; // 同一張還在畫面中
-    for (final t in texts) {
-      _seenCodes.add(t);
+    if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
+    // 累積優先：右碼補齊後合併成完整明細（draft 來自分層/累積）。
+    final merged = ImageQrScanner.draftFromQrTexts(accumulated) ?? draft;
+    if (merged == null) {
+      // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
+      if (accumulated.any((t) => t.startsWith('**'))) {
+        _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票號那格）');
+      }
+      return;
+    }
+    if (mounted) setState(() => _decodeHits++);
+    // 左碼＝發票身分：已入單的發票不重複加入。
+    String? leftCode;
+    for (final t in accumulated) {
+      final l = ImageQrScanner.extractOfficialLeft(t);
+      if (l != null) {
+        leftCode = l;
+        break;
+      }
+    }
+    if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
+      return;
     }
     ref.read(scanDraftsProvider.notifier).add(
-        ScannedItem(draft: draft, photoBytes: photoBytes));
+        ScannedItem(draft: merged, photoBytes: photoBytes));
+    for (final t in accumulated) {
+      _seenCodes.add(t);
+    }
+    if (leftCode != null) _committedLeftCodes.add(leftCode);
     if (mounted) setState(() => _addedFromThisSession++);
     _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
   }
@@ -182,7 +245,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       _seenCodes.clear();
     });
     _loop = Timer.periodic(
-        const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
+        _controller.decodeInterval, (_) => _tryDecode()); // 繼續掃
   }
 
   /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
@@ -202,6 +265,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   @override
   void dispose() {
     _loop?.cancel();
+    _hintReset?.cancel();
+    _nativeBoxesNotifier.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -300,6 +365,93 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   color: Colors.white,
                 ),
               ),
+              // 辨識區域引導框（與 APP 同款——純視覺，偵測全畫面+分層）。
+              const Positioned.fill(
+                child: IgnorePointer(child: _WebAimFrame()),
+              ),
+              // 原生偵測器命中 → 綠框（正規化座標 → preview cover 映射）。
+              ValueListenableBuilder(
+                valueListenable: _nativeBoxesNotifier,
+                builder: (context, boxes, _) =>
+                    boxes == null || boxes.boxes.isEmpty
+                        ? const SizedBox.shrink()
+                        : Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: _NativeBoxPainter(
+                                  boxes: boxes.boxes,
+                                  frameSize: boxes.frameSize,
+                                ),
+                              ),
+                            ),
+                          ),
+              ),
+              // 變焦按鈕（PM 2026-11-23：小/遠條碼——變焦取代靠近）。
+              if (_zoomSupported)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      for (final (label, z) in const [
+                        ('1×', 0.0),
+                        ('2×', 0.5),
+                        ('3×', 1.0),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _zoom = z);
+                              unawaited(_controller.setZoom(z));
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _zoom == z
+                                    ? Colors.white
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(label,
+                                  style: TextStyle(
+                                      color: _zoom == z
+                                          ? Colors.black
+                                          : Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+              // 畫面提示（只掃到明細碼等——與 APP 同款）。
+              if (_hint != null)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_hint!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                  ),
+                ),
               // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
               // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
               if (mode == ScanMode.paper)
@@ -414,3 +566,98 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 }
 
 enum _CamState { starting, live, failed }
+
+/// 辨識區域引導框（四角括號——與 APP 同款；純視覺）。
+class _WebAimFrame extends StatelessWidget {
+  const _WebAimFrame();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final rect = Rect.fromCenter(
+        center: Offset(constraints.biggest.width / 2,
+            constraints.biggest.height * 0.42),
+        width: constraints.biggest.width * 0.88,
+        height: constraints.biggest.height * 0.42,
+      );
+      return CustomPaint(painter: _CornerBrackets(rect: rect));
+    });
+  }
+}
+
+class _CornerBrackets extends CustomPainter {
+  _CornerBrackets({required this.rect});
+
+  final Rect rect;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const len = 26.0;
+    const r = 6.0;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(rect.left, rect.top + len)
+      ..lineTo(rect.left, rect.top + r)
+      ..quadraticBezierTo(rect.left, rect.top, rect.left + r, rect.top)
+      ..lineTo(rect.left + len, rect.top)
+      ..moveTo(rect.right - len, rect.top)
+      ..lineTo(rect.right - r, rect.top)
+      ..quadraticBezierTo(rect.right, rect.top, rect.right, rect.top + r)
+      ..lineTo(rect.right, rect.top + len)
+      ..moveTo(rect.right, rect.bottom - len)
+      ..lineTo(rect.right, rect.bottom - r)
+      ..quadraticBezierTo(rect.right, rect.bottom, rect.right - r, rect.bottom)
+      ..lineTo(rect.right - len, rect.bottom)
+      ..moveTo(rect.left + len, rect.bottom)
+      ..lineTo(rect.left + r, rect.bottom)
+      ..quadraticBezierTo(rect.left, rect.bottom, rect.left, rect.bottom - r)
+      ..lineTo(rect.left, rect.bottom - len);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CornerBrackets old) => old.rect != rect;
+}
+
+/// 原生偵測器命中的條碼框（正規化 rect → preview cover 映射——綠框）。
+class _NativeBoxPainter extends CustomPainter {
+  _NativeBoxPainter({required this.boxes, required this.frameSize});
+
+  final List<Rect> boxes;
+  final Size frameSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (frameSize.isEmpty || boxes.isEmpty) return;
+    final scale = math.max(
+      size.width / frameSize.width,
+      size.height / frameSize.height,
+    );
+    final offset = Offset(
+      (size.width - frameSize.width * scale) / 2,
+      (size.height - frameSize.height * scale) / 2,
+    );
+    final fill = Paint()..color = Colors.green.withValues(alpha: 0.15);
+    final stroke = Paint()
+      ..color = Colors.greenAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeJoin = StrokeJoin.round;
+    for (final box in boxes) {
+      final r = Rect.fromLTWH(box.left * frameSize.width * scale + offset.dx,
+          box.top * frameSize.height * scale + offset.dy,
+          box.width * frameSize.width * scale,
+          box.height * frameSize.height * scale);
+      canvas.drawRect(r.inflate(4), fill);
+      canvas.drawRect(r.inflate(4), stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_NativeBoxPainter old) =>
+      old.boxes != boxes || old.frameSize != frameSize;
+}
