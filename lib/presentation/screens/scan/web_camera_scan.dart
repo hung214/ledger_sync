@@ -80,6 +80,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
+  bool _diagExpanded = false; // 診斷行展開（PM：預設短格式，點擊展開）
   double _zoom = 0; // 0=1×、0.5=2×、1.0=3×
   bool _zoomSupported = false;
   Offset? _focusIndicator; // 點擊回饋
@@ -547,23 +548,30 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                       ),
                     ),
                   ),
-                // 診斷面板（videoRect 左下）。
+                // 診斷行（PM 2026-11-23：**短格式**——點擊展開詳細）。
                 Positioned(
                   left: videoRect.left + 12,
                   top: videoRect.bottom - 40,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6)),
-                    child: Text(
-                      '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · 命中 $_decodeHits · 解 $_decodeMs ms'
-                      '${_controller.elementInfo.isEmpty ? '' : ' · ${_controller.elementInfo}'}'
-                      '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}',
-                      key: const Key('webcam-diag'),
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 11),
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _diagExpanded = !_diagExpanded),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Text(
+                        _diagExpanded
+                            ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
+                                '命中 $_decodeHits · 解 $_decodeMs ms'
+                                '${_controller.elementInfo.isEmpty ? '' : ' · ${_controller.elementInfo}'}'
+                                '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
+                            : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                        key: const Key('webcam-diag'),
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 11),
+                      ),
                     ),
                   ),
                 ),

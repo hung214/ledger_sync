@@ -213,6 +213,49 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   Text('第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
                       key: const Key('review-progress'),
                       style: Theme.of(context).textTheme.titleMedium),
+                  // **照片預覽＋OCR 辨識區域框**（T21，PM：辨識的文字要有框
+                  // ——讓使用者看到辨識到哪段）。BoxFit.fill＝正規化框直接
+                  // 映射（縮放失真可接受——指示用）。
+                  if (widget.items[_index].photoBytes != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: LayoutBuilder(builder: (context, box) {
+                        final w = box.maxWidth;
+                        final h = w * 0.75;
+                        final ocrBox = widget.items[_index].ocrBox;
+                        return SizedBox(
+                          width: w,
+                          height: h,
+                          child: Stack(children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                  widget.items[_index].photoBytes!,
+                                  width: w,
+                                  height: h,
+                                  fit: BoxFit.fill,
+                                  errorBuilder: (context, error,
+                                          stackTrace) =>
+                                      const SizedBox.shrink()),
+                            ),
+                            if (ocrBox != null)
+                              Positioned(
+                                left: ocrBox.left * w,
+                                top: ocrBox.top * h,
+                                width: ocrBox.width * w,
+                                height: ocrBox.height * h,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: Colors.greenAccent,
+                                        width: 2.5),
+                                  ),
+                                ),
+                              ),
+                          ]),
+                        );
+                      }),
+                    ),
                   // 金額（快記同款：**置中大字**）＋下方小字＝帳戶（Sticky）。
                   TextField(
                     key: const Key('review-total'),

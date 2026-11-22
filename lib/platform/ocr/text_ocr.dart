@@ -5,11 +5,20 @@
 library;
 
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
 
 import 'package:image/image.dart' as img;
 
 export 'text_ocr_stub.dart'
     if (dart.library.io) 'text_ocr_io.dart';
+
+/// OCR 辨識行（T21：文字＋**正規化區域** top-left 原點——確認卡照片
+/// 上框出辨識位置用；box=null 表示引擎未提供）。
+class OcrLine {
+  const OcrLine(this.text, {this.box});
+  final String text;
+  final Rect? box;
+}
 
 /// OCR 服務介面（呼叫端不感知平台差異；不支援平台回空清單）。
 abstract interface class TextOcrService {
@@ -17,8 +26,9 @@ abstract interface class TextOcrService {
   /// MissingPluginException → 空清單）。
   bool get isSupported;
 
-  /// 對照片做文字辨識 → 文字行清單（不支援/失敗 → 空清單）。
-  Future<List<String>> recognizeTextLines(Uint8List bytes);
+  /// 對照片做文字辨識 → **辨識行清單**（文字＋正規化區域；不支援/失敗 →
+  /// 空清單）。
+  Future<List<OcrLine>> recognizeTextLines(Uint8List bytes);
 }
 
 /// 自文字行找出**發票號碼**（2 碼英文＋8 數字）。優先序：
@@ -29,6 +39,49 @@ abstract interface class TextOcrService {
 ///    26987585 在「收執聯」後一行；而 40668100（賣方統編位置）在表頭，
 ///    近距配對會選錯；
 /// ③ 回退：字軌行 × 最近數字行（無標籤的收據）。
+/// **帶框版本**：自 OcrLine 清單找發票號＋其區域框（同 findInvoiceNo
+/// 規則；分行配對時框＝兩行聯集）。
+(String, Rect?)? findInvoiceNoWithBox(List<OcrLine> lines) {
+  final invRe = RegExp(r'([A-Z]{2})\s*[-–]?\s*([0-9]{8})');
+  for (final l in lines) {
+    final m = invRe.firstMatch(l.text.toUpperCase());
+    if (m != null) return (m.group(1)! + m.group(2)!, l.box);
+  }
+  final digitIdx = <int>[
+    for (var i = 0; i < lines.length; i++)
+      if (RegExp(r'^[0-9]{8}$').hasMatch(lines[i].text.trim())) i,
+  ];
+  for (var i = 0; i < lines.length; i++) {
+    if (!RegExp(r'^[A-Z]{2}$').hasMatch(lines[i].text.trim().toUpperCase())) {
+      continue;
+    }
+    int? best;
+    var bestDist = 1 << 30;
+    for (final j in digitIdx) {
+      final d = (j - i).abs();
+      if (d < bestDist) {
+        bestDist = d;
+        best = j;
+      }
+    }
+    if (best != null) {
+      return (lines[i].text.trim().toUpperCase() + lines[best].text.trim(),
+          _union(lines[i].box, lines[best].box));
+    }
+  }
+  return null;
+}
+
+Rect? _union(Rect? a, Rect? b) {
+  if (a == null) return b;
+  if (b == null) return a;
+  return Rect.fromLTRB(
+      a.left < b.left ? a.left : b.left,
+      a.top < b.top ? a.top : b.top,
+      a.right > b.right ? a.right : b.right,
+      a.bottom > b.bottom ? a.bottom : b.bottom);
+}
+
 String? findInvoiceNo(List<String> lines) {
   final upper = [for (final l in lines) l.trim().toUpperCase()];
   final digitsRe = RegExp(r'^[0-9]{8}$');
@@ -133,9 +186,9 @@ DateTime? findPrintedDate(List<String> lines) {
   return null;
 }
 
-/// 便利管線：bytes →（大圖降採樣——Vision 對 12MP 直接處理較慢）→ 文字行。
+/// 便利管線：bytes →（大圖降採樣——Vision 對 12MP 直接處理較慢）→ 辨識行。
 /// 前處理為純 Dart（image 套件跨平台）；辨識本體走 [TextOcrService]。
-Future<List<String>> recognizeInvoiceText(
+Future<List<OcrLine>> recognizeInvoiceText(
     TextOcrService service, Uint8List bytes) async {
   if (!service.isSupported) return const [];
   var data = bytes;

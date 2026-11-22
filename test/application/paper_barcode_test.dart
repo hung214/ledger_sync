@@ -1,10 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/scan/paper_barcode.dart';
 import 'package:ledger_sync/platform/ocr/text_ocr.dart';
+import 'dart:ui' show Rect;
 
 /// 紙本發票**一維條碼**解析（官方規格 §壹：Code 39——
 /// `*` + 年期別(5) + 字軌號碼(10) + 隨機碼(4) + `*`）。
 /// PM 2026-11-22：紙本發票模式＝掃此條碼帶出發票號碼＋年月提示。
+/// T21：OcrLine 帶框擷取（確認卡照片上框出辨識位置）。
+void ocrBoxTests() {
+  group('findInvoiceNoWithBox（OcrLine＋區域框）', () {
+    test('同行命中 → 回傳發票號＋該行框', () {
+      final hit = findInvoiceNoWithBox([
+        const OcrLine('中華民國115年'),
+        const OcrLine('EF', box: Rect.fromLTWH(0.1, 0.4, 0.08, 0.05)),
+        const OcrLine('20947672', box: Rect.fromLTWH(0.1, 0.5, 0.3, 0.05)),
+      ]);
+      // 分行配對：字軌 EF＋號碼 20947672 → 框＝兩行聯集
+      expect(hit, isNotNull);
+      expect(hit!.$1, 'EF20947672');
+      expect(hit.$2, isNotNull);
+      expect(hit.$2!.left, 0.1, reason: '聯集框左界');
+      expect(hit.$2!.top, 0.4, reason: '聯集框上界');
+    });
+
+    test('同行直配 → 框＝該行', () {
+      final hit = findInvoiceNoWithBox([
+        const OcrLine('收銀機發票'),
+        const OcrLine('EF-20947672', box: Rect.fromLTWH(0.2, 0.3, 0.4, 0.06)),
+      ]);
+      expect(hit!.$1, 'EF20947672');
+      expect(hit.$2!.left, 0.2);
+    });
+
+    test('無發票號 → null', () {
+      expect(
+          findInvoiceNoWithBox(
+              [const OcrLine('總計 195', box: Rect.fromLTWH(0, 0, 1, 1))]),
+          isNull);
+    });
+  });
+}
+
 void main$() {
   test('官方範例：*10404UZ176908720122* → 發票號 UZ17690872＋2015/03', () {
     final r = parsePaperBarcode('*10404UZ176908720122*');
@@ -85,5 +121,6 @@ void ocrTests() {
 void main() {
   main$();
   ocrTests();
+  ocrBoxTests();
 }
 

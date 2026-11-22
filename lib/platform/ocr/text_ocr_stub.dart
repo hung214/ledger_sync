@@ -10,7 +10,7 @@ class TextOcrServiceImpl implements TextOcrService {
   bool get isSupported => false;
 
   @override
-  Future<List<String>> recognizeTextLines(Uint8List bytes) async => const [];
+  Future<List<OcrLine>> recognizeTextLines(Uint8List bytes) async => const [];
 }
 
 /// 工廠（條件匯出進入點）。

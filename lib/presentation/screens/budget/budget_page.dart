@@ -255,6 +255,7 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
             InkWell(
               key: const Key('budget-category'),
               onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 final pick = await showCategoryPicker(context, ref,
                     kind: 'expense',
                     selectedId: _categoryId ?? defaultCatId,
@@ -267,6 +268,7 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
                     setState(() => _categoryId = categoryId);
                   case CategoryAddRequested(:final asSub, :final parentId):
                     // ＋即建即選（快記同款）。
+                    if (!mounted || !context.mounted) return;
                     final nameCtrl = TextEditingController();
                     final name = await showDialog<String>(
                       context: context,
@@ -293,12 +295,11 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
                     try {
                       final row = CategoryService(ref.read(dbProvider))
                           .create(kind: 'expense', name: name, parentId: parentId);
-                      if (!mounted || !context.mounted) return;
+                      if (!mounted) return;
                       setState(() => _categoryId = row.id);
                     } catch (e) {
-                      if (mounted && context.mounted) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text('$e')));
+                      if (mounted) {
+                        messenger.showSnackBar(SnackBar(content: Text('$e')));
                       }
                     }
                   default:

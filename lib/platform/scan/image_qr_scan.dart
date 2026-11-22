@@ -100,10 +100,12 @@ class ImageQrScanner {
     final now = DateTime.now();
     // ① OCR（紙本無條碼——印刷發票號碼＋印刷日期）。
     final lines = await recognizeInvoiceText(createTextOcrService(), bytes);
-    final invoiceNo = findInvoiceNo(lines);
-    if (invoiceNo != null) {
-      final date =
-          findPrintedDate(lines) ?? DateTime(now.year, now.month, now.day);
+    final hit = findInvoiceNoWithBox(lines);
+    if (hit != null) {
+      final (invoiceNo, box) = hit;
+      final date = findPrintedDate(
+              [for (final l in lines) l.text]) ??
+          DateTime(now.year, now.month, now.day);
       return ScannedItem(
         draft: TransactionDraft(
           merchant: const DraftField.none(),
@@ -112,6 +114,7 @@ class ImageQrScanner {
           invoiceNo: invoiceNo,
         ),
         photoBytes: bytes,
+        ocrBox: box,
       );
     }
     // ② 原生引擎（部分紙本有一維條碼）。

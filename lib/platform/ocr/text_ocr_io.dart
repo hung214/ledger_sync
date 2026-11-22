@@ -19,7 +19,7 @@ class TextOcrServiceImpl implements TextOcrService {
       defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
-  Future<List<String>> recognizeTextLines(Uint8List bytes) async {
+  Future<List<OcrLine>> recognizeTextLines(Uint8List bytes) async {
     if (!isSupported) return const [];
     File? tmp;
     try {
@@ -29,7 +29,22 @@ class TextOcrServiceImpl implements TextOcrService {
       await tmp.writeAsBytes(bytes);
       final r = await _channel.invokeMethod<List<dynamic>>(
           'ledgerSync.recognizeText', {'path': tmp.path});
-      return r?.cast<String>() ?? const [];
+      return [
+        for (final e in r ?? const <dynamic>[])
+          if (e is Map)
+            OcrLine(
+              (e['text'] as String?) ?? '',
+              box: (e['x'] == null || e['y'] == null)
+                  ? null
+                  : Rect.fromLTWH(
+                      (e['x'] as num).toDouble(),
+                      (e['y'] as num).toDouble(),
+                      (e['w'] as num? ?? 0).toDouble(),
+                      (e['h'] as num? ?? 0).toDouble()),
+            )
+          else if (e is String)
+            OcrLine(e), // 舊版 patch（純字串）相容
+      ].where((l) => l.text.isNotEmpty).toList();
     } on MissingPluginException {
       return const [];
     } on PlatformException {
