@@ -29,7 +29,7 @@
   （Chrome/Edge/Safari 17+）優先——品質遠勝 zxing2、直接吃 video 全解析度
   幀（無 canvas/JPEG 損耗）；zxing2 降為後備；診斷行加**視訊解析度**
 - [x] **T7 測試＋analyze**：**250 測試全綠**＋analyze 0
-- [ ] **T7-2 重建 macOS＋部署 PWA＋提交**（進行中）
+- [x] **T7-2 重建 macOS＋部署 PWA＋提交**（0014a45；PWA 0.5.0-pwa.20261122d 已上線驗證）
 
 ## 上一批已完成（PM 2026-11-22 第三批，8524476）
 
