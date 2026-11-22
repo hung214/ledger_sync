@@ -9,6 +9,13 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 進行中（PM 2026-11-24：PWA 補光開關——原推原生APP，現改 PWA）
+
+- [ ] **T58-PWA PWA 掃描頁補光（手電筒）開關**：
+  web_camera_scan.dart（getUserMedia + video + canvas）加 torch 開關
+  （MediaStreamTrack.applyConstraints torch；無能力＝隱藏）＋測試
+  ⚠️ PWA 鏡頭碼凍結線——此為 PM 明示指示，可動
+
 ## 進行中（PM 2026-11-24：手機版補光開關）
 
 - [ ] **T58 手機 APP 掃描頁補光（手電筒）開關**：
