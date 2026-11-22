@@ -368,9 +368,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
               final videoRect = _containRect(constraints.biggest, aspect);
               final aimRect = _aimFrameRect(videoRect);
               return Stack(children: [
-                // 影像（contain；黑邊背景）。
-                Positioned.fromRect(
-                  rect: videoRect,
+                // 影像（**全幅平台檢視——已知可用結構**；object-fit: contain
+                // 會把影像內容縮在 videoRect＝與疊層幾何一致）。
+                Positioned.fill(
                   child: KeyedSubtree(
                       key: const Key('webcam-preview'), child: _preview!),
                 ),
