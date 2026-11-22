@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -56,6 +57,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
   double _zoom = 0; // 0=1×、0.5=2×、1.0=3×（正規化變焦——PM：不用靠近）
+  bool _torchOn = false; // 補光開關（僅行動平台；無手電筒能力＝隱藏按鈕）
   Offset? _focusIndicator; // 點擊對焦回饋（preview 座標）
   Timer? _focusIndicatorReset;
   // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
@@ -121,6 +123,21 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
       if (mounted) setState(() => _focusIndicator = null);
     });
   }
+
+  /// 補光（手電筒）開關：mobile_scanner toggleTorch，無能力或相機未啟動
+  /// 時靜默失敗；狀態從 controller.value.torchState 讀取（on/off）。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() {
+        _torchOn = _controller.value.torchState == TorchState.on;
+      });
+    }
+  }
+
+  /// 行動平台（iOS/Android）才顯示補光按鈕：macOS 內建鏡頭無手電筒，
+  /// Web 走另一條線（web_camera_scan.dart，不在此頁）。
+  bool get _torchVisible => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
   /// 相機啟動（自管）：失敗重試一次（間隔 500ms）；雙敗 → 相機錯誤頁。
   Future<void> _startCamera(int gen, {required int attempt}) async {
@@ -504,6 +521,31 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                                       : Colors.white,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                  if (_torchVisible)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: GestureDetector(
+                        onTap: () {
+                          unawaited(_toggleTorch());
+                        },
+                        child: Container(
+                          key: const Key('scan-torch-toggle'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _torchOn
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            _torchOn ? Icons.flash_on : Icons.flash_off,
+                            color: _torchOn ? Colors.black : Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
