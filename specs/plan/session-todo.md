@@ -15,7 +15,7 @@
   web_camera_scan.dart（getUserMedia + MediaStreamTrack.applyConstraints torch）
   ②✓介面加 torch 能力＋開關按鈕（Key webcam-torch-toggle；右上角與切換鏡頭並排）
   ③✓測試（260 全綠＋analyze 0）
-  ④✓已部署 0.5.0-pwa.20261124i（gh-pages，等 CDN 同步）
+  ④✓已部署 0.5.0-pwa.20261124i（gh-pages，CDN 已同步；PM 確認補光正確）
   ⚠️ PWA 鏡頭碼凍結線，但 PM 明示指示在 PWA 加補光開關，故可動
 
 ## 進行中（PM 2026-11-24：手機版補光開關）
@@ -24,7 +24,7 @@
   ①✓探查 native 掃描頁（mobile_scanner 7.5 toggleTorch/TorchState）
   ②✓介面加 torch 能力＋開關按鈕（Key scan-torch-toggle；iOS/Android 行動 APP；macOS 桌機不顯示）
   ③✓測試（274 全綠＋analyze 0）
-  ④待 PM 實機走查（iOS/Android 手電筒開關）
+  ④✓PM 確認補光正確（iOS/Android 手電筒開關）
   ⚠️ 僅行動 APP 線——**PWA 凍結線不動**（web 端 torch 支援度
   不一，且鏡頭碼凍結中）
 
