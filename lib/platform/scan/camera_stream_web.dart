@@ -163,12 +163,13 @@ class WebCameraStreamController implements CameraStreamController {
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes =>
       _lastNativeBoxesData;
 
-  /// 裁切 canvas（**每階段獨立暫存**——並行偵測不互相覆蓋）。
-  final Map<String, web.HTMLCanvasElement> _cropCanvases = {};
+  /// 階段 canvas（**每階段獨立暫存**——並行偵測不互相覆蓋）。
+  /// `full`＝整幀（videoWidth×videoHeight）；其餘＝中央/象限裁切。
+  final Map<String, web.HTMLCanvasElement> _stageCanvases = {};
 
-  web.HTMLCanvasElement _cropCanvas(
+  web.HTMLCanvasElement _stageCanvas(
       web.HTMLVideoElement v, String key, double f, double ox, double oy) {
-    final canvas = _cropCanvases[key] ??=
+    final canvas = _stageCanvases[key] ??=
         (web.document.createElement('canvas') as web.HTMLCanvasElement);
     final cw = (v.videoWidth * f).round();
     final ch = (v.videoHeight * f).round();
@@ -191,6 +192,18 @@ class WebCameraStreamController implements CameraStreamController {
     }
   }
 
+  /// 輪替區域指標（每 tick 一個額外區域——成本有界，頁面不卡）。
+  int _extraCursor = 0;
+
+  static const List<(String, double, double, double)> _extraStages = [
+    ('q-tl', 0.5, 0.0, 0.0),
+    ('q-tr', 0.5, 0.5, 0.0),
+    ('q-bl', 0.5, 0.0, 0.5),
+    ('q-br', 0.5, 0.5, 0.5),
+    ('c70', 0.7, 0.15, 0.15),
+    ('c50', 0.5, 0.25, 0.25),
+  ];
+
   @override
   Future<List<String>> detectNativeBarcodes() async {
     final v = _video;
@@ -200,38 +213,21 @@ class WebCameraStreamController implements CameraStreamController {
     _frameW = v.videoWidth.toDouble();
     _frameH = v.videoHeight.toDouble();
     try {
-      // **全階段並行＋聯集**（PM 2026-11-23「為什麼不能同時掃兩個 QR」）：
-      // 一幀多碼本來就支援——舊邏輯「一解到就提前返回」把同幀的另一半
-      // 丟掉。整張＋四象限＋中央變焦**同時跑**，全部結果合併去重。
-      final stages = const [
-        ('full', 1.0, 0.0, 0.0),
-        ('q-tl', 0.5, 0.0, 0.0),
-        ('q-tr', 0.5, 0.5, 0.0),
-        ('q-bl', 0.5, 0.0, 0.5),
-        ('q-br', 0.5, 0.5, 0.5),
-        ('c70', 0.7, 0.15, 0.15),
-        ('c50', 0.5, 0.25, 0.25),
-      ];
-      // 先**同步**繪製每個階段各自的 canvas（每階段獨立——並行偵測時
-      // 不會互相覆蓋），再一次並行偵測（單一 region 延遲即整批延遲）。
-      final prepared = <(String, JSObject, double, double)>[
-        for (final (name, f, ox, oy) in stages)
-          (
-            name,
-            f == 1.0
-                ? v as JSObject
-                : _cropCanvas(v, name, f, ox, oy) as JSObject,
-            ox,
-            oy,
-          ),
-      ];
-      final futures = [
-        for (final (_, source, ox, oy) in prepared)
-          _detectOn(source, ox * v.videoWidth, oy * v.videoHeight, 1.0, 1.0),
-      ];
-      final all = await Future.wait(futures);
-      final union = <String>{for (final r in all) ...r};
-      return union.toList();
+      // ① 整幀（每 tick 必跑——最常命中；繪製到 canvas＝座標基準確定）。
+      final full =
+          await _detectOn(_stageCanvas(v, 'full', 1.0, 0, 0), 0, 0, 1, 1);
+      if (full.isNotEmpty) return full;
+      // ② **單一輪替區域**（每 tick 一個——PM 2026-11-23「相機顯示等太久」：
+      // 並行全階段會把 tick 塞爆）；漏掉的位置由後續 tick 輪替補上，
+      // 跨 tick 累積窗合併雙碼。
+      final (name, f, ox, oy) =
+          _extraStages[_extraCursor % _extraStages.length];
+      _extraCursor++;
+      final r = await _detectOn(
+          _stageCanvas(v, name, f, ox, oy), ox * v.videoWidth,
+          oy * v.videoHeight, 1, 1);
+      if (r.isNotEmpty) return r;
+      return const [];
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
     }
