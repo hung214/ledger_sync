@@ -414,7 +414,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                       _diagExpanded
                           ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
                               '命中 $_decodeHits · 解 $_decodeMs ms'
-                              '${_controller.elementInfo.isEmpty ? '' : ' · ${_controller.elementInfo}'}'
                               '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
                           : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
                       key: const Key('webcam-diag'),
