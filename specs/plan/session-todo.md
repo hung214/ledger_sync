@@ -11,9 +11,10 @@
 
 ## 📋 工作流程修正（PM 2026-11-23 指示）
 
-- [x] **W1 工作流程規則**：每項修改/功能都建立**新分支**，完成後一次 MR 到 main
-  ❌ 錯誤做法：直接在 feature/ios-pwa 修改＋推送（已發生 T21/T23/T57/T58）
-  ✅ 正確做法：`git checkout -b feat/xxx` → 修改＋commit → `git push origin feat/xxx` → MR 到 main
+- [x] **W1 工作流程規則（PM 2026-11-23 指示）**：每項修改/功能都建立**新分支**，完成後一次 MR 到 `feature/ios-pwa`
+  ❌ 錯誤做法：直接在 feature/ios-pwa/main 修改＋推送（已發生 T21/T23/T57/T58/0.5.0 發版）
+  ✅ 正確做法：`git checkout -b feat/xxx` → 修改＋commit → `git push origin feat/xxx` → **MR 到 `feature/ios-pwa`**
+  ⚠️ 等全部工作完成並經 PM 確認後，再統一 MR `feature/ios-pwa` → `main`
   ⚠️ 現狀：feature/ios-pwa 已累積多筆 commit（T21 OCR 框、T23-diag、查詢面板同步、
   0.5.0 版本 bump、T57 PWA 回退、T58 補光開關）——這些已在遠端，不再回滾，
   僅作為歷史參考；未來工作一律新分支

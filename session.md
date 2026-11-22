@@ -3,7 +3,7 @@
 | 項目 | 內容 |
 |---|---|
 | 用途 | **休息／中斷工作前**記錄當前進度，下次開工快速恢復；配套規範見 `specs/plan/tasks.md` §0 |
-| 原則 | ⓪**發佈前必經「本地預覽＋PM 親眼確認」**（PM 2026-10-23：未經預覽簽認不得 push tag；預覽形式＝UI_DEMO 畫廊/雛型 HTML/實機安裝，三者擇一並截圖或口頭確認）①離開前必填「目前快照＋下一步」②狀態同步回 `tasks.md` §6（🔴/🟢/🔵/✅）③工作變更必先 commit（或明確標註 WIP 原因）④**本地部署驗證**：整體軟體所有測試寫完＋全量綠燈後做**一次**（非每個功能做完就部署；PM 2026-10-20 指示），通過才 push ⑤執行每個任務前列出 TASK/TODOLIST 讓 PM 可見（PM 2026-10-19 指示）⑥**FE integration test 暫停**（PM 2026-10-24：多項 UI 尚在修正，**先不要跑 FE 測試**——待 PM 指示再恢復；檔案保留不刪）⑦**每次發行版必標註本版修改**（PM 2026-10-26）：發版前於 `CHANGELOG.md` 新增該版區段，CI 自動帶入 GitHub Release 說明——詳見 **§1.1**⑧**工作流程：每項修改建新分支＋一次 MR 到 main**（PM 2026-11-23 指示）：`git checkout -b feat/xxx` → 修改＋commit → `git push origin feat/xxx` → MR 到 main；**禁止直接在 feature/ios-pwa/main 上修改＋推送**。 |
+| 原則 | ⓪**發佈前必經「本地預覽＋PM 親眼確認」**（PM 2026-10-23：未經預覽簽認不得 push tag；預覽形式＝UI_DEMO 畫廊/雛型 HTML/實機安裝，三者擇一並截圖或口頭確認）①離開前必填「目前快照＋下一步」②狀態同步回 `tasks.md` §6（🔴/🟢/🔵/✅）③工作變更必先 commit（或明確標註 WIP 原因）④**本地部署驗證**：整體軟體所有測試寫完＋全量綠燈後做**一次**（非每個功能做完就部署；PM 2026-10-20 指示），通過才 push ⑤執行每個任務前列出 TASK/TODOLIST 讓 PM 可見（PM 2026-10-19 指示）⑥**FE integration test 暫停**（PM 2026-10-24：多項 UI 尚在修正，**先不要跑 FE 測試**——待 PM 指示再恢復；檔案保留不刪）⑦**每次發行版必標註本版修改**（PM 2026-10-26）：發版前於 `CHANGELOG.md` 新增該版區段，CI 自動帶入 GitHub Release 說明——詳見 **§1.1**⑧**工作流程：每項修改建新分支＋一次 MR 到 `ios-pwa`**（PM 2026-11-23 指示）：`git checkout -b feat/xxx` → 修改＋commit → `git push origin feat/xxx` → **MR 到 `feature/ios-pwa`**（不可直接合併 main）。全部工作完成並經 PM 確認後，再統一 MR `feature/ios-pwa` → `main`。**禁止直接在 feature/ios-pwa/main 上修改＋推送**。 |
 
 ---
 
