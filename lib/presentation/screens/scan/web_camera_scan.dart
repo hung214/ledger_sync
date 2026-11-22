@@ -83,6 +83,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   bool _diagExpanded = false; // 診斷行展開（PM：預設短格式，點擊展開）
   double _zoom = 0; // 0=1×、0.5=2×、1.0=3×
   bool _zoomSupported = false;
+  bool _torchOn = false; // 補光開關狀態
+  bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
   Offset? _focusIndicator; // 點擊回饋
   Timer? _focusIndicatorReset;
 
@@ -101,6 +103,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     _focusIndicatorReset = Timer(const Duration(milliseconds: 700), () {
       if (mounted) setState(() => _focusIndicator = null);
     });
+  }
+
+  /// 補光（手電筒）開關：web MediaStreamTrack.applyConstraints torch，
+  /// 無能力或相機未啟動 → 靜默失敗。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() => _torchOn = _controller.torchOn);
+    }
   }
 
   /// 原生偵測器命中的條碼框（正規化——綠框高亮）。
@@ -124,6 +135,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       final preview = await _controller.start();
       if (!mounted) return;
       _zoomSupported = _controller.zoomSupported;
+      _torchSupported = _controller.torchSupported;
       if (mounted) {
         setState(() {
           _preview = preview;
@@ -510,6 +522,36 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                             ),
                           ),
                       ]),
+                    ),
+                  ),
+                // 補光開關（web：MediaStreamTrack.applyConstraints torch；
+                // 支援度有限——無能力則隱藏）。
+                if (_torchSupported)
+                  Positioned(
+                    right: videoRect.left + 8,
+                    top: videoRect.top + 88,
+                    child: GestureDetector(
+                      key: const Key('webcam-torch-toggle'),
+                      onTap: () => unawaited(_toggleTorch()),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _torchOn
+                              ? Colors.white
+                              : Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _torchOn
+                              ? Icons.flash_on
+                              : Icons.flash_off,
+                          color: _torchOn
+                              ? Colors.black
+                              : Colors.white,
+                          size: 20,
+                        ),
+                      ),
                     ),
                   ),
                 // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——

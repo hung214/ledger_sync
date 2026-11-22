@@ -84,6 +84,16 @@ class WebCameraStreamController implements CameraStreamController {
   bool get hasNativeBarcodeDetector => _barcodeDetectorCtor != null;
 
   double? _maxZoom;
+  bool _torchOn = false;
+
+  @override
+  bool get torchSupported => _torchCapability != null;
+
+  /// 快取的 torch 能力（getCapabilities 呼叫一次即可，避免重複 JS 開銷）。
+  bool? _torchCapability;
+
+  @override
+  bool get torchOn => _torchOn;
 
   @override
   bool get zoomSupported => _maxZoom != null && _maxZoom! > 1;
@@ -134,6 +144,32 @@ class WebCameraStreamController implements CameraStreamController {
           .toDart;
     } catch (_) {
       // 裝置不支援變焦——靜默。
+    }
+  }
+
+  @override
+  Future<void> toggleTorch() async {
+    try {
+      final tracks = _stream?.getVideoTracks().toDart;
+      if (tracks == null || tracks.isEmpty) return;
+      final track = tracks.first;
+      // 檢查 torch 能力（快取一次）。
+      if (_torchCapability == null) {
+        final caps = track.getCapabilities();
+        _torchCapability =
+            (caps as JSObject).getProperty('torch'.toJS) != null;
+      }
+      if (_torchCapability != true) return;
+      // 切換 torch：applyConstraints advanced [{torch: !_torchOn}]
+      final advanced = <web.MediaTrackConstraintSet>[
+        web.MediaTrackConstraintSet(torch: (!_torchOn).toJS),
+      ].toJS;
+      await track
+          .applyConstraints(web.MediaTrackConstraints(advanced: advanced))
+          .toDart;
+      _torchOn = !_torchOn;
+    } catch (_) {
+      // 無補光能力或相機未啟動——靜默。
     }
   }
 

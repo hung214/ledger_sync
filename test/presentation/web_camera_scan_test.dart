@@ -171,6 +171,15 @@ class _FakeController implements CameraStreamController {
   Future<void> setFocusPoint(Offset normalized) async {}
 
   @override
+  bool get torchSupported => false;
+
+  @override
+  Future<void> toggleTorch() async {}
+
+  @override
+  bool get torchOn => false;
+
+  @override
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
 
   @override
