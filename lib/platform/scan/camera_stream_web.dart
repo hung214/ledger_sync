@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -159,6 +160,63 @@ class WebCameraStreamController implements CameraStreamController {
   double _frameH = 0;
   ({List<Rect> boxes, Size frameSize})? _lastNativeBoxesData;
 
+  /// **黑畫面看門狗**（T38，PM 2026-11-23：退出重進掃描頁＝黑畫面——
+  /// stream 有拿到但畫面沒渲染；rollback 後依舊＝web 層既有問題）：
+  /// 每秒採樣 16×16 亮度，連續 3 次近黑 → 自動停軌重取 stream（自癒，
+  /// 上限 5 次——避免無限迴圈）。
+  Timer? _watchdog;
+  int _blackStreak = 0;
+  int _healCount = 0;
+  web.HTMLCanvasElement? _probeCanvas;
+
+  void _startWatchdog(web.HTMLVideoElement video) {
+    _watchdog?.cancel();
+    _blackStreak = 0;
+    _watchdog = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final v = _video;
+      if (v == null || v.videoWidth == 0) return;
+      if (v.readyState < 2) {
+        _blackStreak++;
+      } else {
+        final lum = _sampleLuminance(v);
+        if (lum < 4) {
+          _blackStreak++;
+        } else {
+          _blackStreak = 0;
+          return;
+        }
+      }
+      if (_blackStreak >= 3 && _healCount < 5) {
+        _blackStreak = 0;
+        _healCount++;
+        try {
+          for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+            t.stop();
+          }
+          await Future.delayed(const Duration(milliseconds: 600));
+          await _openOn(video);
+        } catch (_) {}
+      }
+    });
+  }
+
+  /// 採樣影像平均亮度（0~255；16×16 縮樣——web 同源不污染）。
+  double _sampleLuminance(web.HTMLVideoElement v) {
+    final canvas = _probeCanvas ??=
+        (web.document.createElement('canvas') as web.HTMLCanvasElement)
+          ..width = 16
+          ..height = 16;
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+    ctx.drawImage(v, 0, 0, 16, 16);
+    final data = ctx.getImageData(0, 0, 16, 16).data.toDart;
+    var sum = 0;
+    for (var i = 0; i < data.length; i += 4) {
+      sum += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])
+          .round();
+    }
+    return sum / (data.length / 4);
+  }
+
   @override
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes =>
       _lastNativeBoxesData;
@@ -269,6 +327,8 @@ class WebCameraStreamController implements CameraStreamController {
       } catch (_) {
         // 暖機失敗不阻擋——正式取得流程自行處理錯誤。
       }
+      // 暖機停止後給 OS 300ms 釋放（重進黑畫面保險——T38）。
+      await Future.delayed(const Duration(milliseconds: 300));
       await _openOn(video);
     } catch (e) {
       dispose();
@@ -276,6 +336,9 @@ class WebCameraStreamController implements CameraStreamController {
     }
     // iOS：背景後軌跡被系統結束（WebKit 239849）——重回可見時自動重取。
     _attachVisibilityRevival(video);
+    // 黑畫面看門狗（T38）——重進頁面黑畫面自癒。
+    _healCount = 0;
+    _startWatchdog(video);
     return HtmlElementView(viewType: _viewType);
   }
 

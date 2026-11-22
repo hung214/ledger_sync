@@ -16,7 +16,6 @@ import '../../category_display.dart';
 import '../../theme/app_theme.dart';
 import 'recent_deletions_page.dart';
 import 'tx_edit_sheet.dart';
-import '../recurring/recurring_queue_page.dart';
 import '../scan/scan_page.dart';
 
 /// 明細頁（FR-R3 呈現面）：未刪除交易列表＋複合篩選（期間/分類/關鍵字，
@@ -67,7 +66,6 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
   Widget build(BuildContext context) {
     // 訂閱交易變化（儲存/復原/刪除後即時刷新 AC-02——快記 controller 會 invalidate）。
     ref.watch(ledgerProvider);
-    final dueCount = ref.watch(recurringDueCountProvider);
     final db = ref.watch(dbProvider);
     final search = SearchService(db);
     final range = _periodRange();
@@ -131,6 +129,13 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       appBar: AppBar(
         title: const Text('明細'),
         actions: [
+          // **查詢**（PM 2026-11-23：分類＋關鍵字收進查詢按鈕——不再常駐佔位）。
+          IconButton(
+            key: const Key('ledger-search'),
+            tooltip: '查詢',
+            onPressed: () => _openSearchSheet(context, db),
+            icon: const Icon(Icons.search),
+          ),
           // 掃描入口（FR-S6：獨立於快記大鈕；F03 S1）。
           IconButton(
             key: const Key('scan-entry'),
@@ -158,7 +163,6 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
         children: [
           // P2（雛型 02-ledger）：帳戶 chips 橫列＋收支性質篩選 chips。
           _accountChips(context, db),
-          _duePill(context, dueCount),
           _monthBar(context, db),
           _kindChips(context),
           _filterBar(context, db),
@@ -201,39 +205,6 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     if (diff == 0) return '今天 $md';
     if (diff == 1) return '昨天 $md';
     return '$md（${_dayWd[day.weekday - 1]}）';
-  }
-
-  /// 待確認 pill（FR-T5 呈現面；雛型 02 琥珀 pill）——定期交易提醒確認制入口。
-  /// 0 亦顯示（F06-FE S2 契約：key `recurring-badge` ＋文字「待確認 N」）。
-  Widget _duePill(BuildContext context, int dueCount) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-      child: InkWell(
-        key: const Key('recurring-badge'),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const RecurringQueuePage()),
-        ),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: dueCount > 0 ? const Color(0xFFFFF1D6) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(children: [
-            const Text('⏳', style: TextStyle(fontSize: 12)),
-            const SizedBox(width: 6),
-            Text('待確認 $dueCount',
-                style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFFB45309))),
-            const Text(' — 點擊處理',
-                style: TextStyle(fontSize: 11, color: Color(0xFFB45309))),
-          ]),
-        ),
-      ),
-    );
   }
 
   /// 分日群組（雛型 02）：今天／昨天／MM/DD（週）＋當日**小計**（淨額；轉帳不計收支）。
@@ -513,62 +484,112 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
           onDeleted: () => setState(() => _keyword = ''),
         ),
     ];
+    // PM 2026-11-23：分類＋關鍵字輸入移進 AppBar「查詢」面板；
+    // 此列只顯示**活動中的篩選**（chips＋清除）。
+    if (chips.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              const SizedBox(width: 8),
-              Flexible(
-                child: PopupMenuButton<String>(
-                  key: const Key('filter-category'),
-                  tooltip: '分類',
-                  onSelected: (id) => setState(() => _categoryFilter = id),
-                  itemBuilder: (_) => [
-                    for (final c in db.categoriesByKind('expense'))
-                      PopupMenuItem(value: c.id, child: Text(c.name)),
-                  ],
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: '分類', isDense: true),
-                    child: Text(_categoryFilter == null
-                        ? '全部'
-                        : (db.categoryName(_categoryFilter!) ?? '')),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  key: const Key('filter-keyword'),
-                  decoration:
-                      const InputDecoration(labelText: '關鍵字', isDense: true),
-                  onChanged: (v) => setState(() => _keyword = v.trim()),
-                ),
-              ),
-            ],
+          ...chips.map((c) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: c,
+              )),
+          TextButton(
+            key: const Key('filter-clear'),
+            onPressed: () => setState(() {
+              _range = null;
+              _categoryFilter = null;
+              _keyword = '';
+            }),
+            child: const Text('清除篩選'),
           ),
-          if (chips.isNotEmpty)
-            Row(
-              children: [
-                ...chips.map((c) => Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: c,
-                    )),
-                TextButton(
-                  key: const Key('filter-clear'),
-                  onPressed: () => setState(() {
-                    _range = null;
-                    _categoryFilter = null;
-                    _keyword = '';
-                  }),
-                  child: const Text('清除篩選'),
-                ),
-              ],
-            ),
         ],
       ),
     );
+  }
+
+  /// **查詢面板**（PM 2026-11-23：關鍵字＋分類收進上方查詢按鈕）。
+  /// 搜尋範圍＝商家／備註／**分類名稱／帳戶名稱／金額（元）**。
+  Future<void> _openSearchSheet(BuildContext context, AppDatabase db) async {
+    var kw = _keyword;
+    var cat = _categoryFilter;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: TextField(
+                  key: const Key('filter-keyword'),
+                  controller: TextEditingController(text: kw),
+                  autofocus: kw.isEmpty,
+                  decoration: const InputDecoration(
+                      labelText: '關鍵字（商家／備註／分類／帳戶／金額）',
+                      border: OutlineInputBorder()),
+                  onChanged: (v) => kw = v.trim(),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text('分類',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('全部'),
+                      selected: cat == null,
+                      onSelected: (_) => setSheet(() => cat = null),
+                    ),
+                    for (final c in db.categoriesByKind('expense'))
+                      ChoiceChip(
+                        label: Text(c.name),
+                        selected: cat == c.id,
+                        onSelected: (_) => setSheet(() => cat = c.id),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(children: [
+                  TextButton(
+                    onPressed: () {
+                      kw = '';
+                      cat = null;
+                      Navigator.of(sheetCtx).pop();
+                    },
+                    child: const Text('清除篩選'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                    child: const Text('套用'),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _keyword = kw;
+      _categoryFilter = cat;
+    });
   }
 
   /// 期間範圍（自訂區間優先；其次月份；皆無＝全部）。
