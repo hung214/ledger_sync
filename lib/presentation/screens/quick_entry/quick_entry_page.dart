@@ -6,6 +6,7 @@ import '../../../application/appearance/theme_mode_state.dart';
 import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
 import '../../category_display.dart';
+import '../scan/scan_page.dart' show openScanFlow;
 import '../../merchant_picker_dialog.dart';
 import 'amount_keypad.dart';
 import 'category_picker_dialog.dart';
@@ -142,6 +143,13 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
       appBar: AppBar(
         title: const Text('快速記帳'),
         actions: [
+          // 掃描入口（PM 2026-11-23：手機版掃描 FAB 移除——統一此處）。
+          IconButton(
+            key: const Key('qe-scan-entry'),
+            tooltip: '掃描發票',
+            onPressed: () => openScanFlow(context, ref),
+            icon: const Icon(Icons.document_scanner_outlined),
+          ),
           // 主題切換（PM 2026-10-22：亮/暗按鈕——亮色以 01/02 白卡風格為準）。
           IconButton(
             key: const Key('qe-theme-toggle'),

@@ -32,6 +32,41 @@ class SearchService {
       } else {
         rows = _db.transactionsContaining(kw);
       }
+      // **擴大搜尋範圍**（PM 2026-11-23 實測：22 筆中 19 筆無商家/備註——
+      // 只搜 merchant/note 等於沒效果）：**分類名稱／帳戶名稱／金額（元）**。
+      final catNames = {
+        for (final c in [
+          ..._db.categoriesByKind('expense'),
+          ..._db.categoriesByKind('income'),
+        ])
+          c.id: c.name,
+      };
+      final accNames = {for (final a in _db.allAccounts()) a.id: a.name};
+      final catIds = {
+        for (final e in catNames.entries)
+          if (e.value.contains(kw)) e.key,
+      };
+      final accIds = {
+        for (final e in accNames.entries)
+          if (e.value.contains(kw)) e.key,
+      };
+      // 金額（元；整數或小數——UI 顯示元，1.2 → 120 minor）。
+      final amountValue = double.tryParse(kw);
+      final amountMinor =
+          amountValue == null ? null : (amountValue * 100).round();
+      if (catIds.isNotEmpty || accIds.isNotEmpty || amountMinor != null) {
+        final byId = {for (final r in rows) r.id: r};
+        for (final t in _db
+            .select('SELECT * FROM transactions WHERE deleted_at IS NULL')
+            .map(TxRow.fromRow)) {
+          final hit = (t.categoryId != null && catIds.contains(t.categoryId)) ||
+              accIds.contains(t.accountId) ||
+              (t.toAccountId != null && accIds.contains(t.toAccountId)) ||
+              (amountMinor != null && t.amountMinor == amountMinor);
+          if (hit) byId.putIfAbsent(t.id, () => t);
+        }
+        rows = byId.values.toList();
+      }
     } else {
       rows = _db.transactionsBetween(
         startMs ?? 0,
