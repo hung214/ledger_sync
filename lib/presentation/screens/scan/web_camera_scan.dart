@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -338,8 +337,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final mode = ref.watch(scanModeProvider);
     return Column(
       children: [
-        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**，
-        // 不在下方）：電子發票＝QR；紙本發票＝相機續掃＋「手動開一筆」。
+        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**）。
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: SegmentedButton<ScanMode>(
@@ -359,157 +357,173 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                 ref.read(scanModeProvider.notifier).set(selection.first),
           ),
         ),
+        // 預覽：**contain 幾何**（PM 2026-11-23「放很大、比例不對、顆粒
+        // 清楚」——cover 在預覽區比例不合時大裁切＋放大）。video 完整
+        // 顯示（黑邊背景），引導框/綠框/按鈕全部定位在 videoRect 內。
         Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              KeyedSubtree(
-                  key: const Key('webcam-preview'), child: _preview!),
-              if (drafts.isNotEmpty)
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final aspect = _controller.videoAspect ?? 16 / 9;
+              final videoRect = _containRect(constraints.biggest, aspect);
+              final aimRect = _aimFrameRect(videoRect);
+              return Stack(children: [
+                // 影像（contain；黑邊背景）。
+                Positioned.fromRect(
+                  rect: videoRect,
+                  child: KeyedSubtree(
+                      key: const Key('webcam-preview'), child: _preview!),
+                ),
+                if (drafts.isNotEmpty)
+                  Positioned(
+                    left: videoRect.left + 12,
+                    top: videoRect.top + 12,
+                    child: Chip(
+                      avatar: const Icon(Icons.check_circle,
+                          color: Colors.green, size: 18),
+                      label: Text('已加入 ${drafts.length} 張'),
+                    ),
+                  ),
+                // 切換鏡頭（PM 2026-11-21）。
                 Positioned(
-                  left: 12,
-                  top: 12,
-                  child: Chip(
-                    avatar: const Icon(Icons.check_circle,
-                        color: Colors.green, size: 18),
-                    label: Text('已加入 ${drafts.length} 張'),
+                  right: videoRect.left + 12,
+                  top: videoRect.top + 12,
+                  child: IconButton(
+                    key: const Key('webcam-switch-camera'),
+                    tooltip: '切換鏡頭',
+                    onPressed: () => _controller.switchCamera(),
+                    icon: const Icon(Icons.cameraswitch),
+                    color: Colors.white,
                   ),
                 ),
-              // 切換鏡頭（PM 2026-11-21 按鈕需求）。
-              Positioned(
-                right: 12,
-                top: 12,
-                child: IconButton(
-                  key: const Key('webcam-switch-camera'),
-                  tooltip: '切換鏡頭',
-                  onPressed: () => _controller.switchCamera(),
-                  icon: const Icon(Icons.cameraswitch),
-                  color: Colors.white,
+                // 辨識區域引導框（四角括號——與 APP 同款；純視覺）。
+                Positioned.fromRect(
+                  rect: aimRect,
+                  child: IgnorePointer(
+                      child: CustomPaint(
+                          painter: _CornerBrackets(rect: aimRect))),
                 ),
-              ),
-              // 辨識區域引導框（與 APP 同款——純視覺，偵測全畫面+分層）。
-              const Positioned.fill(
-                child: IgnorePointer(child: _WebAimFrame()),
-              ),
-              // 原生偵測器命中 → 綠框（正規化座標 → preview cover 映射）。
-              ValueListenableBuilder(
-                valueListenable: _nativeBoxesNotifier,
-                builder: (context, boxes, _) =>
-                    boxes == null || boxes.boxes.isEmpty
-                        ? const SizedBox.shrink()
-                        : Positioned.fill(
-                            child: IgnorePointer(
-                              child: CustomPaint(
-                                painter: _NativeBoxPainter(
-                                  boxes: boxes.boxes,
-                                  frameSize: boxes.frameSize,
+                // 原生偵測器命中 → 綠框（正規化座標 → videoRect 映射）。
+                ValueListenableBuilder(
+                  valueListenable: _nativeBoxesNotifier,
+                  builder: (context, boxes, _) =>
+                      boxes == null || boxes.boxes.isEmpty
+                          ? const SizedBox.shrink()
+                          : Positioned.fromRect(
+                              rect: videoRect,
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _NativeBoxPainter(
+                                      boxes: boxes.boxes,
+                                      videoRect: videoRect),
                                 ),
                               ),
                             ),
-                          ),
-              ),
-              // 變焦按鈕（PM 2026-11-23：小/遠條碼——變焦取代靠近）。
-              if (_zoomSupported)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      for (final (label, z) in const [
-                        ('1×', 0.0),
-                        ('2×', 0.5),
-                        ('3×', 1.0),
-                      ])
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() => _zoom = z);
-                              unawaited(_controller.setZoom(z));
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _zoom == z
-                                    ? Colors.white
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
+                ),
+                // 變焦按鈕（PM 2026-11-23：小/遠條碼——變焦取代靠近）。
+                if (_zoomSupported)
+                  Positioned(
+                    right: videoRect.left + 8,
+                    top: videoRect.top + 48,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        for (final (label, z) in const [
+                          ('1×', 0.0),
+                          ('2×', 0.5),
+                          ('3×', 1.0),
+                        ])
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 2),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _zoom = z);
+                                unawaited(_controller.setZoom(z));
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _zoom == z
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(label,
+                                    style: TextStyle(
+                                        color: _zoom == z
+                                            ? Colors.black
+                                            : Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
                               ),
-                              child: Text(label,
-                                  style: TextStyle(
-                                      color: _zoom == z
-                                          ? Colors.black
-                                          : Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700)),
                             ),
                           ),
-                        ),
-                    ]),
+                      ]),
+                    ),
                   ),
-                ),
-              // 畫面提示（只掃到明細碼等——與 APP 同款）。
-              if (_hint != null)
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(20),
+                // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
+                // scan_policy 平台分流）。
+                if (mode == ScanMode.paper)
+                  Positioned(
+                    left: videoRect.left,
+                    right: videoRect.left,
+                    top: videoRect.bottom - 48,
+                    child: Center(
+                      child: FilledButton.icon(
+                        key: const Key('webcam-manual-entry'),
+                        onPressed: _addBlankDraft,
+                        icon: const Icon(Icons.receipt_long),
+                        label: const Text('手動開一筆'),
                       ),
-                      child: Text(_hint!,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12)),
                     ),
                   ),
-                ),
-              // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
-              // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
-              if (mode == ScanMode.paper)
+                // 畫面提示（只掃到明細碼等——與 APP 同款）。
+                if (_hint != null)
+                  Positioned(
+                    left: videoRect.left,
+                    right: videoRect.left,
+                    top: videoRect.bottom - 12,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(_hint!,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12)),
+                      ),
+                    ),
+                  ),
+                // 診斷面板（videoRect 左下）。
                 Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 48,
-                  child: Center(
-                    child: FilledButton.icon(
-                      key: const Key('webcam-manual-entry'),
-                      onPressed: _addBlankDraft,
-                      icon: const Icon(Icons.receipt_long),
-                      label: const Text('手動開一筆'),
+                  left: videoRect.left + 12,
+                  top: videoRect.bottom - 40,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · 命中 $_decodeHits · 解 $_decodeMs ms'
+                      '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}',
+                      key: const Key('webcam-diag'),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 11),
                     ),
                   ),
                 ),
-              // 診斷面板（定位「無法正確掃描」：取幀是否流動／解碼是否命中）。
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(6)),
-                  child: Text(
-                    '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · 命中 $_decodeHits · 解 $_decodeMs ms'
-                    '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}',
-                    key: const Key('webcam-diag'),
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 11),
-                  ),
-                ),
-              ),
-            ],
+              ]);
+            }),
           ),
         ),
         Padding(
@@ -550,6 +564,26 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     );
   }
 
+  /// 在 [container] 內以 [aspect] 置中取最大內接矩形（contain 幾何）。
+  Rect _containRect(Size container, double aspect) {
+    final targetH = container.width / aspect;
+    if (targetH <= container.height) {
+      return Rect.fromLTWH(
+          0, (container.height - targetH) / 2, container.width, targetH);
+    }
+    final targetW = container.height * aspect;
+    return Rect.fromLTWH(
+        (container.width - targetW) / 2, 0, targetW, container.height);
+  }
+
+  /// 引導框 rect（videoRect 內：88%×42% 置中偏上——雙 QR 橫排）。
+  Rect _aimFrameRect(Rect videoRect) => Rect.fromCenter(
+        center: Offset(videoRect.center.dx,
+            videoRect.top + videoRect.height * 0.42),
+        width: videoRect.width * 0.88,
+        height: videoRect.height * 0.42,
+      );
+
   Widget _buildFailed(BuildContext context) {
     return Center(
       child: Padding(
@@ -589,24 +623,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
 enum _CamState { starting, live, failed }
 
-/// 辨識區域引導框（四角括號——與 APP 同款；純視覺）。
-class _WebAimFrame extends StatelessWidget {
-  const _WebAimFrame();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final rect = Rect.fromCenter(
-        center: Offset(constraints.biggest.width / 2,
-            constraints.biggest.height * 0.42),
-        width: constraints.biggest.width * 0.88,
-        height: constraints.biggest.height * 0.42,
-      );
-      return CustomPaint(painter: _CornerBrackets(rect: rect));
-    });
-  }
-}
-
 class _CornerBrackets extends CustomPainter {
   _CornerBrackets({required this.rect});
 
@@ -645,24 +661,16 @@ class _CornerBrackets extends CustomPainter {
   bool shouldRepaint(_CornerBrackets old) => old.rect != rect;
 }
 
-/// 原生偵測器命中的條碼框（正規化 rect → preview cover 映射——綠框）。
+/// 原生偵測器命中的條碼框（正規化 rect → videoRect 映射——綠框）。
 class _NativeBoxPainter extends CustomPainter {
-  _NativeBoxPainter({required this.boxes, required this.frameSize});
+  _NativeBoxPainter({required this.boxes, required this.videoRect});
 
   final List<Rect> boxes;
-  final Size frameSize;
+  final Rect videoRect;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (frameSize.isEmpty || boxes.isEmpty) return;
-    final scale = math.max(
-      size.width / frameSize.width,
-      size.height / frameSize.height,
-    );
-    final offset = Offset(
-      (size.width - frameSize.width * scale) / 2,
-      (size.height - frameSize.height * scale) / 2,
-    );
+    if (videoRect.isEmpty || boxes.isEmpty) return;
     final fill = Paint()..color = Colors.green.withValues(alpha: 0.15);
     final stroke = Paint()
       ..color = Colors.greenAccent
@@ -670,10 +678,11 @@ class _NativeBoxPainter extends CustomPainter {
       ..strokeWidth = 3
       ..strokeJoin = StrokeJoin.round;
     for (final box in boxes) {
-      final r = Rect.fromLTWH(box.left * frameSize.width * scale + offset.dx,
-          box.top * frameSize.height * scale + offset.dy,
-          box.width * frameSize.width * scale,
-          box.height * frameSize.height * scale);
+      final r = Rect.fromLTRB(
+          videoRect.left + box.left * videoRect.width,
+          videoRect.top + box.top * videoRect.height,
+          videoRect.left + box.right * videoRect.width,
+          videoRect.top + box.bottom * videoRect.height);
       canvas.drawRect(r.inflate(4), fill);
       canvas.drawRect(r.inflate(4), stroke);
     }
@@ -681,5 +690,5 @@ class _NativeBoxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_NativeBoxPainter old) =>
-      old.boxes != boxes || old.frameSize != frameSize;
+      old.boxes != boxes || old.videoRect != videoRect;
 }

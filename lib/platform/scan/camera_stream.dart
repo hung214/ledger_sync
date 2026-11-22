@@ -49,6 +49,9 @@ abstract interface class CameraStreamController {
   /// PM 2026-11-22 Mac PWA 定位用）。無資訊回空字串。
   String get resolutionInfo;
 
+  /// 視訊長寬比（w/h；未就緒回 null——web 預覽 contain 幾何用）。
+  double? get videoAspect;
+
   /// 瀏覽器**原生條碼偵測器**（BarcodeDetector API）可用？（T10——
   /// Chrome/Edge/Safari 17+；品質遠勝 zxing2。僅 web 實作回 true。）
   bool get hasNativeBarcodeDetector;

@@ -63,6 +63,13 @@ class WebCameraStreamController implements CameraStreamController {
         : '${v.videoWidth}x${v.videoHeight}';
   }
 
+  @override
+  double? get videoAspect {
+    final v = _video;
+    if (v == null || v.videoWidth == 0 || v.videoHeight == 0) return null;
+    return v.videoWidth / v.videoHeight;
+  }
+
   _BarcodeDetector? _nativeDetector;
 
   @override
@@ -280,11 +287,13 @@ class WebCameraStreamController implements CameraStreamController {
   Future<void> _openOn(web.HTMLVideoElement video) async {
     _stream = await _acquireRearCamera();
     video.srcObject = _stream;
-    // object-fit: cover——與預覽框映射（綠框/引導框）一致；預設 fill 會
-    // 拉伸變形 → 框全部錯位（PM 2026-11-23「掃描範圍爆掉」）。
-    video.style.setProperty('object-fit', 'cover');
+    // object-fit: contain（PM 2026-11-23：cover 在預覽區比例不合時會
+    // 大裁切＋放大＝「放很大、比例不對、顆粒清楚」）——完整顯示不變形；
+    // 黑邊由頁面背景呈現；框幾何以 videoRect（contain 幾何）計算。
+    video.style.setProperty('object-fit', 'contain');
     video.style.setProperty('width', '100%');
     video.style.setProperty('height', '100%');
+    video.style.setProperty('background', '#000');
     // 變焦能力探測（有 zoom 能力 → 掃描頁顯示變焦按鈕）。
     try {
       final tracks = _stream?.getVideoTracks().toDart ?? const [];

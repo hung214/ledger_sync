@@ -24,6 +24,9 @@ class _StubCameraController implements CameraStreamController {
   String get resolutionInfo => '';
 
   @override
+  double? get videoAspect => null;
+
+  @override
   bool get hasNativeBarcodeDetector => false;
 
   @override

@@ -1,7 +1,5 @@
 import 'dart:typed_data';
 
-import 'dart:ui' show Rect;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -147,6 +145,9 @@ class _FakeController implements CameraStreamController {
 
   @override
   String get resolutionInfo => '';
+
+  @override
+  double? get videoAspect => null;
 
   @override
   bool get hasNativeBarcodeDetector => false;
