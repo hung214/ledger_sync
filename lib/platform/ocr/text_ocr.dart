@@ -21,27 +21,65 @@ abstract interface class TextOcrService {
   Future<List<String>> recognizeTextLines(Uint8List bytes);
 }
 
-/// 自文字行找出**發票號碼**（2 碼英文＋8 數字；容許連字號/空白——
-/// 紙本發票印刷常見「AB-12345678」「AB 12345678」「AB12345678」）。
+/// 自文字行找出**發票號碼**（2 碼英文＋8 數字）。優先序：
 ///
-/// **分行配對**（PM 實測 2075/2076：收銀機發票的字軌與號碼**分兩行印**——
-/// 「EF」一行、「20947672」一行）：同行直配失敗時，取字軌行最近的
-/// 8 位數字行配對（OCR 順序不保證，前後都找）。
+/// ① **同行直配**（「AB-12345678」「AB 12345678」「AB12345678」）；
+/// ② **標籤行後的數字行**（收銀機發票排版：號碼緊接「收執聯／統一發票」
+///    標籤之後）＋最近的字軌行組合——PM 2026-11-22 實測 2076：正確號碼
+///    26987585 在「收執聯」後一行；而 40668100（賣方統編位置）在表頭，
+///    近距配對會選錯；
+/// ③ 回退：字軌行 × 最近數字行（無標籤的收據）。
 String? findInvoiceNo(List<String> lines) {
+  final upper = [for (final l in lines) l.trim().toUpperCase()];
+  final digitsRe = RegExp(r'^[0-9]{8}$');
+  final trackRe = RegExp(r'^[A-Z]{2}$');
   final invRe = RegExp(r'([A-Z]{2})\s*[-–]?\s*([0-9]{8})');
-  // ① 同行直接命中。
-  for (final line in lines) {
-    final m = invRe.firstMatch(line.toUpperCase());
+
+  // ① 同行直配。
+  for (final line in upper) {
+    final m = invRe.firstMatch(line);
     if (m != null) return '${m.group(1)}${m.group(2)}';
   }
-  // ② 分行配對：字軌行（恰 2 大寫字母）× 數字行（恰 8 位數字）。
-  final upper = [for (final l in lines) l.trim().toUpperCase()];
+
+  // ② 標籤行後的數字行 ＋ 最近字軌行。
+  String? digits;
+  var digitsIdx = -1;
+  for (var i = 0; i < upper.length; i++) {
+    if (!upper[i].contains('收執聯') &&
+        !upper[i].contains('統一發票') &&
+        !upper[i].contains('電子發票')) {
+      continue;
+    }
+    for (var j = i + 1; j < upper.length && j <= i + 3; j++) {
+      if (digitsRe.hasMatch(upper[j])) {
+        digits = upper[j];
+        digitsIdx = j;
+        break;
+      }
+    }
+    if (digits != null) break;
+  }
+  if (digits != null) {
+    String? track;
+    var bestDist = 1 << 30;
+    for (var i = 0; i < upper.length; i++) {
+      if (!trackRe.hasMatch(upper[i])) continue;
+      final d = (i - digitsIdx).abs();
+      if (d < bestDist) {
+        bestDist = d;
+        track = upper[i];
+      }
+    }
+    return track == null ? digits : '$track$digits';
+  }
+
+  // ③ 回退：字軌行 × 最近數字行。
   final digitIdx = <int>[
     for (var i = 0; i < upper.length; i++)
-      if (RegExp(r'^[0-9]{8}$').hasMatch(upper[i])) i,
+      if (digitsRe.hasMatch(upper[i])) i,
   ];
   for (var i = 0; i < upper.length; i++) {
-    if (!RegExp(r'^[A-Z]{2}$').hasMatch(upper[i])) continue;
+    if (!trackRe.hasMatch(upper[i])) continue;
     int? best;
     var bestDist = 1 << 30;
     for (final j in digitIdx) {
