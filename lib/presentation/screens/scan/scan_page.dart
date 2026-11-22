@@ -105,19 +105,40 @@ class _PermissionDenied extends StatelessWidget {
 
 /// 掃描中（FR-S7 連拍）：模式切換＋相機預覽＋已掃計數＋連續掃描開關
 /// ＋縮圖列＋完成掃描。
-class _ScanningBody extends ConsumerWidget {
+class _ScanningBody extends ConsumerStatefulWidget {
   const _ScanningBody();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ScanningBody> createState() => _ScanningBodyState();
+}
+
+class _ScanningBodyState extends ConsumerState<_ScanningBody> {
+  bool _navigating = false;
+
+  /// 推入確認清單：**掃描暫停**（scanPausedProvider——PM 2026-11-22：
+  /// 確認期間不得繼續偵測＝修「關閉連續掃描還是連續掃描」），返回後恢復。
+  Future<void> _openReview(List<ScannedItem> items) async {
+    if (_navigating) return;
+    _navigating = true;
+    ref.read(scanPausedProvider.notifier).set(true);
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ReviewPage(items: List.of(items))));
+    if (!mounted) return;
+    ref.read(scanPausedProvider.notifier).set(false);
+    _navigating = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(scanDraftsProvider);
     final mode = ref.watch(scanModeProvider);
-    // 連續掃描關閉（PM 2026-11-21）：掃到一張（QR 命中或紙本手動開卡）
-    // → 自動進確認清單；開啟＝連拍累積（FR-S7 預設，「完成掃描」統一進）。
+    // 連續掃描關閉（PM 2026-11-21）：掃到**第一張**（QR 命中或紙本手動開卡）
+    // → 自動進確認清單（掃描同時暫停）；開啟＝連拍累積（FR-S7 預設）。
     ref.listen(scanDraftsProvider, (prev, next) {
-      if (!ref.read(continuousScanProvider) && next.isNotEmpty) {
-        Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => ReviewPage(items: List.of(next))));
+      if (!ref.read(continuousScanProvider) &&
+          (prev == null || prev.isEmpty) &&
+          next.isNotEmpty) {
+        _openReview(next);
       }
     });
     return Column(
@@ -185,7 +206,11 @@ class _ScanningBody extends ConsumerWidget {
               padding: const EdgeInsets.all(8),
               children: [
                 for (var i = 0; i < items.length; i++)
-                  _Thumbnail(item: items[i], index: i),
+                  _Thumbnail(
+                    item: items[i],
+                    index: i,
+                    onTap: () => _openReview([items[i]]),
+                  ),
               ],
             ),
           ),
@@ -197,14 +222,7 @@ class _ScanningBody extends ConsumerWidget {
               key: const Key('scan-finish'),
               onPressed: items.isEmpty
                   ? null
-                  : () {
-                      final drafts = List<ScannedItem>.of(items);
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ReviewPage(items: drafts),
-                        ),
-                      );
-                    },
+                  : () => _openReview(items),
               child: const Text('完成掃描'),
             ),
           ),
@@ -214,38 +232,51 @@ class _ScanningBody extends ConsumerWidget {
   }
 }
 
-/// 掃描縮圖（FR-S7：即時縮圖列表）。
+/// 掃描縮圖（FR-S7：即時縮圖列表；**點擊＝單張編輯**——PM 2026-11-22）。
 class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.item, required this.index});
+  const _Thumbnail(
+      {required this.item, required this.index, required this.onTap});
 
   final ScannedItem item;
   final int index;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final draft = item.draft;
     final total = draft.totalMinor.value;
-    return Container(
+    return GestureDetector(
       key: Key('scan-thumbnail-$index'),
-      width: 88,
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            draft.merchant.value ?? '（未辨識）',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-          Text(total == null ? '—' : '$total 元',
-              style: Theme.of(context).textTheme.labelMedium),
-        ],
+      onTap: onTap,
+      child: Container(
+        width: 88,
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(
+                  draft.merchant.value ?? '（未辨識）',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+              Icon(Icons.edit_outlined,
+                  size: 12, color: Theme.of(context).colorScheme.outline),
+            ]),
+            Text(total == null ? '—' : '$total 元',
+                style: Theme.of(context).textTheme.labelMedium),
+          ],
+        ),
       ),
     );
   }

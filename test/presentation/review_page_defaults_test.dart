@@ -93,11 +93,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('最後一次掃描的帳戶優先；入帳後記住（下次預設）＋多張 Sticky', (tester) async {
+  testWidgets('帳戶/類別＝最後一次掃描優先；入帳記住＋多張 Sticky＋單張移除',
+      (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
     db.setSetting(kScanLastAccountKey, 'bank'); // 上次掃描用了銀行
+    db.setSetting(kScanLastCategoryKey, 'c-food'); // 上次掃描用了餐飲
     final container = _container(db);
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(500, 1200);
@@ -109,29 +111,38 @@ void main() {
           totalMinor: DraftField(total, 1.0),
           date: DraftField(DateTime(2026, 10, 18), 1.0),
         );
+    final item1 = ScannedItem(draft: draft(195));
+    final item2 = ScannedItem(draft: draft(60));
+    container.read(scanDraftsProvider.notifier).add(item1);
+    container.read(scanDraftsProvider.notifier).add(item2);
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
-        home: ReviewPage(items: [
-          ScannedItem(draft: draft(195)),
-          ScannedItem(draft: draft(60)),
-        ]),
+        home: ReviewPage(items: [item1, item2]),
       ),
     ));
     await tester.pumpAndSettle();
 
     expect(find.text('帳戶：銀行（Sticky）'), findsOneWidget,
         reason: '最後一次掃描的帳戶優先於第一個現金帳戶');
+    expect(find.textContaining('餐飲'), findsOneWidget,
+        reason: '類別＝最後一次掃描入帳的類別（非一律「其他」）');
 
-    // 第 1 張：金額 195（預填）→ OK 入帳 → 自動跳第 2 張（帳戶 Sticky 沿用）。
+    // 第 1 張：金額 195（預填）→ OK 入帳 → 自動跳第 2 張（Sticky 沿用）。
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
     expect(db.getSetting(kScanLastAccountKey), 'bank',
         reason: '入帳即記住＝下次掃描預設');
+    expect(db.getSetting(kScanLastCategoryKey), 'c-food',
+        reason: '類別同款記住');
+    expect(container.read(scanDraftsProvider).length, 1,
+        reason: '存檔只移除**該張**（單張編輯不清其他待掃）');
     expect(find.text('第 2 張 / 共 2 張'), findsOneWidget);
     expect(find.text('帳戶：銀行（Sticky）'), findsOneWidget,
         reason: '同回合 Sticky 沿用');
+    expect(find.textContaining('餐飲'), findsOneWidget,
+        reason: '類別 Sticky 沿用');
 
     // 第 2 張：改用現金 → 入帳 → 記住現金。
     await tester.tap(find.byKey(const Key('review-account')));
@@ -142,6 +153,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(db.getSetting(kScanLastAccountKey), 'cash',
         reason: '最後入帳的帳戶＝下次掃描預設');
+    expect(container.read(scanDraftsProvider), isEmpty,
+        reason: '全部存完＝暫存清空（逐張移除）');
     expect(tester.takeException(), isNull);
   });
 

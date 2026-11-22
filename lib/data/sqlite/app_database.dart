@@ -1243,6 +1243,19 @@ class AppDatabase {
 
   // ── 設定（key-value；device.* 為 per-device 不入 oplog） ──
 
+  /// 常用商家（最近使用優先；商家選擇器 T8——PM 2026-11-22：
+  /// 商家「類別同款」可選可增。免新表：交易 DISTINCT merchant）。
+  List<String> distinctMerchants({int limit = 12}) {
+    final rows = _db.select(
+      'SELECT merchant, MAX(occurred_at) AS last_used '
+      'FROM transactions '
+      "WHERE merchant IS NOT NULL AND merchant != '' AND deleted_at IS NULL "
+      'GROUP BY merchant ORDER BY last_used DESC LIMIT ?',
+      [limit],
+    );
+    return [for (final r in rows) r['merchant'] as String];
+  }
+
   void setSetting(String key, String value) => _db.execute(
         'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)'
         ' ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',

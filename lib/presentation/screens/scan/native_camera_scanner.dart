@@ -39,6 +39,15 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   // 兩碼配對（PM 2026-11-20：發票同時有左右兩個 QR——左碼先等右碼
   // 0.8 秒，湊成完整明細再一次入單；逾時才以左碼單獨入單）。
   final Map<String, DateTime> _recent = {}; // 偵測過的條碼 → 時間（3s TTL）
+
+  /// **session 級去重**（PM 2026-11-22：同一張在畫面內不得重複加入——
+  /// 舊 1.5s 時窗會讓同一發票每 1.5 秒重加一張＝「關閉連續掃描還是連續掃描」
+  /// 的根因之一）。已入單的條碼於本回合（scanDrafts 清空前）不再入單。
+  final Set<String> _seenCodes = <String>{};
+
+  /// 每次入單後的掃描暫停（PM 2026-11-22：每掃到一張暫停 0.3 秒——
+  /// 連續掃描也是）；確認清單開啟中另有 [scanPausedProvider] 全停。
+  DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   String? _pendingLeft;
   Timer? _pendingTimer;
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
@@ -95,6 +104,11 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
 
   /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
+    // 掃描節流（PM 2026-11-22）：確認清單開啟中全停＋每筆入單後 0.3 秒暫停。
+    if (ref.read(scanPausedProvider) ||
+        DateTime.now().isBefore(_pausedUntil)) {
+      return;
+    }
     // 綠框高亮＋偵測計數：**所有**偵測到的條碼都畫（含非發票碼——讓使用者
     // 看到「掃到什麼」；角點為影像座標，相對 [BarcodeCapture.size]）。
     if (mounted && !capture.size.isEmpty) {
@@ -261,8 +275,10 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
 
   void _commitDraft(TransactionDraft draft, String note) {
     ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
+    _seenCodes.addAll(_recent.keys); // 本發票所有條碼：本回合不再重複入單
     _recent.clear();
     _pendingLeft = null;
+    _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
     final detail = draft.totalMinor.value != null
         ? '${draft.merchant.value ?? '（未辨識商家）'} ${draft.totalMinor.value} 元'
         : '';
@@ -285,10 +301,13 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(builder: (context, constraints) {
+        // 中央 60% 分析窗（PM 2026-11-22：QR 佔畫面 1/4~1/5 即可辨識，
+        // 不必貼近鏡頭——Vision regionOfInterest 裁切＝數位變焦；
+        // 框線與分析窗同一 rect——看到框＝掃得到）。
         final scanWindow = Rect.fromCenter(
           center: constraints.biggest.center(Offset.zero),
-          width: constraints.biggest.width * 0.7,
-          height: constraints.biggest.height * 0.7,
+          width: constraints.biggest.width * 0.6,
+          height: constraints.biggest.height * 0.6,
         );
         return Stack(
           fit: StackFit.expand,
@@ -296,6 +315,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
             MobileScanner(
               controller: _controller,
               onDetect: _onDetect,
+              scanWindow: scanWindow,
               errorBuilder: (context, error) => _CameraError(onFallback: () {
                 Navigator.of(context).push(MaterialPageRoute<void>(
                     builder: (_) => const ImportPage()));

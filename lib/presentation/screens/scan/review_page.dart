@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
 import '../../../application/scan/scan_defaults.dart';
+import '../../merchant_picker_dialog.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../core/clock.dart';
 import '../../category_display.dart';
@@ -16,8 +17,9 @@ import '../quick_entry/quick_date_time_picker.dart';
 /// 置中大金額＋常駐計算機（OK＝確認儲存）、帳戶｜分類同一列（Sticky 帳戶）、
 /// ◀▶ 日期快調＋DateTime picker、商家/備註欄、逐張自動前進。
 ///
-/// 帳戶預設（PM 2026-11-22）：**最後一次掃描發票入帳的帳戶** → 無則
-/// **第一個現金帳戶**（[resolveScanDefaultAccount]；入帳即記住，跨回合生效）。
+/// 帳戶/類別預設（PM 2026-11-22）：**最後一次掃描發票入帳的帳戶與類別**
+/// → 無則帳戶＝第一個現金帳戶、類別＝「其他」（入帳即記住，跨回合生效）。
+/// 商家欄＝選擇器（最近商家＋直接輸入——T8）。
 /// 日期＝**掃到即用**，不做確認閘（PM 2026-11-22：移除「已確認」按鈕——
 /// 使用者自行以 ◀▶／picker 調整）；發票號碼自動寫入**備註欄**。
 /// 全數完成清掃描暫存返回（acceptance S3.7）。
@@ -42,9 +44,6 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   DateTime _date = DateTime.now();
   String? _categoryId;
   String? _accountId;
-
-  /// 使用者選過分類 → 之後的卡片沿用（Sticky；快記同款）。
-  bool _categoryTouched = false;
 
   String? _blockedMessage;
 
@@ -73,14 +72,14 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     _merchantCtrl.text = draft.merchant.value ?? '';
     // 發票號碼寫入備註欄（PM 2026-11-22：掃描帶金額/時間，發票號入備註）。
     _noteCtrl.text = draft.invoiceNo == null ? '' : '發票號 ${draft.invoiceNo}';
-    if (!_categoryTouched || _categoryId == null) {
-      final cats = ref.read(expenseCategoriesProvider);
-      _categoryId = cats
-              .where((c) => c.name == '其他')
-              .map((c) => c.id)
-              .firstOrNull ??
-          (cats.isEmpty ? null : cats.first.id);
-    }
+    // 類別預設（PM 2026-11-22：與帳戶同款 Sticky）＝**最後一次掃描入帳的
+    // 類別**；無（或已刪除）→「其他」（acceptance S3.3）。
+    final cats = ref.read(expenseCategoriesProvider);
+    final lastCat = ref.read(dbProvider).getSetting(kScanLastCategoryKey);
+    _categoryId = (lastCat != null && cats.any((c) => c.id == lastCat))
+        ? lastCat
+        : (cats.where((c) => c.name == '其他').map((c) => c.id).firstOrNull ??
+            (cats.isEmpty ? null : cats.first.id));
     if (_accountId == null) {
       final last = ref.read(dbProvider).getSetting(kScanLastAccountKey);
       _accountId = resolveScanDefaultAccount(
@@ -126,8 +125,13 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
           note: note.isEmpty ? null : note,
           source: 'scan',
         );
-    // 記住本次帳戶＝下次掃描預設（PM 2026-11-22：最後一次掃描發票的帳戶）。
+    // 記住本次帳戶/類別＝下次掃描預設（PM 2026-11-22 Sticky 同款）。
     ref.read(dbProvider).setSetting(kScanLastAccountKey, _accountId!);
+    if (_categoryId != null) {
+      ref.read(dbProvider).setSetting(kScanLastCategoryKey, _categoryId!);
+    }
+    // 存檔即從暫存移除**該張**（縮圖單張編輯不清其他待掃——PM 2026-11-22）。
+    ref.read(scanDraftsProvider.notifier).removeItem(widget.items[_index]);
     final photo = widget.items[_index].photoBytes;
     if (photo != null) {
       // 附件落地（FR-S4；BE S5 契約：壓縮→sha256→blobs→attachments＋oplog）。
@@ -149,8 +153,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       });
       return;
     }
-    // 全數完成：清掃描暫存、返回（acceptance S3.7：回明細頁）。
-    ref.read(scanDraftsProvider.notifier).reset();
+    // 全數完成（暫存已逐張移除）：返回（acceptance S3.7：回明細頁）。
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -302,9 +305,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   TextField(
                     key: const Key('review-merchant'),
                     controller: _merchantCtrl,
-                    decoration: const InputDecoration(
-                        labelText: '商家', border: OutlineInputBorder(),
-                        isDense: true),
+                    decoration: InputDecoration(
+                        labelText: '商家（點 › 選常用商家）',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: IconButton(
+                          tooltip: '選擇常用商家',
+                          icon: const Icon(Icons.arrow_drop_down),
+                          onPressed: _pickMerchant,
+                        )),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -358,6 +367,14 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     );
   }
 
+  /// 商家選擇器（T8：最近商家＋直接輸入新商家——可選可增）。
+  Future<void> _pickMerchant() async {
+    final name = await showMerchantPicker(context, ref,
+        initial: _merchantCtrl.text);
+    if (name == null || name.isEmpty || !mounted) return;
+    setState(() => _merchantCtrl.text = name);
+  }
+
   /// 分類選擇彈窗（快記同款：上常用／左主／右子；＋即建即選）。
   Future<void> _openCategoryPicker() async {
     final pick = await showCategoryPicker(
@@ -371,7 +388,6 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       case CategoryPicked(:final categoryId):
         setState(() {
           _categoryId = categoryId;
-          _categoryTouched = true;
           _blockedMessage = null;
         });
       case CategoryAddRequested(:final asSub, :final parentId):
@@ -409,10 +425,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
           CategoryService(ref.read(dbProvider)).create(kind: 'expense', name: name, parentId: parentId);
       ref.invalidate(expenseCategoriesProvider);
       ref.refreshAllData();
-      setState(() {
-        _categoryId = row.id;
-        _categoryTouched = true;
-      });
+      setState(() => _categoryId = row.id);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

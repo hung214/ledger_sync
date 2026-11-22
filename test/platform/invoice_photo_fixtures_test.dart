@@ -191,6 +191,45 @@ void main() {
     });
   });
 
+  group('透印去除與中央變焦（PM 2026-11-22 實測情境）', () {
+    test('透印去除：背面印刷（中灰雜訊）干擾下仍可解', () {
+      final base =
+          img.decodeImage(qrPng(InvoiceQrFixtures.officialLeftQr77, scale: 4))!;
+      // 背面印刷透光模擬：**只染白底**（真實透印不會蓋掉正面深黑印刷）——
+      // 白色像素改為中灰 150（背面文字透印）。
+      final noisy = img.Image.from(base);
+      for (var y = 0; y < noisy.height; y += 2) {
+        for (var x = 0; x < noisy.width; x++) {
+          final p = noisy.getPixel(x, y);
+          final l = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round();
+          if (l > 200) {
+            noisy.setPixel(x, y, img.ColorRgb8(150, 150, 150));
+          }
+        }
+      }
+      final bytes = Uint8List.fromList(img.encodePng(noisy));
+      expect(ImageQrScanner.decodeQrTexts(bytes),
+          contains(InvoiceQrFixtures.officialLeftQr77),
+          reason: '硬閾值二值化洗掉中灰透印，正面深黑 QR 保留');
+    });
+
+    test('中央裁切變焦：遠距小 QR（佔畫面約 1/5）→ draftFromCameraFrame 命中',
+        () {
+      // 1600×1200 白底，QR 置中（佔寬約 1/8）——整張/切半特徵不足。
+      final qr = img.decodeImage(
+          qrPng(InvoiceQrFixtures.officialLeftWithItems, scale: 3))!;
+      final out = img.Image(width: 1600, height: 1200);
+      img.fill(out, color: img.ColorRgb8(255, 255, 255));
+      img.compositeImage(out, qr,
+          dstX: (1600 - qr.width) ~/ 2, dstY: (1200 - qr.height) ~/ 2);
+      final bytes = Uint8List.fromList(img.encodeJpg(out, quality: 80));
+
+      final draft = const ImageQrScanner().draftFromCameraFrame(bytes);
+      expect(draft, isNotNull, reason: '中央 70%/50% 裁切＝數位變焦——遠距可解');
+      expect(draft!.invoiceNo, InvoiceQrFixtures.officialExpected.invoiceNo);
+    });
+  });
+
   group('真實發票照片（drop-in fixtures）', () {
     final dir = Directory('test/fixtures/invoices');
     final photos = dir.existsSync()

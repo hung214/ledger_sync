@@ -44,4 +44,15 @@ abstract interface class CameraStreamController {
 
   /// 診斷資訊（目前朝向／切換結果——掃描頁診斷面板顯示，定位用）。
   String get diagInfo;
+
+  /// 目前視訊解析度字串（診斷行顯示——判斷 getUserMedia 是否被瀏覽器降級；
+  /// PM 2026-11-22 Mac PWA 定位用）。無資訊回空字串。
+  String get resolutionInfo;
+
+  /// 瀏覽器**原生條碼偵測器**（BarcodeDetector API）可用？（T10——
+  /// Chrome/Edge/Safari 17+；品質遠勝 zxing2。僅 web 實作回 true。）
+  bool get hasNativeBarcodeDetector;
+
+  /// 以原生偵測器掃描目前畫面 → rawValue 清單（不支援/無結果/錯誤 → 空）。
+  Future<List<String>> detectNativeBarcodes();
 }

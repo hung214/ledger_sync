@@ -37,6 +37,23 @@ class ScanDraftsNotifier extends Notifier<List<ScannedItem>> {
 
   /// 開新掃描回合（進掃描頁時清空）。
   void reset() => state = const [];
+
+  /// 移除單張（確認卡存檔後——**只移除該張**，不清其他待掃；
+  /// PM 2026-11-22：縮圖可點擊編輯，存檔不清同回合其他項目）。
+  void removeItem(ScannedItem item) =>
+      state = [for (final e in state) if (!identical(e, item)) e];
+}
+
+/// 掃描暫停（PM 2026-11-22：**確認清單開啟期間完全暫停偵測**——
+/// 修「關閉連續掃描後還是連續掃描」；推入 ReviewPage 前設 true、返回後 false）。
+final scanPausedProvider =
+    NotifierProvider<ScanPausedNotifier, bool>(ScanPausedNotifier.new);
+
+class ScanPausedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool paused) => state = paused;
 }
 
 /// 相機權限（FR-S6；M4 in-app stub——平台 permission_handler 接線屬

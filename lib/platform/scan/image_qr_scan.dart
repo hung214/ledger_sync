@@ -46,15 +46,6 @@ class ImageQrScanner {
   TransactionDraft? draftFromImage(Uint8List bytes, {DateTime? now}) =>
       draftFromQrTexts(decodeQrTexts(bytes));
 
-  /// **相機幀輕量解碼**（F14 web 迴圈專用）：只試**整張＋左右半**（3 區）。
-  ///
-  /// 相機迴圈每 1.2s 一幀、解碼在主執行緒**同步**跑（dart2js 單執行緒）——
-  /// 完整 9 區掃描在行動裝置上每幀可達數秒，疊加後塞死 UI（PM 2026-11-21
-  /// 「全部掃描失敗＋顯示不正常」根因）。發票雙碼左右同列，切半即可分別
-  /// 解出（PM 2026-10-29 實測）；上下半/四象限留給檔案匯入完整掃。
-  TransactionDraft? draftFromCameraFrame(Uint8List bytes, {DateTime? now}) =>
-      draftFromQrTexts(decodeQrTexts(bytes, fullScan: false));
-
   /// 左碼字軌特徵（官方規格 v1.9：2 大寫字母＋8 數字）。
   static final RegExp _invoiceNoPattern = RegExp(r'[A-Z]{2}[0-9]{8}');
 
@@ -72,6 +63,39 @@ class ImageQrScanner {
       if (InvoiceQrParser.isValidOfficialLeft(candidate)) return candidate;
     }
     return null;
+  }
+
+  /// 相機幀解碼（web/PWA 迴圈）——**中央裁切變焦分層重試**（T1，
+  /// PM 2026-11-22「MAC PWA 還是掃描不到」）：
+  /// ①輕量 3 區（整張＋左右半，各自含降採樣後備）→ ②未命中時中央 70% →
+  /// ③中央 50%。Mac/桌面 webcam 遠距小 QR 在整張幀裡特徵太弱——
+  /// 裁切＝數位變焦，QR 佔分析區比例放大後可解（每區 ≤800px，耗時有界）。
+  TransactionDraft? draftFromCameraFrame(Uint8List bytes, {DateTime? now}) {
+    final draft = draftFromQrTexts(decodeQrTexts(bytes, fullScan: false));
+    if (draft != null) return draft;
+    for (final fraction in const [0.7, 0.5]) {
+      final d =
+          draftFromQrTexts(decodeQrTextsCenterCrop(bytes, fraction));
+      if (d != null) return d;
+    }
+    return null;
+  }
+
+  /// 中央 [fraction]（0~1）裁切之單區解碼（含降採樣後備）。
+  static List<String> decodeQrTextsCenterCrop(
+      Uint8List bytes, double fraction) {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return const [];
+    final w = decoded.width;
+    final h = decoded.height;
+    final cw = (w * fraction).round();
+    final ch = (h * fraction).round();
+    final crop = img.copyCrop(decoded,
+        x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
+    final text = _decodeRegion(crop) ??
+        _decodeDownscaled(crop) ??
+        _decodeShowThrough(crop);
+    return text == null ? const [] : [text];
   }
 
   /// 由 QR 文字組出發票草稿——**官方規格（財政部 v1.9）優先**，舊內部測資
@@ -128,7 +152,11 @@ class ImageQrScanner {
     if (decoded == null) return const [];
     final found = <String>[];
     for (final region in _regions(decoded, fullScan: fullScan)) {
-      final text = _decodeRegion(region) ?? _decodeDownscaled(region);
+      var text = _decodeRegion(region) ?? _decodeDownscaled(region);
+      if (text == null && fullScan) {
+        // 檔案匯入（離線，無幀率預算）：透印去除變體全試。
+        text = _decodeShowThrough(region);
+      }
       if (text != null && !found.contains(text)) found.add(text);
       if (found.length >= _maxCodes) break;
     }
@@ -139,6 +167,37 @@ class ImageQrScanner {
 
   /// 區域解碼之降採樣後備上限（最長邊）。
   static const int _maxDecodeDim = 800;
+
+  /// **透印去除**（PM 2026-11-22：熱感應收據背面印刷透光干擾 QR——
+  /// 正面印刷＝深黑、透印＝中灰。硬閾值二值化只留深色筆畫、洗掉灰階
+  /// 透印；先降採樣 ≤[_maxDecodeDim]（細碎透印文字在縮圖中自然均化），
+  /// 再以多閾值重試 [100, 70]）。
+  static String? _decodeShowThrough(img.Image region) {
+    final maxDim = region.width > region.height ? region.width : region.height;
+    var src = region;
+    if (maxDim > _maxDecodeDim) {
+      final scale = _maxDecodeDim / maxDim;
+      src = img.copyResize(region,
+          width: (region.width * scale).round(),
+          height: (region.height * scale).round());
+    }
+    for (final cutoff in const [100, 70]) {
+      final text = _decodeRegion(_binarize(src, cutoff));
+      if (text != null) return text;
+    }
+    return null;
+  }
+
+  /// 灰階＋硬閾值二值化（< [cutoff] → 黑，其餘 → 白）。
+  static img.Image _binarize(img.Image src, int cutoff) {
+    final out = img.Image.from(src);
+    for (final p in out) {
+      final l = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round();
+      final v = l < cutoff ? 0 : 255;
+      p..r = v..g = v..b = v;
+    }
+    return out;
+  }
 
   static String? _decodeDownscaled(img.Image region) {
     final maxDim = region.width > region.height ? region.width : region.height;

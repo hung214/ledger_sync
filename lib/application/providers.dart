@@ -154,6 +154,12 @@ final expenseCategoriesProvider = Provider((ref) {
   return ref.watch(dbProvider).categoriesByKind('expense');
 });
 
+/// 常用商家（最近使用優先——商家選擇器 T8，PM 2026-11-22；免新表）。
+final recentMerchantsProvider = Provider<List<String>>((ref) {
+  ref.watch(dataVersionProvider);
+  return ref.watch(dbProvider).distinctMerchants();
+});
+
 /// 收入分類（設定頁分頁；與支出同源快取策略）。
 final incomeCategoriesProvider = Provider((ref) {
   ref.watch(dataVersionProvider);

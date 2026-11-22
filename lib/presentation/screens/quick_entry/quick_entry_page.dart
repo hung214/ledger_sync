@@ -6,6 +6,7 @@ import '../../../application/appearance/theme_mode_state.dart';
 import '../../../application/categories/category_service.dart';
 import '../../../application/providers.dart';
 import '../../category_display.dart';
+import '../../merchant_picker_dialog.dart';
 import 'amount_keypad.dart';
 import 'category_picker_dialog.dart';
 import 'quick_date_time_picker.dart';
@@ -313,9 +314,10 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                       key: const Key('quick-entry-merchant'),
                       controller: _merchantCtrl,
                       decoration: const InputDecoration(
-                          labelText: '商家',
+                          labelText: '商家（點 › 選常用商家）',
                           border: OutlineInputBorder(),
-                          isDense: true),
+                          isDense: true,
+                          suffixIcon: MerchantSuffixIcon()),
                       onChanged: controller.setMerchant,
                     ),
                   const SizedBox(height: 12),
@@ -535,6 +537,26 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
         ),
         child: Text(text, overflow: TextOverflow.ellipsis),
       ),
+    );
+  }
+}
+
+/// 商家欄後綴選擇鈕（T8：最近商家＋直接輸入新商家——可選可增）。
+class MerchantSuffixIcon extends ConsumerWidget {
+  const MerchantSuffixIcon({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return IconButton(
+      tooltip: '選擇常用商家',
+      icon: const Icon(Icons.arrow_drop_down),
+      onPressed: () async {
+        final name = await showMerchantPicker(context, ref);
+        if (name == null || name.isEmpty) return;
+        ref
+            .read(quickEntryControllerProvider.notifier)
+            .setMerchant(name);
+      },
     );
   }
 }

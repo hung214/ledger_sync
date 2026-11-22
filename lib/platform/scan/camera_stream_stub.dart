@@ -21,6 +21,15 @@ class _StubCameraController implements CameraStreamController {
   String get diagInfo => '';
 
   @override
+  String get resolutionInfo => '';
+
+  @override
+  bool get hasNativeBarcodeDetector => false;
+
+  @override
+  Future<List<String>> detectNativeBarcodes() async => const [];
+
+  @override
   void dispose() {}
 }
 

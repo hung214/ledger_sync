@@ -52,6 +52,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   String _frameInfo = '—'; // 最近取幀狀態（大小／無畫面）
   int _decodeHits = 0; // 解碼命中次數
   bool _decoding = false; // 解碼中跳過新幀（同步解碼塞主執行緒——疊加即卡死）
+
+  /// 每次命中後的掃描暫停（PM 2026-11-22：每掃到一張暫停 0.3 秒）＋
+  /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
+  DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
 
   @override
@@ -93,19 +97,43 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   Future<void> _tryDecode() async {
     if (_state != _CamState.live || _decoding) return;
-    final bytes = await _controller.captureFrame();
-    if (!mounted) return;
-    if (bytes == null) {
-      setState(() => _frameInfo = '無畫面');
+    if (ref.read(scanPausedProvider) ||
+        DateTime.now().isBefore(_pausedUntil)) {
       return;
     }
-    setState(() {
-      _frames++;
-      _frameInfo = '${bytes.length} B';
-    });
     _decoding = true;
     final sw = Stopwatch()..start();
-    final draft = ref.read(webCameraDecodeProvider)(bytes);
+    Uint8List? photoBytes;
+    TransactionDraft? draft;
+    // **瀏覽器原生偵測器優先**（T10，PM 2026-11-22「Mac PWA 還是無法讀取」
+    // 主修法）：BarcodeDetector API 直接吃 video 全解析度幀——無 canvas/
+    // JPEG 轉檔損耗、品質遠勝 zxing2；不支援的瀏覽器 → 既有 zxing2 後備。
+    if (_controller.hasNativeBarcodeDetector) {
+      final texts = await _controller.detectNativeBarcodes();
+      if (mounted) {
+        setState(() {
+          _frames++;
+          _frameInfo = _controller.resolutionInfo;
+        });
+      }
+      if (texts.isNotEmpty) {
+        draft = ImageQrScanner.draftFromQrTexts(texts);
+      }
+    } else {
+      final bytes = await _controller.captureFrame();
+      if (mounted) {
+        setState(() {
+          _frames++;
+          _frameInfo = bytes == null
+              ? '無畫面'
+              : '${_controller.resolutionInfo} · ${bytes.length} B';
+        });
+      }
+      if (bytes != null) {
+        photoBytes = bytes;
+        draft = ref.read(webCameraDecodeProvider)(bytes);
+      }
+    }
     sw.stop();
     _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
@@ -115,15 +143,18 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         '|${draft.merchant.value ?? ''}';
     if (!_seenSignatures.add(sig)) return; // 同張去重（QR 還在畫面中）
     ref.read(scanDraftsProvider.notifier).add(
-        ScannedItem(draft: draft, photoBytes: bytes));
+        ScannedItem(draft: draft, photoBytes: photoBytes));
     if (mounted) setState(() => _addedFromThisSession++);
+    _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
   }
 
   Future<void> _finish() async {
     _loop?.cancel();
+    ref.read(scanPausedProvider.notifier).set(true);
     final items = ref.read(scanDraftsProvider).toList();
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => ReviewPage(items: items)));
+    ref.read(scanPausedProvider.notifier).set(false);
     if (!mounted) return;
     ref.read(scanDraftsProvider.notifier).reset();
     setState(() {
@@ -134,19 +165,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
   }
 
-  /// 紙本發票（PWA）：web 無線性條碼解碼（scan_policy 平台分流）→
-  /// **手動開卡**（金額/日期/商家/發票號皆手動；PM 2026-11-22）。
-  Future<void> _openPaperManual() async {
-    _loop?.cancel();
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => ReviewPage(items: [
-              ScannedItem(draft: TransactionDraft.blank(DateTime.now())),
-            ])));
-    if (!mounted) return;
-    ref.read(scanDraftsProvider.notifier).reset();
-    setState(() => _addedFromThisSession = 0);
-    _loop = Timer.periodic(
-        const Duration(milliseconds: 1200), (_) => _tryDecode());
+  /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
+  /// 「完成掃描」統一進確認清單；金額/日期/商家/發票號皆手動輸入）。
+  void _addBlankDraft() {
+    ref.read(scanDraftsProvider.notifier)
+        .add(ScannedItem(draft: TransactionDraft.blank(DateTime.now())));
   }
 
   void _fallbackToFile() {
@@ -192,8 +215,30 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   Widget _buildLive(BuildContext context) {
     final drafts = ref.watch(scanDraftsProvider);
+    final mode = ref.watch(scanModeProvider);
     return Column(
       children: [
+        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**，
+        // 不在下方）：電子發票＝QR；紙本發票＝相機續掃＋「手動開一筆」。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: SegmentedButton<ScanMode>(
+            key: const Key('scan-mode-toggle'),
+            segments: const [
+              ButtonSegment(
+                  value: ScanMode.eInvoice,
+                  icon: Icon(Icons.qr_code_scanner),
+                  label: Text('電子發票 QR')),
+              ButtonSegment(
+                  value: ScanMode.paper,
+                  icon: Icon(Icons.receipt_long),
+                  label: Text('紙本發票')),
+            ],
+            selected: {mode},
+            onSelectionChanged: (selection) =>
+                ref.read(scanModeProvider.notifier).set(selection.first),
+          ),
+        ),
         Expanded(
           child: Stack(
             fit: StackFit.expand,
@@ -222,6 +267,22 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   color: Colors.white,
                 ),
               ),
+              // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
+              // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
+              if (mode == ScanMode.paper)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 48,
+                  child: Center(
+                    child: FilledButton.icon(
+                      key: const Key('webcam-manual-entry'),
+                      onPressed: _addBlankDraft,
+                      icon: const Icon(Icons.receipt_long),
+                      label: const Text('手動開一筆'),
+                    ),
+                  ),
+                ),
               // 診斷面板（定位「無法正確掃描」：取幀是否流動／解碼是否命中）。
               Positioned(
                 left: 12,
@@ -248,11 +309,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
-              TextButton(
-                key: const Key('webcam-paper-manual'),
-                onPressed: _openPaperManual,
-                child: const Text('紙本發票（手動）'),
-              ),
               TextButton(
                 key: const Key('webcam-fallback-file'),
                 onPressed: _fallbackToFile,

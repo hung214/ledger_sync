@@ -8,6 +8,10 @@ import '../../domain/entities/account.dart';
 /// 同回合多張＝Sticky 沿用（確認清單與快記同款互動，PM 2026-11-22）。
 const String kScanLastAccountKey = 'scan.lastAccountId';
 
+/// 最後一次掃描入帳的**類別**（PM 2026-11-22：類別同款 Sticky——
+/// 確認卡預設＝上次類別；無紀錄→「其他」）。
+const String kScanLastCategoryKey = 'scan.lastCategoryId';
+
 /// 依規則解析掃描預設帳戶（純函式——可單測）。
 String? resolveScanDefaultAccount(
     List<Account> accounts, String? lastScanAccountId) {

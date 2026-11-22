@@ -8,6 +8,22 @@ import 'package:web/web.dart' as web;
 
 import 'camera_stream.dart';
 
+/// 瀏覽器**原生 BarcodeDetector API**（T10，PM 2026-11-22「Mac PWA 還是
+/// 無法讀取」主修法）：Chrome/Edge/Safari 17+ 內建——品質遠勝 zxing2，
+/// 直接吃 `<video>` 全解析度幀（無 canvas/JPEG 轉檔損耗）。
+@JS('BarcodeDetector')
+external JSObject? get _barcodeDetectorCtor; // feature detection 用
+
+@JS('BarcodeDetector')
+extension type _BarcodeDetector._(JSObject _) implements JSObject {
+  external _BarcodeDetector(JSObject options);
+  external JSPromise<JSArray<_BarcodeResultJS>> detect(JSObject source);
+}
+
+extension type _BarcodeResultJS._(JSObject _) implements JSObject {
+  external JSString? get rawValue;
+}
+
 /// web（PWA）相機控制器：`getUserMedia`（後鏡頭）＋`<video>` 預覽＋canvas 取幀。
 ///
 /// - 需 **https**（或 localhost）——瀏覽器權限要求。
@@ -31,6 +47,45 @@ class WebCameraStreamController implements CameraStreamController {
   @override
   String get diagInfo =>
       'facing=$_facing${_switchNote == null ? '' : '｜$_switchNote'}';
+
+  @override
+  String get resolutionInfo {
+    final v = _video;
+    return (v == null || v.videoWidth == 0)
+        ? ''
+        : '${v.videoWidth}x${v.videoHeight}';
+  }
+
+  _BarcodeDetector? _nativeDetector;
+
+  @override
+  bool get hasNativeBarcodeDetector => _barcodeDetectorCtor != null;
+
+  _BarcodeDetector? _getNativeDetector() {
+    if (!hasNativeBarcodeDetector) return null;
+    try {
+      return _nativeDetector ??= _BarcodeDetector(({
+        'formats': ['qr_code', 'code_39', 'code_128'],
+      }).jsify()! as JSObject);
+    } catch (_) {
+      return null; // 構造失敗（不支援的格式等）——退回 zxing2 後備。
+    }
+  }
+
+  @override
+  Future<List<String>> detectNativeBarcodes() async {
+    final v = _video;
+    final detector = _getNativeDetector();
+    if (v == null || v.videoWidth == 0 || detector == null) return const [];
+    try {
+      final results = await detector.detect(v).toDart;
+      return [
+        for (final r in results.toDart) r.rawValue?.toDart ?? '',
+      ].where((t) => t.isNotEmpty).toList();
+    } catch (_) {
+      return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
+    }
+  }
 
   static int _seq = 0;
   late final String _viewType = 'webcam-${_seq++}';
