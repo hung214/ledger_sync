@@ -392,8 +392,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       style: TextStyle(fontSize: 13)),
                   const Spacer(),
                   TextButton(
-                    onPressed: () =>
-                        FocusScope.of(context).unfocus(),
+                    key: const Key('text-edit-done'),
+                    onPressed: () => FocusScope.of(context).unfocus(),
                     child: const Text('完成'),
                   ),
                 ]),

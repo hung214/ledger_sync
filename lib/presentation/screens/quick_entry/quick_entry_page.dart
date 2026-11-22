@@ -394,6 +394,7 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                           style: TextStyle(fontSize: 13)),
                       const Spacer(),
                       TextButton(
+                        key: const Key('text-edit-done'),
                         onPressed: () => FocusScope.of(context).unfocus(),
                         child: const Text('完成'),
                       ),
