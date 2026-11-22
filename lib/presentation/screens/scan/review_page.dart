@@ -47,14 +47,33 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
   String? _blockedMessage;
 
+  // 文字欄位聚焦 → **隱藏計算機鍵盤**（PM 2026-11-23：避免遮擋畫面；
+  // 系統鍵盤接手；失焦後計算機回來）。
+  final _merchantFocus = FocusNode();
+  final _noteFocus = FocusNode();
+  bool _textEditing = false;
+
+  void _onTextFocusChanged() {
+    final editing = _merchantFocus.hasFocus || _noteFocus.hasFocus;
+    if (editing != _textEditing && mounted) {
+      setState(() => _textEditing = editing);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _merchantFocus.addListener(_onTextFocusChanged);
+    _noteFocus.addListener(_onTextFocusChanged);
     _loadCard(0);
   }
 
   @override
   void dispose() {
+    _merchantFocus.removeListener(_onTextFocusChanged);
+    _noteFocus.removeListener(_onTextFocusChanged);
+    _merchantFocus.dispose();
+    _noteFocus.dispose();
     _amountCtrl.dispose();
     _merchantCtrl.dispose();
     _noteCtrl.dispose();
@@ -305,6 +324,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   TextField(
                     key: const Key('review-merchant'),
                     controller: _merchantCtrl,
+                    focusNode: _merchantFocus,
                     decoration: InputDecoration(
                         labelText: '商家（點 › 選常用商家）',
                         border: const OutlineInputBorder(),
@@ -319,6 +339,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   TextField(
                     key: const Key('review-note'),
                     controller: _noteCtrl,
+                    focusNode: _noteFocus,
                     decoration: const InputDecoration(
                         labelText: '備註（選填）', border: OutlineInputBorder(),
                         isDense: true),
@@ -336,7 +357,37 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                 ],
               ),
             ),
-            // 浮動底部計算機（快記同款）：OK＝確認儲存，鍵盤貼底常駐。
+            // 文字欄位聚焦時隱藏計算機（PM 2026-11-23）→「完成」列。
+            if (_textEditing)
+              Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .shadow
+                          .withValues(alpha: 0.18),
+                      blurRadius: 14,
+                      offset: const Offset(0, -3),
+                    ),
+                  ],
+                ),
+                child: Row(children: [
+                  const Text('輸入文字中…',
+                      style: TextStyle(fontSize: 13)),
+                  const Spacer(),
+                  TextButton(
+                    key: const Key('text-edit-done'),
+                    onPressed: () => FocusScope.of(context).unfocus(),
+                    child: const Text('完成'),
+                  ),
+                ]),
+              )
+            else
             Container(
               margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),

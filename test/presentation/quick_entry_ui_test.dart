@@ -165,6 +165,9 @@ void main() {
       await tester.enterText(
           find.byKey(const Key('quick-entry-note')), '早餐');
       await tester.pumpAndSettle();
+      // 文字欄位聚焦時計算機收起（PM 2026-11-23）→ 點「完成」收鍵盤。
+      await tester.tap(find.byKey(const Key('text-edit-done')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('quick-entry-save')));
       await tester.pumpAndSettle();
 

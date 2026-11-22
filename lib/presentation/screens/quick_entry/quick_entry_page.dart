@@ -32,6 +32,25 @@ class QuickEntryPage extends ConsumerStatefulWidget {
 class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   final _amountCtrl = TextEditingController();
 
+  // 文字欄位聚焦 → **隱藏計算機鍵盤**（PM 2026-11-23：避免遮擋輸入框）。
+  final _merchantFocus = FocusNode();
+  final _noteFocus = FocusNode();
+  bool _textEditing = false;
+
+  void _onTextFocusChanged() {
+    final editing = _merchantFocus.hasFocus || _noteFocus.hasFocus;
+    if (editing != _textEditing && mounted) {
+      setState(() => _textEditing = editing);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _merchantFocus.addListener(_onTextFocusChanged);
+    _noteFocus.addListener(_onTextFocusChanged);
+  }
+
   /// 備註欄（PM 2026-10-24：手機與 PC 皆有）。
   final _noteCtrl = TextEditingController();
 
@@ -53,6 +72,10 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
 
   @override
   void dispose() {
+    _merchantFocus.removeListener(_onTextFocusChanged);
+    _noteFocus.removeListener(_onTextFocusChanged);
+    _merchantFocus.dispose();
+    _noteFocus.dispose();
     _amountCtrl.dispose();
     _noteCtrl.dispose();
     _merchantCtrl.dispose();
@@ -313,6 +336,7 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     TextField(
                       key: const Key('quick-entry-merchant'),
                       controller: _merchantCtrl,
+                      focusNode: _merchantFocus,
                       decoration: const InputDecoration(
                           labelText: '商家（點 › 選常用商家）',
                           border: OutlineInputBorder(),
@@ -325,6 +349,7 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                   TextField(
                     key: const Key('quick-entry-note'),
                     controller: _noteCtrl,
+                    focusNode: _noteFocus,
                     decoration: const InputDecoration(
                         labelText: '備註（選填）',
                         border: OutlineInputBorder(),
@@ -363,18 +388,29 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // OK 已移入鍵盤第一排（PM 2026-10-24：C／⌫／OK；移除「＝」）。
-                  AmountKeypad(
-                    expr: _expr,
-                    onExprChanged: _onKeypadExpr,
-                    onOk: controller.save,
-                    okEnabled: quickEntrySaveEnabled(state),
-                  ),
-                ],
-              ),
+              child: _textEditing
+                  ? Row(children: [
+                      const Text('輸入文字中…',
+                          style: TextStyle(fontSize: 13)),
+                      const Spacer(),
+                      TextButton(
+                        key: const Key('text-edit-done'),
+                        onPressed: () => FocusScope.of(context).unfocus(),
+                        child: const Text('完成'),
+                      ),
+                    ])
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // OK 已移入鍵盤第一排（PM 2026-10-24：C／⌫／OK；移除「＝」）。
+                        AmountKeypad(
+                          expr: _expr,
+                          onExprChanged: _onKeypadExpr,
+                          onOk: controller.save,
+                          okEnabled: quickEntrySaveEnabled(state),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
