@@ -8,6 +8,7 @@ import '../../../application/providers.dart';
 import '../../../application/stats/monthly_stats_service.dart';
 import '../../../application/accounts/totals_service.dart';
 import '../../../core/version.dart';
+import '../../../domain/entities/transaction.dart';
 import '../../../domain/services/balance_calculator.dart';
 import '../../theme/app_theme.dart';
 import '../budget/budget_page.dart';
@@ -394,7 +395,7 @@ class _RecentTxRow extends StatelessWidget {
     final tokens = AppTokens.of(context);
     final db = ProviderScope.containerOf(context).read(dbProvider);
     final hasAttachment = db.attachmentsForTransaction(tx.id).isNotEmpty;
-    final isExpense = tx.kind == 'expense';
+    final isExpense = tx.kind == TxKind.expense;
     final amountText = masked
         ? '●●●●'
         : (isExpense ? '−' : '+') + fmt.format(tx.amountMinor);
