@@ -177,6 +177,28 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // **跨 tick 累積窗**（3 秒）——雙碼常分 tick 解出（PM 2026-11-23）。
     if (texts.isNotEmpty) {
       final now2 = DateTime.now();
+      // 新左碼出現 → 重置累積窗（換發票——避免 A 張左碼混 B 張右碼）。
+      String? newLeft;
+      for (final t in texts) {
+        final l = ImageQrScanner.extractOfficialLeft(t);
+        if (l != null) {
+          newLeft = l;
+          break;
+        }
+      }
+      if (newLeft != null) {
+        String? oldLeft;
+        for (final t in _recentTexts.keys) {
+          final l = ImageQrScanner.extractOfficialLeft(t);
+          if (l != null) {
+            oldLeft = l;
+            break;
+          }
+        }
+        if (oldLeft != null && oldLeft != newLeft) {
+          _recentTexts.clear();
+        }
+      }
       _recentTexts.removeWhere((_, t) =>
           now2.difference(t) > const Duration(seconds: 3));
       for (final t in texts) {

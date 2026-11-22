@@ -280,6 +280,11 @@ class WebCameraStreamController implements CameraStreamController {
   Future<void> _openOn(web.HTMLVideoElement video) async {
     _stream = await _acquireRearCamera();
     video.srcObject = _stream;
+    // object-fit: cover——與預覽框映射（綠框/引導框）一致；預設 fill 會
+    // 拉伸變形 → 框全部錯位（PM 2026-11-23「掃描範圍爆掉」）。
+    video.style.setProperty('object-fit', 'cover');
+    video.style.setProperty('width', '100%');
+    video.style.setProperty('height', '100%');
     // 變焦能力探測（有 zoom 能力 → 掃描頁顯示變焦按鈕）。
     try {
       final tracks = _stream?.getVideoTracks().toDart ?? const [];
