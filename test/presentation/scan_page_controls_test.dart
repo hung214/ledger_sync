@@ -102,7 +102,7 @@ void main() {
   });
 
   testWidgets('補光開關：點按不拋例外（行動平台手電筒＝靜默失敗）', (tester) async {
-    final container = await pumpPage(tester);
+    await pumpPage(tester);
     final torchFinder = find.byKey(const Key('scan-torch-toggle'));
     if (torchFinder.evaluate().isNotEmpty) {
       await tester.tap(torchFinder);
