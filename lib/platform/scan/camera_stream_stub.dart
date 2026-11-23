@@ -36,6 +36,7 @@ class _StubCameraController implements CameraStreamController {
   Future<List<String>> detectNativeBarcodes() async => const [];
 
   @override
+<<<<<<< HEAD
   Duration get decodeInterval => const Duration(milliseconds: 1200);
 
   @override
@@ -48,6 +49,8 @@ class _StubCameraController implements CameraStreamController {
   Future<void> setFocusPoint(Offset normalized) async {}
 
   @override
+=======
+>>>>>>> pwa-accumulate
   bool get torchSupported => false;
 
   @override
@@ -57,9 +60,12 @@ class _StubCameraController implements CameraStreamController {
   bool get torchOn => false;
 
   @override
+<<<<<<< HEAD
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
 
   @override
+=======
+>>>>>>> pwa-accumulate
   void dispose() {}
 }
 

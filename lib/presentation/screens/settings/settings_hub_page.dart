@@ -56,15 +56,6 @@ class SettingsHubPage extends ConsumerWidget {
                 builder: (_) => const CategorySettingsPage())),
           ),
           ListTile(
-            key: const Key('settings-help'),
-            leading: const Icon(Icons.help_outline),
-            title: const Text('使用說明'),
-            subtitle: const Text('安裝更新／備份還原／匯入／常見問題'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const HelpPage())),
-          ),
-          ListTile(
             key: const Key('settings-data-management'),
             leading: const Icon(Icons.storage_outlined),
             title: const Text('資料管理'),
@@ -72,6 +63,15 @@ class SettingsHubPage extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const DataManagementPage())),
+          ),
+          ListTile(
+            key: const Key('settings-help'),
+            leading: const Icon(Icons.help_outline),
+            title: const Text('使用說明'),
+            subtitle: const Text('安裝更新／備份還原／匯入／常見問題'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const HelpPage())),
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           const _SectionLabel('安全（FR-X）'),

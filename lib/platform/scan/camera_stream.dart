@@ -65,6 +65,7 @@ abstract interface class CameraStreamController {
   /// 「要喬很久角度距離」的容許度修法）。
   Future<List<String>> detectNativeBarcodes();
 
+<<<<<<< HEAD
   /// 解碼迴圈建議間隔（原生偵測器快→700ms；zxing2 慢→1200ms）。
   Duration get decodeInterval;
 
@@ -78,6 +79,8 @@ abstract interface class CameraStreamController {
   /// 設定變焦（正規化 0~1；web：track zoom constraint）。
   Future<void> setZoom(double normalized);
 
+=======
+>>>>>>> pwa-accumulate
   /// 相機**補光（手電筒）**是否可用？（web：track capabilities 有 torch；
   /// native：mobile_scanner torch）。無能力 → 開關隱藏。
   bool get torchSupported;
@@ -87,8 +90,11 @@ abstract interface class CameraStreamController {
 
   /// 補光目前狀態（on/off）。UI 按鈕顏色依此顯示。
   bool get torchOn;
+<<<<<<< HEAD
 
   /// 最近一次原生偵測的**條碼區域**（正規化 0~1，top-left 原點；畫綠框用）
   /// 與參考幀尺寸。null＝無。
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes;
+=======
+>>>>>>> pwa-accumulate
 }

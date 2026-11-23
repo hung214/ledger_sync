@@ -36,6 +36,7 @@ class _NativeCameraController implements CameraStreamController {
   Future<List<String>> detectNativeBarcodes() async => const [];
 
   @override
+<<<<<<< HEAD
   Duration get decodeInterval => const Duration(milliseconds: 1200);
 
   @override
@@ -48,6 +49,8 @@ class _NativeCameraController implements CameraStreamController {
   Future<void> setFocusPoint(Offset normalized) async {}
 
   @override
+=======
+>>>>>>> pwa-accumulate
   bool get torchSupported => false;
 
   @override
@@ -55,10 +58,13 @@ class _NativeCameraController implements CameraStreamController {
 
   @override
   bool get torchOn => false;
+<<<<<<< HEAD
 
   @override
   ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
 
+=======
+>>>>>>> pwa-accumulate
 
   @override
   void dispose() {}

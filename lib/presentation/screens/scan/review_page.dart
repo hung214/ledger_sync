@@ -409,9 +409,13 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                 ],
               ),
             ),
+<<<<<<< HEAD
             // 浮動底部計算機（快記同款）：OK＝確認儲存，鍵盤貼底常駐；
             // **文字欄位聚焦時隱藏**（PM 2026-11-23：避免遮擋輸入框——
             // 換「完成」列，點擊收起系統鍵盤並讓計算機回來）。
+=======
+            // 文字欄位聚焦時隱藏計算機（PM 2026-11-23）→「完成」列。
+>>>>>>> pwa-accumulate
             if (_textEditing)
               Container(
                 margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
