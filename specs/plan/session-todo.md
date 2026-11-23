@@ -44,8 +44,17 @@
   pending_scan_nav.dart 條件匯出隔離——native 測試不受影響）
   ✓verify-heal 4 輪失敗 → 重載後備（上限 2 次防迴圈；成功清計數）
   ✓部署 20261124v（CDN 驗證）＋pwa-accumulate 已 commit
-  待 PM 驗證：①離開掃描頁→燈即滅②重進→短暫重載（2~3 秒）→
-  掃描頁自動開啟＋相機有畫面③背景返回恢復④補光正常
+  部署 20261124v——**PM 驗證：第二次進掃描「相機啟動失敗：
+  NoSuchMethodError 'dz'」**
+- [x] **T66 NoSuchMethodError 根因（headless Chrome 重現）**：
+  **`?? const []` 型別降級 bug**（T62 引入）——空字面量無上下文推斷
+  List<dynamic>，與 List<MediaStreamTrack> 的 LUB 降級迴圈變數為
+  dynamic → interop `.stop()` 變動態派發 `stop$0`（minified 'dz'）→
+  raw JS 軌道物件缺 Dart selector → 炸。首次進入串流 null＝空列表
+  僥倖不炸；串流活著（離開掃描頁再進）必炸。
+  ✓修復：5 處改 `_videoTracks()`（null 檢查＋型別正確 List）
+  ✓headless Chrome（profile build＋fake camera）重現→修復驗證
+  ✓260 測試全綠＋analyze 0
 
 ## 🔴 進行中（PM 2026-11-23：總覽最近交易支出/收入正負反了）
 
