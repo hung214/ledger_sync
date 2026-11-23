@@ -91,27 +91,6 @@ class SettingsHubPage extends ConsumerWidget {
           const _SectionLabel('安全（FR-X）'),
           const _SecurityCard(),
           const Divider(height: 1, indent: 16, endIndent: 16),
-          const _SectionLabel('外觀'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Wrap(
-              spacing: 8,
-              children: [
-                for (final (mode, label, key) in const [
-                  (ThemeMode.system, '跟隨系統', 'theme-system'),
-                  (ThemeMode.light, '淺色', 'theme-light'),
-                  (ThemeMode.dark, '深色', 'theme-dark'),
-                ])
-                  ChoiceChip(
-                    key: Key(key),
-                    label: Text(label),
-                    selected: themeMode == mode,
-                    onSelected: (_) => ref.read(themeModeProvider.notifier).set(mode),
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
           const _SectionLabel('同步'),
           ListTile(
             key: const Key('settings-sync'),
