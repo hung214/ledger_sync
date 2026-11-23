@@ -9,6 +9,16 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 進行中（PM 2026-11-23：iOS PWA 選檔修正）
+
+- [x] **T70 iOS PWA 選檔修正**：PM 實測——資料管理「從檔案還原」
+  筆電/桌機正常、iPhone 找不到檔案。根因＝file_selector 的
+  openFile() 依賴 File System Access API（iOS Safari 僅支援
+  image/video）。修復＝web 分流 `<input type="file">`（條件匯出
+  web_file_picker*，cancel 事件監聽）；還原 .db/.json＋CSV 匯入
+  兩處接線；274 全綠＋analyze 0；部署 0.5.1-pwa.20261123a
+  （CDN 驗證 ✓）；iPhone 檔案來源＝檔案 App/iCloud/AirDrop。
+
 ## 進行中（PM 2026-11-23：品牌定稿——ICON 換裝＋首頁左上 LOGO）
 
 - [x] **T69 ICON/LOGO 定稿換裝**：icon 來源改 `jpg/icon01.png`
