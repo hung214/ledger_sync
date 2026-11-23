@@ -1,6 +1,7 @@
 
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,7 @@ import '../../../application/providers.dart';
 import 'package:file_selector/file_selector.dart';
 
 import '../../../core/file_saver.dart';
+import '../../../platform/web_file_picker.dart';
 
 import '../../../application/sync/backup_service.dart';
 import '../../../platform/cloud/cloud_storage_adapter.dart';
@@ -86,9 +88,14 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   /// 從檔案還原（**二次確認**——會覆蓋目前全部資料；單一 DB transaction 冪等）。
   Future<void> _restoreFromFile() async {
     try {
-      final file = await openFile(acceptedTypeGroups: [
-        const XTypeGroup(label: '備份檔', extensions: ['db', 'json']),
-      ]);
+      // web（PWA）：`<input type="file">`——iOS Safari 的 File System
+      // Access API 僅支援 image/video，.db/.json 選不了（PM 2026-11-23）；
+      // native 維持 file_selector 官方對話框。
+      final file = kIsWeb
+          ? await pickWebFile(accept: '.db,.json,application/octet-stream')
+          : await openFile(acceptedTypeGroups: [
+              const XTypeGroup(label: '備份檔', extensions: ['db', 'json']),
+            ]);
       if (file == null) return; // 取消
       if (!mounted) return;
       final ok = await showDialog<bool>(

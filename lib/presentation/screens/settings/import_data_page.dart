@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
+import '../../../platform/web_file_picker.dart';
 
 import '../../../application/providers.dart';
 import '../../../application/import/import_models.dart';
@@ -45,9 +48,12 @@ class _ImportDataPageState extends ConsumerState<ImportDataPage> {
       _error = null;
     });
     try {
-      final file = await openFile(acceptedTypeGroups: [
-        const XTypeGroup(label: 'CSV', extensions: ['csv', 'txt']),
-      ]);
+      // web（PWA）：`<input type="file">`——iOS Safari 限制（同資料管理頁）。
+      final file = kIsWeb
+          ? await pickWebFile(accept: '.csv,.txt,text/csv,text/plain')
+          : await openFile(acceptedTypeGroups: [
+              const XTypeGroup(label: 'CSV', extensions: ['csv', 'txt']),
+            ]);
       if (file == null) {
         setState(() => _busy = false); // 使用者取消
         return;
