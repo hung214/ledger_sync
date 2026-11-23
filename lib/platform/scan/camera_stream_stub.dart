@@ -24,33 +24,12 @@ class _StubCameraController implements CameraStreamController {
   String get resolutionInfo => '';
 
   @override
-  double? get videoAspect => null;
-
-  @override
-  String get elementInfo => '';
-
-  @override
   bool get hasNativeBarcodeDetector => false;
 
   @override
   Future<List<String>> detectNativeBarcodes() async => const [];
 
   @override
-<<<<<<< HEAD
-  Duration get decodeInterval => const Duration(milliseconds: 1200);
-
-  @override
-  bool get zoomSupported => false;
-
-  @override
-  Future<void> setZoom(double normalized) async {}
-
-  @override
-  Future<void> setFocusPoint(Offset normalized) async {}
-
-  @override
-=======
->>>>>>> pwa-accumulate
   bool get torchSupported => false;
 
   @override
@@ -60,12 +39,6 @@ class _StubCameraController implements CameraStreamController {
   bool get torchOn => false;
 
   @override
-<<<<<<< HEAD
-  ({List<Rect> boxes, Size frameSize})? get lastNativeBoxes => null;
-
-  @override
-=======
->>>>>>> pwa-accumulate
   void dispose() {}
 }
 
