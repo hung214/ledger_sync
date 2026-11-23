@@ -51,11 +51,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
   final Set<String> _seenCodes = <String>{};
 
-  /// **跨 tick 累積窗**（PM 2026-11-23：單碼好辨識、雙碼難——左碼/右碼
-  /// 常分 tick 或分區域解出；APP 有 3 秒累積窗、PWA 原本沒有）。
+  /// **跨 tick 累積窗**（PM 2026-11-23：無法一次掃兩碼 → 各別辨識＋合併——
+  /// 左碼/右碼分 tick 解出，3 秒窗內合併成完整明細；與 APP 累積窗同款）。
   final Map<String, DateTime> _recentTexts = {};
 
-  /// 已入單的**左碼**（發票身分）——同一張不重複加入。
+  /// 已入單的**左碼**（發票身分）——同一張不重複加入；資料對應不起來
+  /// ＝另一張發票（不同左碼）。
   final Set<String> _committedLeftCodes = <String>{};
 
   String? _hint; // 畫面提示（只掃到明細碼等）——與 APP 同款
@@ -80,43 +81,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
-  bool _diagExpanded = false; // 診斷行展開（PM：預設短格式，點擊展開）
-  double _zoom = 0; // 0=1×、0.5=2×、1.0=3×
-  bool _zoomSupported = false;
+  bool _diagExpanded = false; // 診斷行展開（PM：預設短格式）
   bool _torchOn = false; // 補光開關狀態
   bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
-  Offset? _focusIndicator; // 點擊回饋
-  Timer? _focusIndicatorReset;
-
-  /// **點擊對焦嘗試**（PM 2026-11-24）：tap 正規化 → pointsOfInterest
-  /// constraint（瀏覽器/裝置支援有限——靜默失敗）＋黃圈回饋 700ms。
-  void _onPreviewTap(Offset local, Rect videoRect) {
-    if (videoRect.width == 0 || videoRect.height == 0) return;
-    // 相對 videoRect 正規化（0~1——pointsOfInterest 規格座標）。
-    final normalized = Offset(
-      ((local.dx - videoRect.left) / videoRect.width).clamp(0.0, 1.0),
-      ((local.dy - videoRect.top) / videoRect.height).clamp(0.0, 1.0),
-    );
-    unawaited(_controller.setFocusPoint(normalized).catchError((Object _) {}));
-    _focusIndicatorReset?.cancel();
-    setState(() => _focusIndicator = local);
-    _focusIndicatorReset = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _focusIndicator = null);
-    });
-  }
-
-  /// 補光（手電筒）開關：web MediaStreamTrack.applyConstraints torch，
-  /// 無能力或相機未啟動 → 靜默失敗。
-  Future<void> _toggleTorch() async {
-    await _controller.toggleTorch().catchError((Object _) {});
-    if (mounted) {
-      setState(() => _torchOn = _controller.torchOn);
-    }
-  }
-
-  /// 原生偵測器命中的條碼框（正規化——綠框高亮）。
-  final ValueNotifier<({List<Rect> boxes, Size frameSize})?>
-      _nativeBoxesNotifier = ValueNotifier(null);
 
   @override
   void initState() {
@@ -134,16 +101,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     try {
       final preview = await _controller.start();
       if (!mounted) return;
-      _zoomSupported = _controller.zoomSupported;
-      _torchSupported = _controller.torchSupported;
-      if (mounted) {
-        setState(() {
-          _preview = preview;
-          _state = _CamState.live;
-        });
-      }
-      // 節奏自適應（PM 2026-11-23）：原生偵測器快 → 700ms；zxing2 → 1200ms。
-      _loop = Timer.periodic(_controller.decodeInterval, (_) => _tryDecode());
+      setState(() {
+        _preview = preview;
+        _state = _CamState.live;
+        _torchSupported = _controller.torchSupported;
+      });
+      _loop = Timer.periodic(
+          const Duration(milliseconds: 1200), (_) => _tryDecode());
     } on CameraUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -156,6 +120,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _state = _CamState.failed;
         _error = '相機啟動失敗：$e';
       });
+    }
+  }
+
+  /// 補光（手電筒）開關：web MediaStreamTrack.applyConstraints torch，
+  /// 無能力或相機未啟動 → 靜默失敗。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() => _torchOn = _controller.torchOn);
     }
   }
 
@@ -181,7 +154,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           _frameInfo = _controller.resolutionInfo;
         });
       }
-      _nativeBoxesNotifier.value = _controller.lastNativeBoxes;
       if (texts.isNotEmpty) {
         draft = ImageQrScanner.draftFromQrTexts(texts);
       }
@@ -205,31 +177,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     sw.stop();
     _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
-    // **跨 tick 累積窗**（3 秒）——雙碼常分 tick 解出（PM 2026-11-23）。
+    // **跨 tick 累積窗**（3 秒）——無法一次掃兩碼 → 各別辨識＋合併
+    // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
     if (texts.isNotEmpty) {
       final now2 = DateTime.now();
-      // 新左碼出現 → 重置累積窗（換發票——避免 A 張左碼混 B 張右碼）。
-      String? newLeft;
-      for (final t in texts) {
-        final l = ImageQrScanner.extractOfficialLeft(t);
-        if (l != null) {
-          newLeft = l;
-          break;
-        }
-      }
-      if (newLeft != null) {
-        String? oldLeft;
-        for (final t in _recentTexts.keys) {
-          final l = ImageQrScanner.extractOfficialLeft(t);
-          if (l != null) {
-            oldLeft = l;
-            break;
-          }
-        }
-        if (oldLeft != null && oldLeft != newLeft) {
-          _recentTexts.clear();
-        }
-      }
       _recentTexts.removeWhere((_, t) =>
           now2.difference(t) > const Duration(seconds: 3));
       for (final t in texts) {
@@ -241,7 +192,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
     if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
-    // 累積優先：右碼補齊後合併成完整明細（draft 來自分層/累積）。
+    // 累積優先：右碼補齊後合併成完整明細。
     final merged = ImageQrScanner.draftFromQrTexts(accumulated) ?? draft;
     if (merged == null) {
       // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
@@ -251,7 +202,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       return;
     }
     if (mounted) setState(() => _decodeHits++);
-    // 左碼＝發票身分：已入單的發票不重複加入。
+    // 左碼＝發票身分：已入單的發票不重複加入（對應不起來＝另一張）。
     String? leftCode;
     for (final t in accumulated) {
       final l = ImageQrScanner.extractOfficialLeft(t);
@@ -298,7 +249,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       _seenCodes.clear();
     });
     _loop = Timer.periodic(
-        _controller.decodeInterval, (_) => _tryDecode()); // 繼續掃
+        const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
   }
 
   /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
@@ -319,7 +270,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   void dispose() {
     _loop?.cancel();
     _hintReset?.cancel();
-    _nativeBoxesNotifier.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -329,8 +279,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 回合重置（暫存清空＝新回合）→ seen 清空（可再掃同一張）；
     // 連續掃描關閉（預設）：掃到第一張 → 自動進確認清單（掃描暫停）。
     ref.listen(scanDraftsProvider, (prev, next) {
-      if (next.isEmpty && _seenCodes.isNotEmpty) {
+      if (next.isEmpty &&
+          (_seenCodes.isNotEmpty ||
+              _committedLeftCodes.isNotEmpty ||
+              _recentTexts.isNotEmpty)) {
         _seenCodes.clear();
+        _committedLeftCodes.clear();
+        _recentTexts.clear();
       }
       if (!ref.read(continuousScanProvider) &&
           (prev == null || prev.isEmpty) &&
@@ -369,7 +324,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final mode = ref.watch(scanModeProvider);
     return Column(
       children: [
-        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**）。
+        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**，
+        // 不在下方）：電子發票＝QR；紙本發票＝相機續掃＋「手動開一筆」。
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: SegmentedButton<ScanMode>(
@@ -389,236 +345,123 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                 ref.read(scanModeProvider.notifier).set(selection.first),
           ),
         ),
-        // 預覽：**contain 幾何**（PM 2026-11-23「放很大、比例不對、顆粒
-        // 清楚」——cover 在預覽區比例不合時大裁切＋放大）。video 完整
-        // 顯示（黑邊背景），引導框/綠框/按鈕全部定位在 videoRect 內。
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: LayoutBuilder(builder: (context, constraints) {
-              final aspect = _controller.videoAspect ?? 16 / 9;
-              final videoRect = _containRect(constraints.biggest, aspect);
-              final aimRect = _aimFrameRect(videoRect);
-              return Stack(children: [
-                // 影像（**全幅平台檢視——已知可用結構**；object-fit: contain
-                // 會把影像內容縮在 videoRect＝與疊層幾何一致）。
-                Positioned.fill(
-                  child: KeyedSubtree(
-                      key: const Key('webcam-preview'), child: _preview!),
-                ),
-                if (drafts.isNotEmpty)
-                  Positioned(
-                    left: videoRect.left + 12,
-                    top: videoRect.top + 12,
-                    child: Chip(
-                      avatar: const Icon(Icons.check_circle,
-                          color: Colors.green, size: 18),
-                      label: Text('已加入 ${drafts.length} 張'),
-                    ),
-                  ),
-                // 切換鏡頭（PM 2026-11-21）。
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              KeyedSubtree(
+                  key: const Key('webcam-preview'), child: _preview!),
+              if (drafts.isNotEmpty)
                 Positioned(
-                  right: videoRect.left + 12,
-                  top: videoRect.top + 12,
-                  child: IconButton(
-                    key: const Key('webcam-switch-camera'),
-                    tooltip: '切換鏡頭',
-                    onPressed: () => _controller.switchCamera(),
-                    icon: const Icon(Icons.cameraswitch),
-                    color: Colors.white,
+                  left: 12,
+                  top: 12,
+                  child: Chip(
+                    avatar: const Icon(Icons.check_circle,
+                        color: Colors.green, size: 18),
+                    label: Text('已加入 ${drafts.length} 張'),
                   ),
                 ),
-                // **點擊對焦嘗試**（PM 2026-11-24）：瀏覽器對焦控制支援
-                // 有限（多半靜默無效）——仍提供點擊回饋＋constraint 嘗試。
-                Positioned.fill(
+              // 切換鏡頭（PM 2026-11-21 按鈕需求）。
+              Positioned(
+                right: 12,
+                top: 12,
+                child: IconButton(
+                  key: const Key('webcam-switch-camera'),
+                  tooltip: '切換鏡頭',
+                  onPressed: () => _controller.switchCamera(),
+                  icon: const Icon(Icons.cameraswitch),
+                  color: Colors.white,
+                ),
+              ),
+              // 補光開關（web：MediaStreamTrack.applyConstraints torch；
+              // 支援度有限——無能力則隱藏）。
+              if (_torchSupported)
+                Positioned(
+                  right: 72,
+                  top: 12,
                   child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp: (d) => _onPreviewTap(d.localPosition, videoRect),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-                if (_focusIndicator != null)
-                  Positioned(
-                    left: _focusIndicator!.dx - 28,
-                    top: _focusIndicator!.dy - 28,
-                    child: IgnorePointer(
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: Colors.yellowAccent, width: 2.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                // 辨識區域引導框（四角括號——與 APP 同款；純視覺）。
-                Positioned.fromRect(
-                  rect: aimRect,
-                  child: IgnorePointer(
-                      child: CustomPaint(
-                          painter: _CornerBrackets(rect: aimRect))),
-                ),
-                // 原生偵測器命中 → 綠框（正規化座標 → videoRect 映射）。
-                ValueListenableBuilder(
-                  valueListenable: _nativeBoxesNotifier,
-                  builder: (context, boxes, _) =>
-                      boxes == null || boxes.boxes.isEmpty
-                          ? const SizedBox.shrink()
-                          : Positioned.fromRect(
-                              rect: videoRect,
-                              child: IgnorePointer(
-                                child: CustomPaint(
-                                  painter: _NativeBoxPainter(
-                                      boxes: boxes.boxes,
-                                      videoRect: videoRect),
-                                ),
-                              ),
-                            ),
-                ),
-                // 變焦按鈕（PM 2026-11-23：小/遠條碼——變焦取代靠近）。
-                if (_zoomSupported)
-                  Positioned(
-                    right: videoRect.left + 8,
-                    top: videoRect.top + 48,
+                    key: const Key('webcam-torch-toggle'),
+                    onTap: () => unawaited(_toggleTorch()),
                     child: Container(
-                      padding: const EdgeInsets.all(2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(10),
+                        color: _torchOn
+                            ? Colors.white
+                            : Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        for (final (label, z) in const [
-                          ('1×', 0.0),
-                          ('2×', 0.5),
-                          ('3×', 1.0),
-                        ])
-                          Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 2),
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() => _zoom = z);
-                                unawaited(_controller.setZoom(z));
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: _zoom == z
-                                      ? Colors.white
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(label,
-                                    style: TextStyle(
-                                        color: _zoom == z
-                                            ? Colors.black
-                                            : Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700)),
-                              ),
-                            ),
-                          ),
-                      ]),
-                    ),
-                  ),
-                // 補光開關（web：MediaStreamTrack.applyConstraints torch；
-                // 支援度有限——無能力則隱藏）。
-                if (_torchSupported)
-                  Positioned(
-                    right: videoRect.left + 8,
-                    top: videoRect.top + 88,
-                    child: GestureDetector(
-                      key: const Key('webcam-torch-toggle'),
-                      onTap: () => unawaited(_toggleTorch()),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _torchOn
-                              ? Colors.white
-                              : Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          _torchOn
-                              ? Icons.flash_on
-                              : Icons.flash_off,
-                          color: _torchOn
-                              ? Colors.black
-                              : Colors.white,
-                          size: 20,
-                        ),
+                      child: Icon(
+                        _torchOn ? Icons.flash_on : Icons.flash_off,
+                        color: _torchOn ? Colors.black : Colors.white,
+                        size: 20,
                       ),
                     ),
                   ),
-                // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
-                // scan_policy 平台分流）。
-                if (mode == ScanMode.paper)
-                  Positioned(
-                    left: videoRect.left,
-                    right: videoRect.left,
-                    top: videoRect.bottom - 48,
-                    child: Center(
-                      child: FilledButton.icon(
-                        key: const Key('webcam-manual-entry'),
-                        onPressed: _addBlankDraft,
-                        icon: const Icon(Icons.receipt_long),
-                        label: const Text('手動開一筆'),
-                      ),
-                    ),
-                  ),
-                // 畫面提示（只掃到明細碼等——與 APP 同款）。
-                if (_hint != null)
-                  Positioned(
-                    left: videoRect.left,
-                    right: videoRect.left,
-                    top: videoRect.bottom - 12,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(_hint!,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12)),
-                      ),
-                    ),
-                  ),
-                // 診斷行（PM 2026-11-23：**短格式**——點擊展開詳細）。
+                ),
+              // 畫面提示（只掃到明細碼等——與 APP 同款）。
+              if (_hint != null)
                 Positioned(
-                  left: videoRect.left + 12,
-                  top: videoRect.bottom - 40,
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_hint!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                  ),
+                ),
+              // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
+              // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
+              if (mode == ScanMode.paper)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 48,
+                  child: Center(
+                    child: FilledButton.icon(
+                      key: const Key('webcam-manual-entry'),
+                      onPressed: _addBlankDraft,
+                      icon: const Icon(Icons.receipt_long),
+                      label: const Text('手動開一筆'),
+                    ),
+                  ),
+                ),
+              // 診斷面板（定位「無法正確掃描」：取幀是否流動／解碼是否命中）。
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6)),
                   child: GestureDetector(
                     onTap: () =>
                         setState(() => _diagExpanded = !_diagExpanded),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(6)),
-                      child: Text(
-                        _diagExpanded
-                            ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
-                                '命中 $_decodeHits · 解 $_decodeMs ms'
-                                '${_controller.elementInfo.isEmpty ? '' : ' · ${_controller.elementInfo}'}'
-                                '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
-                            : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
-                        key: const Key('webcam-diag'),
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 11),
-                      ),
+                    child: Text(
+                      _diagExpanded
+                          ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
+                              '命中 $_decodeHits · 解 $_decodeMs ms'
+                              '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
+                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                      key: const Key('webcam-diag'),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 11),
                     ),
                   ),
                 ),
-              ]);
-            }),
+              ),
+            ],
           ),
         ),
         Padding(
@@ -659,26 +502,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     );
   }
 
-  /// 在 [container] 內以 [aspect] 置中取最大內接矩形（contain 幾何）。
-  Rect _containRect(Size container, double aspect) {
-    final targetH = container.width / aspect;
-    if (targetH <= container.height) {
-      return Rect.fromLTWH(
-          0, (container.height - targetH) / 2, container.width, targetH);
-    }
-    final targetW = container.height * aspect;
-    return Rect.fromLTWH(
-        (container.width - targetW) / 2, 0, targetW, container.height);
-  }
-
-  /// 引導框 rect（videoRect 內：88%×42% 置中偏上——雙 QR 橫排）。
-  Rect _aimFrameRect(Rect videoRect) => Rect.fromCenter(
-        center: Offset(videoRect.center.dx,
-            videoRect.top + videoRect.height * 0.42),
-        width: videoRect.width * 0.88,
-        height: videoRect.height * 0.42,
-      );
-
   Widget _buildFailed(BuildContext context) {
     return Center(
       child: Padding(
@@ -717,73 +540,3 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 }
 
 enum _CamState { starting, live, failed }
-
-class _CornerBrackets extends CustomPainter {
-  _CornerBrackets({required this.rect});
-
-  final Rect rect;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const len = 26.0;
-    const r = 6.0;
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    final path = Path()
-      ..moveTo(rect.left, rect.top + len)
-      ..lineTo(rect.left, rect.top + r)
-      ..quadraticBezierTo(rect.left, rect.top, rect.left + r, rect.top)
-      ..lineTo(rect.left + len, rect.top)
-      ..moveTo(rect.right - len, rect.top)
-      ..lineTo(rect.right - r, rect.top)
-      ..quadraticBezierTo(rect.right, rect.top, rect.right, rect.top + r)
-      ..lineTo(rect.right, rect.top + len)
-      ..moveTo(rect.right, rect.bottom - len)
-      ..lineTo(rect.right, rect.bottom - r)
-      ..quadraticBezierTo(rect.right, rect.bottom, rect.right - r, rect.bottom)
-      ..lineTo(rect.right - len, rect.bottom)
-      ..moveTo(rect.left + len, rect.bottom)
-      ..lineTo(rect.left + r, rect.bottom)
-      ..quadraticBezierTo(rect.left, rect.bottom, rect.left, rect.bottom - r)
-      ..lineTo(rect.left, rect.bottom - len);
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_CornerBrackets old) => old.rect != rect;
-}
-
-/// 原生偵測器命中的條碼框（正規化 rect → videoRect 映射——綠框）。
-class _NativeBoxPainter extends CustomPainter {
-  _NativeBoxPainter({required this.boxes, required this.videoRect});
-
-  final List<Rect> boxes;
-  final Rect videoRect;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (videoRect.isEmpty || boxes.isEmpty) return;
-    final fill = Paint()..color = Colors.green.withValues(alpha: 0.15);
-    final stroke = Paint()
-      ..color = Colors.greenAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeJoin = StrokeJoin.round;
-    for (final box in boxes) {
-      final r = Rect.fromLTRB(
-          videoRect.left + box.left * videoRect.width,
-          videoRect.top + box.top * videoRect.height,
-          videoRect.left + box.right * videoRect.width,
-          videoRect.top + box.bottom * videoRect.height);
-      canvas.drawRect(r.inflate(4), fill);
-      canvas.drawRect(r.inflate(4), stroke);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_NativeBoxPainter old) =>
-      old.boxes != boxes || old.videoRect != videoRect;
-}
