@@ -167,7 +167,12 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   /// 完整開機流程：取得後鏡頭串流 → 掛到 video → play。
+  /// 開機世代（重進/切鏡頭/看門狗重取會遞增——舊驗證迴圈自動失效）。
+  int _openGen = 0;
+
   Future<void> _openOn(web.HTMLVideoElement video) async {
+    final gen = ++_openGen;
+    _stopStreamTracks(); // 確保無殘留軌道（硬體鎖釋放後再取）
     _stream = await _acquireRearCamera();
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
@@ -183,6 +188,36 @@ class WebCameraStreamController implements CameraStreamController {
         video.play().toDart.ignore();
       } catch (_) {}
     }).toJS;
+    // **黑畫面驗證＋自癒**（PM 2026-11-23：退出重進掃描頁＝停軌後
+    // iOS 相機管線未完全重置→重取得黑串流。取得後實際採樣驗證，
+    // 黑 → 停、遞增延遲重取——背景進行不阻塞預覽掛載）。
+    unawaited(_verifyAndHeal(video, gen));
+  }
+
+  /// 黑畫面驗證＋自癒迴圈：每輪採樣亮度，非黑即成功返回；黑 → 停軌、
+  /// 清掛載、遞增延遲（400/800/1200ms）重取。世代不符（新開機）即退出。
+  Future<void> _verifyAndHeal(web.HTMLVideoElement video, int gen) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (gen != _openGen || _video == null) return; // 已有更新開機/已退出
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        try {
+          if (_sampleLuminance(video) > 4) return; // 幀流動 ✓
+        } catch (_) {/* 採樣失敗——下輪再驗 */}
+      }
+      // 黑畫面 → 釋放＋重取（遞增延遲給 iOS 硬體更多重置時間）。
+      _stopStreamTracks();
+      video.srcObject = null;
+      await Future.delayed(Duration(milliseconds: 400 + attempt * 400));
+      if (gen != _openGen || _video == null) return;
+      try {
+        _stream = await _acquireRearCamera();
+        video.srcObject = _stream;
+        try {
+          await video.play().toDart;
+        } catch (_) {}
+      } catch (_) {/* 重取失敗——下輪再試 */}
+    }
   }
 
   /// 後鏡頭取得流程：
