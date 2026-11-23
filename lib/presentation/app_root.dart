@@ -1,15 +1,11 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../application/lock/lock_fe_state.dart';
 import '../application/providers.dart';
 import '../data/sqlite/app_database.dart';
-import '../platform/pending_scan_nav.dart';
 import 'screens/lock/lock_gate.dart';
 import 'screens/main_shell_page.dart';
 import 'screens/onboarding/first_run_guide_page.dart';
-import 'screens/scan/web_camera_scan.dart';
 import 'app_shell.dart';
 
 /// App 根分流（F13 首次啟動引導；PM §4#1 決策項實作）。
@@ -38,22 +34,6 @@ class _AppRootState extends ConsumerState<AppRoot> {
     final hasTx = widget.db.select('SELECT COUNT(*) c FROM transactions WHERE deleted_at IS NULL').first['c'] as int;
     _onboarded =
         widget.db.getSetting('app.onboarded') == '1' || hasTx > 0;
-    // **相機重載後自動回掃描頁**（T65，PM 2026-11-23）：iOS PWA 離開
-    // 掃描頁關燈（停軌毒化管線）→ 重進由相機層觸發整頁重載 → 此處
-    // 接手導回掃描頁。鎖定中/未完成引導 → 不自動跳（使用者手動再進）。
-    if (kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final pending = consumePendingScanFlag();
-        if (pending == null) return;
-        if (!_onboarded) return;
-        if (ref.read(lockOverlayProvider)) return;
-        Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute<void>(
-              builder: (_) => const WebCameraScanPage()),
-        );
-      });
-    }
   }
 
   void _completeOnboarding() {

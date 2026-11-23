@@ -339,7 +339,7 @@ class WebCameraStreamController implements CameraStreamController {
     try {
       final target = _facing == 'user' ? 'environment' : 'user';
       _switchNote = '切換→$target…';
-      for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+      for (final t in _videoTracks()) {
         t.stop();
       }
       await Future.delayed(const Duration(milliseconds: 600));
@@ -450,9 +450,19 @@ class WebCameraStreamController implements CameraStreamController {
     web.document.addEventListener('visibilitychange', _visibilityHandler!);
   }
 
+  /// 目前串流的視訊軌（**型別正確**——不可用 `?? const []`：空字面量
+  /// 無上下文推斷成 `List<dynamic>`，LUB 降級迴圈變數為 dynamic →
+  /// interop 呼叫變動態派發 → raw JS 軌道缺 Dart selector →
+  /// NoSuchMethodError 'stop'（PM 實機 2026-11-23）。
+  List<web.MediaStreamTrack> _videoTracks() {
+    final stream = _stream;
+    if (stream == null) return const <web.MediaStreamTrack>[];
+    return stream.getVideoTracks().toDart;
+  }
+
   /// 停止目前串流所有軌道（釋放相機硬體鎖）。
   void _stopStreamTracks() {
-    for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+    for (final t in _videoTracks()) {
       t.stop();
     }
   }
@@ -507,7 +517,7 @@ class WebCameraStreamController implements CameraStreamController {
         _blackStreak = 0;
         _healCount++;
         try {
-          for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+          for (final t in _videoTracks()) {
             t.stop();
           }
           await Future.delayed(const Duration(milliseconds: 600));
@@ -544,12 +554,12 @@ class WebCameraStreamController implements CameraStreamController {
     // 第一次啟動行為，PM 已驗證可靠）。
     var wasLive = false;
     try {
-      final tracks = _stream?.getVideoTracks().toDart ?? const [];
+      final tracks = _videoTracks();
       wasLive =
           tracks.isNotEmpty && tracks.any((t) => t.readyState == 'live');
     } catch (_) {}
     _video?.srcObject = null;
-    for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+    for (final t in _videoTracks()) {
       t.stop();
     }
     if (wasLive) {

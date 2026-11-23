@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/lock/lock_fe_state.dart';
 import '../../application/providers.dart';
+import '../../platform/pending_scan_nav.dart';
 import '../category_display.dart';
 import 'settings/settings_hub_page.dart';
 import '../../core/version.dart';
@@ -18,6 +20,7 @@ import '../../application/categories/category_service.dart';
 import 'quick_entry/quick_date_time_picker.dart';
 import 'quick_entry/quick_entry_page.dart';
 import 'scan/scan_page.dart';
+import 'scan/web_camera_scan.dart';
 import '../../application/sync/sync_fe_state.dart';
 import 'stats/stats_page.dart';
 
@@ -46,6 +49,18 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   @override
   void initState() {
     super.initState();
+    // **相機重載後自動回掃描頁**（T65，PM 2026-11-23）：iOS PWA 離開
+    // 掃描頁關燈（停軌毒化管線）→ 重進由相機層觸發整頁重載 → 此處
+    // 接手導回掃描頁。鎖定中 → 不自動跳（使用者解鎖後手動再進）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final pending = consumePendingScanFlag();
+      if (pending == null) return;
+      if (ref.read(lockOverlayProvider)) return;
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute<void>(builder: (_) => const WebCameraScanPage()),
+      );
+    });
     // FR-Y11 啟動同步：已連結雲端時同步一次（fire-and-forget；M5 BE 已驗協議）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // FR-T5 啟動檢查（N-7）——FE 情境由 harness 統一驅動（雙鉤子會漏計）；
