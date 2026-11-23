@@ -117,18 +117,36 @@ class WebCameraStreamController implements CameraStreamController {
 
   static DateTime? _lastDisposeAt; // 跨實例：退出重進的釋放等待基準
 
-  // === iOS PWA 全程保活（PM 2026-11-23 實測：session 內只有第一次啟動有
-  // 畫面，之後全黑，強制關閉才恢復——「已啟動」相機一旦停軌＝管線毒化，
-  // 之後所有 getUserMedia 皆黑。唯一可行策略：串流＋video 元素全程保活，
-  // 退出頁面只分離、永不停軌。代價＝離開掃描頁後相機燈持續亮。） ===
+  // === iOS PWA 相機策略（PM 2026-11-23 實測迭代結論）：
+  // session 內「已啟動」相機一旦停軌＝管線毒化，之後所有 getUserMedia
+  // 皆黑（只有 process 首次啟動可用；強制關閉 PWA 才恢復）。全程保活
+  // （20261124u）雖讓重進有畫面，但相機燈離開掃描頁仍亮（PM：不對）。
+  // **最終策略：離開即關燈＋標記；重進偵測標記 → 整頁重載**（乾淨
+  // JS context＝第一次啟動行為，PM 已驗證可靠）＋重載後自動回掃描頁。 ===
   static web.HTMLVideoElement? _sharedVideo; // session 唯一 video 元素
-  static web.MediaStream? _keepAliveStream; // session 唯一保活串流
   static bool _factoryRegistered = false;
   static const String _sharedViewType = 'webcam-shared';
 
+  /// sessionStorage keys：離開掃描頁停了活相機 → 重進需整頁重載；
+  /// 重載完成 → 自動回掃描頁。
+  static const String _kReopenFlag = 'ls_scan_reopen';
+  static const String _kPendingScan = 'ls_pending_scan';
+  static const String _kHealReloadCount = 'ls_heal_reload_count';
+
   @override
   Future<Widget> start() async {
-    // video 元素：整個 session 只建立一次（新元素不渲染＝黑畫面）。
+    // 上次離開掃描頁停了活相機（管線已毒化）→ 整頁重載取乾淨 context。
+    try {
+      final reopen = web.window.sessionStorage.getItem(_kReopenFlag);
+      if (reopen != null) {
+        web.window.sessionStorage.removeItem(_kReopenFlag);
+        web.window.sessionStorage.setItem(_kPendingScan, '1');
+        web.window.location.reload();
+        // 頁面即將卸載——回傳佔位（不會被渲染到）。
+        return HtmlElementView(viewType: _sharedViewType);
+      }
+    } catch (_) {/* sessionStorage 不可用——照原流程 */}
+    // video 元素：整個 session 只建立一次。
     _sharedVideo ??=
         (web.document.createElement('video') as web.HTMLVideoElement)
           ..autoplay = true
@@ -151,43 +169,20 @@ class WebCameraStreamController implements CameraStreamController {
         }
       }
       _lastDisposeAt = null;
-      // 串流活著 → 直接重接同一元素（**不自願停軌**——停＝毒化）；
-      // 死了（首次啟動／系統回收）才重取——乾淨路徑。
-      final keep = _keepAliveStream;
-      var live = false;
-      if (keep != null) {
-        final tracks = keep.getVideoTracks().toDart;
-        live = tracks.isNotEmpty && tracks.every((t) => t.readyState == 'live');
-      }
-      if (live) {
-        _stream = keep;
-        if (video.srcObject != _stream) video.srcObject = _stream;
-        try {
-          await video.play().toDart;
-        } catch (_) {}
-        video.onloadedmetadata = ((web.Event e) {
-          try {
-            video.play().toDart.ignore();
-          } catch (_) {}
-        }).toJS;
-      } else {
-        _keepAliveStream = null;
-        final md = web.window.navigator.mediaDevices;
-        try {
-          final warm = await md
-              .getUserMedia(web.MediaStreamConstraints(video: true.toJS))
-              .toDart;
-          for (final t in warm.getTracks().toDart) {
-            t.stop();
-          }
-        } catch (_) {
-          // 暖機失敗不阻擋——正式取得流程自行處理錯誤。
+      final md = web.window.navigator.mediaDevices;
+      try {
+        final warm = await md
+            .getUserMedia(web.MediaStreamConstraints(video: true.toJS))
+            .toDart;
+        for (final t in warm.getTracks().toDart) {
+          t.stop();
         }
-        // 暖機後等 300ms（重進釋放保險）。
-        await Future.delayed(const Duration(milliseconds: 300));
-        await _openOn(video);
-        _keepAliveStream = _stream;
+      } catch (_) {
+        // 暖機失敗不阻擋——正式取得流程自行處理錯誤。
       }
+      // 暖機後等 300ms（重進釋放保險）。
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _openOn(video);
     } catch (e) {
       dispose();
       throw _classify(e);
@@ -208,7 +203,6 @@ class WebCameraStreamController implements CameraStreamController {
     final gen = ++_openGen;
     _stopStreamTracks(); // 確保無殘留軌道（硬體鎖釋放後再取）
     _stream = await _acquireRearCamera();
-    _keepAliveStream = _stream; // 保活引用同步（重進重接用）
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
@@ -237,7 +231,13 @@ class WebCameraStreamController implements CameraStreamController {
       if (gen != _openGen || _video == null) return; // 已有更新開機/已退出
       if (video.readyState >= 2 && video.videoWidth > 0) {
         try {
-          if (_sampleLuminance(video) > 4) return; // 幀流動 ✓
+          if (_sampleLuminance(video) > 4) {
+            // 幀流動 ✓——清癒後重載計數。
+            try {
+              web.window.sessionStorage.removeItem(_kHealReloadCount);
+            } catch (_) {}
+            return;
+          }
         } catch (_) {/* 採樣失敗——下輪再驗 */}
       }
       // 黑畫面 → 釋放＋重取（遞增延遲給 iOS 硬體更多重置時間）。
@@ -247,13 +247,25 @@ class WebCameraStreamController implements CameraStreamController {
       if (gen != _openGen || _video == null) return;
       try {
         _stream = await _acquireRearCamera();
-        _keepAliveStream = _stream; // 保活引用同步
         video.srcObject = _stream;
         try {
           await video.play().toDart;
         } catch (_) {}
       } catch (_) {/* 重取失敗——下輪再試 */}
     }
+    // 4 輪自癒全數失敗 → **整頁重載後備**（乾淨 context＝第一次啟動行為；
+    // 上限 2 次避免硬體故障時無限重載迴圈）。
+    try {
+      final prev =
+          int.tryParse(web.window.sessionStorage.getItem(_kHealReloadCount) ??
+                  '0') ??
+              0;
+      if (prev < 2) {
+        web.window.sessionStorage.setItem(_kHealReloadCount, '${prev + 1}');
+        web.window.sessionStorage.setItem(_kPendingScan, '1');
+        web.window.location.reload();
+      }
+    } catch (_) {}
   }
 
   /// 後鏡頭取得流程：
@@ -527,9 +539,24 @@ class WebCameraStreamController implements CameraStreamController {
     _watchdog?.cancel();
     web.document.removeEventListener('visibilitychange', _visibilityHandler);
     _visibilityHandler = null;
-    // **不停軌、不清 srcObject**（iOS PWA：session 內停「已啟動」相機＝
-    // 管線毒化，之後所有 getUserMedia 皆黑——串流與元素全程保活，
-    // 退出僅分離實例引用。代價＝離開掃描頁後相機燈持續亮）。
+    // **離開即關燈**（PM 2026-11-23：相機燈亮著不對）——停軌＋清 srcObject。
+    // 停了活相機＝管線毒化 → 標記「重進需整頁重載」（乾淨 context＝
+    // 第一次啟動行為，PM 已驗證可靠）。
+    var wasLive = false;
+    try {
+      final tracks = _stream?.getVideoTracks().toDart ?? const [];
+      wasLive =
+          tracks.isNotEmpty && tracks.any((t) => t.readyState == 'live');
+    } catch (_) {}
+    _video?.srcObject = null;
+    for (final t in _stream?.getVideoTracks().toDart ?? const []) {
+      t.stop();
+    }
+    if (wasLive) {
+      try {
+        web.window.sessionStorage.setItem(_kReopenFlag, '1');
+      } catch (_) {}
+    }
     _stream = null;
     _video = null;
     _lastDisposeAt = DateTime.now();
