@@ -115,22 +115,33 @@ class WebCameraStreamController implements CameraStreamController {
     }
   }
 
-  static int _seq = 0;
-  late final String _viewType = 'webcam-${_seq++}';
   static DateTime? _lastDisposeAt; // 跨實例：退出重進的釋放等待基準
+
+  // === iOS PWA 全程保活（PM 2026-11-23 實測：session 內只有第一次啟動有
+  // 畫面，之後全黑，強制關閉才恢復——「已啟動」相機一旦停軌＝管線毒化，
+  // 之後所有 getUserMedia 皆黑。唯一可行策略：串流＋video 元素全程保活，
+  // 退出頁面只分離、永不停軌。代價＝離開掃描頁後相機燈持續亮。） ===
+  static web.HTMLVideoElement? _sharedVideo; // session 唯一 video 元素
+  static web.MediaStream? _keepAliveStream; // session 唯一保活串流
+  static bool _factoryRegistered = false;
+  static const String _sharedViewType = 'webcam-shared';
 
   @override
   Future<Widget> start() async {
-    final video = (web.document.createElement('video') as web.HTMLVideoElement)
-      ..autoplay = true
-      ..muted = true
-      ..playsInline = true;
+    // video 元素：整個 session 只建立一次（新元素不渲染＝黑畫面）。
+    _sharedVideo ??=
+        (web.document.createElement('video') as web.HTMLVideoElement)
+          ..autoplay = true
+          ..muted = true
+          ..playsInline = true;
+    if (!_factoryRegistered) {
+      ui_web.platformViewRegistry.registerViewFactory(
+          _sharedViewType, (int viewId) => _sharedVideo!);
+      _factoryRegistered = true;
+    }
+    final video = _sharedVideo!;
     _video = video;
-    ui_web.platformViewRegistry.registerViewFactory(
-        _viewType, (int viewId) => video);
     try {
-      // iOS PWA：退出重進的黑畫面（WebKit 275527 同族；wildhart workaround）
-      // ——① 等 session 釋放（≥600ms）② 暖機呼叫重置相機狀態。
       final last = _lastDisposeAt;
       if (last != null) {
         final elapsed = DateTime.now().difference(last);
@@ -140,20 +151,43 @@ class WebCameraStreamController implements CameraStreamController {
         }
       }
       _lastDisposeAt = null;
-      final md = web.window.navigator.mediaDevices;
-      try {
-        final warm = await md
-            .getUserMedia(web.MediaStreamConstraints(video: true.toJS))
-            .toDart;
-        for (final t in warm.getTracks().toDart) {
-          t.stop();
-        }
-      } catch (_) {
-        // 暖機失敗不阻擋——正式取得流程自行處理錯誤。
+      // 串流活著 → 直接重接同一元素（**不自願停軌**——停＝毒化）；
+      // 死了（首次啟動／系統回收）才重取——乾淨路徑。
+      final keep = _keepAliveStream;
+      var live = false;
+      if (keep != null) {
+        final tracks = keep.getVideoTracks().toDart;
+        live = tracks.isNotEmpty && tracks.every((t) => t.readyState == 'live');
       }
-      // 暖機後等 300ms（重進釋放保險）。
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _openOn(video);
+      if (live) {
+        _stream = keep;
+        if (video.srcObject != _stream) video.srcObject = _stream;
+        try {
+          await video.play().toDart;
+        } catch (_) {}
+        video.onloadedmetadata = ((web.Event e) {
+          try {
+            video.play().toDart.ignore();
+          } catch (_) {}
+        }).toJS;
+      } else {
+        _keepAliveStream = null;
+        final md = web.window.navigator.mediaDevices;
+        try {
+          final warm = await md
+              .getUserMedia(web.MediaStreamConstraints(video: true.toJS))
+              .toDart;
+          for (final t in warm.getTracks().toDart) {
+            t.stop();
+          }
+        } catch (_) {
+          // 暖機失敗不阻擋——正式取得流程自行處理錯誤。
+        }
+        // 暖機後等 300ms（重進釋放保險）。
+        await Future.delayed(const Duration(milliseconds: 300));
+        await _openOn(video);
+        _keepAliveStream = _stream;
+      }
     } catch (e) {
       dispose();
       throw _classify(e);
@@ -163,7 +197,7 @@ class WebCameraStreamController implements CameraStreamController {
     // 黑畫面看門狗——進入後自癒（PM：每次進入重新渲染鏡頭）。
     _healCount = 0;
     _startWatchdog(video);
-    return HtmlElementView(viewType: _viewType);
+    return HtmlElementView(viewType: _sharedViewType);
   }
 
   /// 完整開機流程：取得後鏡頭串流 → 掛到 video → play。
@@ -174,6 +208,7 @@ class WebCameraStreamController implements CameraStreamController {
     final gen = ++_openGen;
     _stopStreamTracks(); // 確保無殘留軌道（硬體鎖釋放後再取）
     _stream = await _acquireRearCamera();
+    _keepAliveStream = _stream; // 保活引用同步（重進重接用）
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
@@ -212,6 +247,7 @@ class WebCameraStreamController implements CameraStreamController {
       if (gen != _openGen || _video == null) return;
       try {
         _stream = await _acquireRearCamera();
+        _keepAliveStream = _stream; // 保活引用同步
         video.srcObject = _stream;
         try {
           await video.play().toDart;
@@ -491,14 +527,9 @@ class WebCameraStreamController implements CameraStreamController {
     _watchdog?.cancel();
     web.document.removeEventListener('visibilitychange', _visibilityHandler);
     _visibilityHandler = null;
-    // iOS：先分離串流再停止軌跡——退出重進的黑畫面
-    // 多為相機 session 未完全釋放。
-    _video?.srcObject = null;
-    if (_stream != null) {
-      for (final t in _stream!.getTracks().toDart) {
-        t.stop();
-      }
-    }
+    // **不停軌、不清 srcObject**（iOS PWA：session 內停「已啟動」相機＝
+    // 管線毒化，之後所有 getUserMedia 皆黑——串流與元素全程保活，
+    // 退出僅分離實例引用。代價＝離開掃描頁後相機燈持續亮）。
     _stream = null;
     _video = null;
     _lastDisposeAt = DateTime.now();
