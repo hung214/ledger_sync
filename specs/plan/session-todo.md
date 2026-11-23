@@ -9,6 +9,13 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 進行中（PM 2026-11-23：品牌定稿——ICON 換裝＋首頁左上 LOGO）
+
+- [ ] **T69 ICON/LOGO 定稿換裝**：icon 來源改 `jpg/icon01.png`
+  （滿版無圓角——系統自套圓角，避免雙層圓角）；logo.png → 首頁
+  左上角 LOGO（現為 📒 emoji 文字）。重跑 flutter_launcher_icons
+  覆蓋草稿 A 未 commit 產物（PM 授權接手）；清孤兒尺寸檔。
+
 ## 進行中（PM 2026-11-23：相機修復完成——MR 回流＋發佈 0.5.1）
 
 - [x] **T67 相機修復 MR 回流**：pwa-accumulate（T61-T66 相機修復）
