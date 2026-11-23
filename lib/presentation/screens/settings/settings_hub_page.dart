@@ -29,15 +29,25 @@ class SettingsHubPage extends ConsumerWidget {
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
-          const _SectionLabel('同步'),
-          ListTile(
-            key: const Key('settings-sync'),
-            leading: const Icon(Icons.cloud_sync_outlined),
-            title: const Text('雲端備份'),
-            subtitle: const Text('備份到 Google Drive、跨裝置同步、衝突檢視'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsSyncPage())),
+          const _SectionLabel('外觀'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (final (mode, label, key) in const [
+                  (ThemeMode.system, '跟隨系統', 'theme-system'),
+                  (ThemeMode.light, '淺色', 'theme-light'),
+                  (ThemeMode.dark, '深色', 'theme-dark'),
+                ])
+                  ChoiceChip(
+                    key: Key(key),
+                    label: Text(label),
+                    selected: themeMode == mode,
+                    onSelected: (_) => ref.read(themeModeProvider.notifier).set(mode),
+                  ),
+              ],
+            ),
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           const _SectionLabel('資料'),
@@ -72,7 +82,7 @@ class SettingsHubPage extends ConsumerWidget {
             key: const Key('settings-data-management'),
             leading: const Icon(Icons.storage_outlined),
             title: const Text('資料管理'),
-            subtitle: const Text('清空資料（三重防護）'),
+            subtitle: const Text('／本地備份還原／匯入／清空資料'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const DataManagementPage())),
@@ -100,6 +110,17 @@ class SettingsHubPage extends ConsumerWidget {
                   ),
               ],
             ),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          const _SectionLabel('同步'),
+          ListTile(
+            key: const Key('settings-sync'),
+            leading: const Icon(Icons.cloud_sync_outlined),
+            title: const Text('雲端備份'),
+            subtitle: const Text('備份到 Google Drive、跨裝置同步、衝突檢視'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsSyncPage())),
           ),
         ],
       ),
