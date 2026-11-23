@@ -259,7 +259,10 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
                 final pick = await showCategoryPicker(context, ref,
                     kind: 'expense',
                     selectedId: _categoryId ?? defaultCatId,
-                    recentLimit: 5);
+                    recentLimit: 5,
+                    // T71 PM 2026-11-24：預算可綁主分類——用量＝主分類
+                    // ＋其全部子分類加總（早餐100＋午餐200 → 餐飲食品 300）。
+                    pickMainLabel: '整個主分類（含子類別）');
                 if (!mounted) return;
                 switch (pick) {
                   case CategoryPicked(:final categoryId):
@@ -542,6 +545,11 @@ class _CategoryBudgetsCard extends ConsumerWidget {
     final db = ref.watch(dbProvider);
     final evaluator = BudgetEvaluator(db);
     final fmt = NumberFormat('#,###');
+    // 主分類 id 集合（T71——主分類預算列標示「（含子類）」）。
+    final parentIds = {
+      for (final c in db.categoriesByKind('expense'))
+        if (c.parentId == null) c.id,
+    };
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -556,7 +564,8 @@ class _CategoryBudgetsCard extends ConsumerWidget {
             const SizedBox(height: 4),
             for (final b in budgets)
               _CategoryItem(
-                name: db.categoryName(b.categoryId!) ?? '分類預算',
+                name: (db.categoryName(b.categoryId!) ?? '分類預算') +
+                    (parentIds.contains(b.categoryId) ? '（含子類）' : ''),
                 usage: evaluator.categoryUsage(b.categoryId!),
                 amountMinor: b.amountMinor,
                 periodStartDay: b.periodStartDay,
