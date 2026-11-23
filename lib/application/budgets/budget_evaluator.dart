@@ -15,14 +15,19 @@ class BudgetEvaluator {
   static const BudgetPeriodService _period = BudgetPeriodService();
 
   /// 分類預算用量（含 pending 分量）；無該分類預算回 null。
+  ///
+  /// **主分類預算＝主分類自身＋其全部子分類加總**（PM 2026-11-24：
+  /// 早餐 100＋午餐 200 →「餐飲食品」預算顯示 300）；子分類預算＝
+  /// 精確比對該子分類（不受主分類影響）。
   CategoryUsage? categoryUsage(String categoryId) {
     final budget = _budgetByCategory(categoryId);
     if (budget == null) return null;
     final period = _period.current(budget.periodStartDay);
+    final ids = _selfAndChildIds(categoryId);
     var total = 0;
     var pending = 0;
     for (final t in _db.transactionsBetween(period.startMs, period.endExclusiveMs)) {
-      if (t.kind != 'expense' || t.categoryId != categoryId) continue;
+      if (t.kind != 'expense' || !ids.contains(t.categoryId)) continue;
       total += t.amountMinor;
       if (t.settlementStatus == 'pending') pending += t.amountMinor;
     }
@@ -31,6 +36,15 @@ class BudgetEvaluator {
       pendingMinor: pending,
       budgetAmountMinor: budget.amountMinor,
     );
+  }
+
+  /// 該分類自身＋（若為主分類）其全部子分類的 id 集合。
+  Set<String> _selfAndChildIds(String categoryId) {
+    final ids = <String>{categoryId};
+    for (final c in _db.categoriesByKind('expense')) {
+      if (c.parentId == categoryId) ids.add(c.id);
+    }
+    return ids;
   }
 
   /// 總預算用量（全分類，含 pending；無總預算回 null）。

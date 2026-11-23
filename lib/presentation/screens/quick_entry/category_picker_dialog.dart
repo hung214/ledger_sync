@@ -37,6 +37,7 @@ Future<CategoryPick?> showCategoryPicker(
   String? selectedId,
   int recentLimit = 10,
   bool showAdd = true,
+  String pickMainLabel = '（不分類）',
 }) {
   return showDialog<CategoryPick>(
     context: context,
@@ -44,7 +45,8 @@ Future<CategoryPick?> showCategoryPicker(
         kind: kind,
         selectedId: selectedId,
         recentLimit: recentLimit,
-        showAdd: showAdd),
+        showAdd: showAdd,
+        pickMainLabel: pickMainLabel),
   );
 }
 
@@ -53,7 +55,8 @@ class _CategoryPickerDialog extends ConsumerStatefulWidget {
       {this.kind = 'expense',
       this.selectedId,
       this.recentLimit = 10,
-      this.showAdd = true});
+      this.showAdd = true,
+      this.pickMainLabel = '（不分類）'});
 
   final String kind;
   final String? selectedId;
@@ -63,6 +66,10 @@ class _CategoryPickerDialog extends ConsumerStatefulWidget {
 
   /// 是否顯示「＋新增」（明細查詢＝搜尋場景不新增——false）。
   final bool showAdd;
+
+  /// 右欄頂部「回傳主分類本身」選項的標籤（T71 PM 2026-11-24）——
+  /// 預算場景＝「整個主分類（含子類別）」；快記等維持「（不分類）」。
+  final String pickMainLabel;
 
   @override
   ConsumerState<_CategoryPickerDialog> createState() =>
@@ -259,7 +266,7 @@ class _CategoryPickerDialogState extends ConsumerState<_CategoryPickerDialog> {
                                   if (effMain != null)
                                     row(
                                       key: const Key('picker-sub-none'),
-                                      label: '（不分類）',
+                                      label: widget.pickMainLabel,
                                       selected: false,
                                       onTap: () => Navigator.of(context)
                                           .pop(CategoryPicked(effMain)),

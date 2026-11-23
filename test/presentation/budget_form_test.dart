@@ -49,7 +49,8 @@ void main() {
       await tester.enterText(find.byKey(const Key('budget-start-day')), '1');
       await tester.tap(find.byKey(const Key('budget-save')));
       await tester.pumpAndSettle();
-      expect(find.text('餐飲食品'), findsOneWidget, reason: '分類預算項');
+      expect(find.text('餐飲食品（含子類）'), findsOneWidget,
+          reason: '分類預算項（T71——主分類預算標示含子類加總）');
       expect(find.text('0 / 8,000'), findsOneWidget, reason: '無交易→用量 0/額度');
 
       // ── 3. 收入目標：60,000 ──
@@ -75,13 +76,13 @@ void main() {
       expect(find.text('/ 35,000'), findsOneWidget, reason: '總預算已更新');
 
       // ── 5. 刪除分類預算：點項目→刪除 ──
-      await tester.tap(find.text('餐飲食品'));
+      await tester.tap(find.text('餐飲食品（含子類）'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('budget-delete')), findsOneWidget,
           reason: '編輯模式可刪（收入目標無刪除鈕）');
       await tester.tap(find.byKey(const Key('budget-delete')));
       await tester.pumpAndSettle();
-      expect(find.text('餐飲食品'), findsNothing, reason: '分類預算已移除');
+      expect(find.text('餐飲食品（含子類）'), findsNothing, reason: '分類預算已移除');
       expect(db.allBudgets().where((b) => b.categoryId != null), isEmpty,
           reason: '軟刪除後查無分類預算');
       expect(tester.takeException(), isNull);
