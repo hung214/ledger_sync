@@ -16,6 +16,41 @@
 
 ---
 
+## [0.5.1] - 2026-11-23 ｜**PWA 相機黑畫面根治＋補光開關＋總覽/設定修正**
+
+> 主題：**PWA 相機（iOS WebKit）黑畫面三層根因根治＋手機補光開關＋總覽正負號＋設定頁重排**
+
+### 修正 Fixed
+
+- **PWA 相機黑畫面根治**（三層根因，詳見 `specs/plan/pwaCmara.md`）：
+  - 相機實驗碼（keep-alive＋absolute/contain 樣式）誤入部署線 → 回退凍結線；
+  - 生命週期釋放（退背景停軌／回前景延遲 300ms 重取——PM 研究方案）；
+  - **離開掃描頁即關燈**；重進由**整頁重載**取乾淨 context 並自動回掃描頁
+    （iOS WebKit：session 內停「已啟動」相機＝管線毒化，頁內重取必黑）；
+  - **NoSuchMethodError 'dz' 根治**：`?? const []` 使 interop 迴圈變數降級
+    dynamic（5 處改 `_videoTracks()` 型別正確迭代）。
+- **總覽最近交易正負號**：`tx.kind == 'expense'` 字串比較對 `TxKind` enum
+  永遠 false → 改 `tx.kind == TxKind.expense`（支出 −紅、收入 ＋綠）。
+
+### 新增 Added
+
+- **手機 APP 補光（手電筒）開關**：掃描頁右上 🔦（mobile_scanner toggleTorch；
+  無手電筒能力＝隱藏；macOS 桌機不顯示）。
+- **PWA 補光開關**：`MediaStreamTrack.applyConstraints(torch)`；無能力靜默。
+
+### 變更 Changed
+
+- **設定頁重排**：區塊順序 外觀 → 資料（帳戶/分類/資料管理/使用說明）→ 安全 → 同步；
+  主題改**單一三狀態循環按鈕**（系統→淺色→深色）。
+- **預算分類選擇**同步快記（MRU 5＋主分類→子分類兩層）。
+- **PWA 診斷行短格式**：「幀 N · 命中 N · 解 N ms」，點擊展開詳細。
+
+### 文件 Docs
+
+- `specs/plan/pwaCmara.md`：相機問題處理全記錄（根因三層＋解法演進＋工程教訓）。
+
+---
+
 ## [0.5.0] - 2026-10-26 ｜**候選（待 PM 確認版本號與發版）**
 
 > 主題：**快記 v4 收斂（含跨頁圖示一致）＋明細可讀性＋統計頁重做＋「最近刪除」永久刪除＋PC 版修正**

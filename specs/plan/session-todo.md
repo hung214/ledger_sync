@@ -11,8 +11,10 @@
 
 ## 進行中（PM 2026-11-23：相機修復完成——MR 回流＋發佈 0.5.1）
 
-- [ ] **T67 相機修復 MR 回流**：pwa-accumulate（T61-T66 相機修復）
-  → merge 回 feature/ios-pwa（相機檔以凍結線測試版為準）
+- [x] **T67 相機修復 MR 回流**：pwa-accumulate（T61-T66 相機修復）
+  → merge 回 feature/ios-pwa ✓（web_camera_scan＋camera_stream 系列取凍結線
+  測試版；補完 5 檔衝突解決——c82b344；274 全綠＋analyze 0）
+  ✓**pwaCmara.md** 處理全記錄文件（根因三層＋解法演進＋教訓）
 - [ ] **T68 發佈 0.5.1**：pubspec 0.5.1+1＋CHANGELOG＋全測試 →
   merge main＋tag v0.5.1＋push（CI 發佈）＋macOS 重建＋PWA 標章 0.5.1
 
