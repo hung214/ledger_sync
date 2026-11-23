@@ -54,6 +54,9 @@
   僥倖不炸；串流活著（離開掃描頁再進）必炸。
   ✓修復：5 處改 `_videoTracks()`（null 檢查＋型別正確 List）
   ✓headless Chrome（profile build＋fake camera）重現→修復驗證
+  ✓**自動導航 Navigator 修復**：AppRoot context 在 MaterialApp 之上
+  → Navigator.of null check 炸 → 移至 MainShellPage（下層）✓
+  ✓headless 二驗：兩次進入**零錯誤**＋假相機畫面正常渲染＋幀流動
   ✓260 測試全綠＋analyze 0
 
 ## 🔴 進行中（PM 2026-11-23：總覽最近交易支出/收入正負反了）
