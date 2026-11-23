@@ -115,6 +115,17 @@ class _ScanningBody extends ConsumerStatefulWidget {
 class _ScanningBodyState extends ConsumerState<_ScanningBody> {
   bool _navigating = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // 保險：進入掃描頁時暫停狀態歸零（異常退出殘留 true → 重進不辨識）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(scanPausedProvider)) {
+        ref.read(scanPausedProvider.notifier).set(false);
+      }
+    });
+  }
+
   /// 推入確認清單：**掃描暫停**（scanPausedProvider——PM 2026-11-22：
   /// 確認期間不得繼續偵測＝修「關閉連續掃描還是連續掃描」），返回後恢復。
   Future<void> _openReview(List<ScannedItem> items) async {
@@ -295,7 +306,7 @@ class _AimHint extends StatelessWidget {
         color: Colors.black54,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Text('對準發票 QR code（自動辨識；重複掃描自動略過）',
+      child: const Text('將條碼對準框內（框外也掃得到；重複掃描自動略過）',
           style: TextStyle(color: Colors.white, fontSize: 12)),
     );
   }

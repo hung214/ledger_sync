@@ -88,6 +88,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     _expr = draft.totalMinor.value?.toString() ?? '';
     _amountCtrl.text = _expr;
     _date = draft.date.value ?? Clock.now();
+    // PM 2026-11-23：掃描草稿（QR/OCR）**沒有時間資訊**（時間＝00:00）——
+    // 時間預設＝**當下時刻**（例：現在 12:35 → 任何日期都配 12:35），
+    // 不出現深夜 00:00 的異常觀感；picker 時分沿用 initial（只改日期），
+    // 使用者改時段的需求由 picker 後續版本支援。
+    if (_date.hour == 0 && _date.minute == 0) {
+      final now = Clock.now();
+      _date = DateTime(
+          _date.year, _date.month, _date.day, now.hour, now.minute);
+    }
     _merchantCtrl.text = draft.merchant.value ?? '';
     // 發票號碼寫入備註欄（PM 2026-11-22：掃描帶金額/時間，發票號入備註）。
     _noteCtrl.text = draft.invoiceNo == null ? '' : '發票號 ${draft.invoiceNo}';
@@ -204,6 +213,49 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   Text('第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
                       key: const Key('review-progress'),
                       style: Theme.of(context).textTheme.titleMedium),
+                  // **照片預覽＋OCR 辨識區域框**（T21，PM：辨識的文字要有框
+                  // ——讓使用者看到辨識到哪段）。BoxFit.fill＝正規化框直接
+                  // 映射（縮放失真可接受——指示用）。
+                  if (widget.items[_index].photoBytes != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: LayoutBuilder(builder: (context, box) {
+                        final w = box.maxWidth;
+                        final h = w * 0.75;
+                        final ocrBox = widget.items[_index].ocrBox;
+                        return SizedBox(
+                          width: w,
+                          height: h,
+                          child: Stack(children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                  widget.items[_index].photoBytes!,
+                                  width: w,
+                                  height: h,
+                                  fit: BoxFit.fill,
+                                  errorBuilder: (context, error,
+                                          stackTrace) =>
+                                      const SizedBox.shrink()),
+                            ),
+                            if (ocrBox != null)
+                              Positioned(
+                                left: ocrBox.left * w,
+                                top: ocrBox.top * h,
+                                width: ocrBox.width * w,
+                                height: ocrBox.height * h,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: Colors.greenAccent,
+                                        width: 2.5),
+                                  ),
+                                ),
+                              ),
+                          ]),
+                        );
+                      }),
+                    ),
                   // 金額（快記同款：**置中大字**）＋下方小字＝帳戶（Sticky）。
                   TextField(
                     key: const Key('review-total'),
@@ -357,7 +409,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                 ],
               ),
             ),
-            // 文字欄位聚焦時隱藏計算機（PM 2026-11-23）→「完成」列。
+            // 浮動底部計算機（快記同款）：OK＝確認儲存，鍵盤貼底常駐；
+            // **文字欄位聚焦時隱藏**（PM 2026-11-23：避免遮擋輸入框——
+            // 換「完成」列，點擊收起系統鍵盤並讓計算機回來）。
             if (_textEditing)
               Container(
                 margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),

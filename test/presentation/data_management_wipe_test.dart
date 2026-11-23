@@ -40,10 +40,14 @@ void main() {
       await tester.tap(find.byKey(const Key('wipe-warning-continue')));
       await tester.pumpAndSettle();
 
-      // 未設定 PIN → 直接落在「確認文字」步驟（不出現 PIN 輸入）。
-      expect(find.byKey(const Key('wipe-confirm-input')), findsOneWidget,
-          reason: '無 PIN → 跳過 PIN 步驟（2026-10-23 修復）');
+      // PM 2026-11-23：移除「輸入確認文字」——無 PIN → 直接執行清空。
+      expect(find.byKey(const Key('wipe-confirm-input')), findsNothing,
+          reason: '確認文字步驟已移除');
       expect(find.byKey(const Key('wipe-pin-input')), findsNothing);
+      expect(find.byKey(const Key('wipe-done-home')), findsOneWidget,
+          reason: '直接執行 → 完成畫面');
+      expect(db.allTransactions().where((t) => t.deletedAt == null), isEmpty,
+          reason: '資料已清空');
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
@@ -80,7 +84,8 @@ void main() {
 
       expect(find.byKey(const Key('wipe-pin-input')), findsOneWidget,
           reason: '已設定 PIN → 維持 PIN 關卡');
-      expect(find.byKey(const Key('wipe-confirm-input')), findsNothing);
+      expect(find.byKey(const Key('wipe-confirm-input')), findsNothing,
+          reason: '確認文字步驟已移除');
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();

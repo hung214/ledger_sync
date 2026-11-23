@@ -158,6 +158,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('時間預設＝當下時刻（PM 2026-11-23）：掃描日期配當下 HH:mm',
+      (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedStandardScenario(db);
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
+    ]);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    // 官方 QR 草稿：日期 2023-10-17、時間＝00:00（無時間資訊）。
+    final draft = TransactionDraft(
+      merchant: const DraftField.none(),
+      totalMinor: const DraftField(21, 1.0),
+      date: DraftField(DateTime(2023, 10, 17), 1.0),
+      invoiceNo: 'SR30393603',
+    );
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: buildAppTheme(Brightness.light),
+        home: ReviewPage(items: [ScannedItem(draft: draft)]),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final now = DateTime.now();
+    // 日期 ◀▶ 快調（±1 天）——時間應保持當下時刻。
+    await tester.tap(find.byKey(const Key('review-date-prev')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('quick-entry-save')));
+    await tester.pumpAndSettle();
+
+    final txs = db.allTransactions();
+    expect(txs, isNotEmpty);
+    final occurred =
+        DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
+    expect(occurred, DateTime(2023, 10, 16, now.hour, now.minute),
+        reason: '◀ 快調一天（2023-10-17→16）＋時間＝當下時刻（非 00:00）');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('日期＝掃到即用（無確認閘）：2023 舊日期直接入帳＋發票號入備註',
       (tester) async {
     final db = DbFixture.create();
@@ -197,8 +245,11 @@ void main() {
     expect(txs, isNotEmpty);
     expect(txs.first.note, '發票號 SR30393603');
     expect(txs.first.amountMinor, 21);
-    expect(DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt),
-        DateTime(2023, 10, 17));
+    final occurred =
+        DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
+    final now = DateTime.now();
+    expect(occurred, DateTime(2023, 10, 17, now.hour, now.minute),
+        reason: '日期＝掃描值；時間＝當下時刻（PM 2026-11-23）');
     expect(txs.first.source, 'scan');
     expect(tester.takeException(), isNull);
   });

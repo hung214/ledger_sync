@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -31,8 +32,10 @@ class NativeCameraScanner extends ConsumerStatefulWidget {
       _NativeCameraScannerState();
 }
 
-class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
+class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
+    with WidgetsBindingObserver {
   late final MobileScannerController _controller;
+  bool _cameraFailed = false; // 啟動雙敗 → 顯示相機錯誤頁（手動重試/匯入）
   String? _lastRaw;
   DateTime? _lastAt;
   Timer? _dedupReset;
@@ -53,6 +56,10 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   String? _hint; // 畫面回饋（偵測到條碼／略過原因）——PM 2026-11-20 診斷用
   Timer? _hintReset;
   int _events = 0; // 偵測事件計數（0＝連條碼都沒進來；持續顯示便診斷）
+  double _zoom = 0; // 0=1×、0.5=2×、1.0=3×（正規化變焦——PM：不用靠近）
+  bool _torchOn = false; // 補光開關（僅行動平台；無手電筒能力＝隱藏按鈕）
+  Offset? _focusIndicator; // 點擊對焦回饋（preview 座標）
+  Timer? _focusIndicatorReset;
   // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
   // 400ms 內無新偵測即清空——對準時 unrestricted 連續回呼，框持續顯示。
   List<List<Offset>> _boxes = const [];
@@ -62,10 +69,15 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.unrestricted, // PM：掃描頻率——最高頻偵測
       facing: CameraFacing.back,
-      autoStart: true,
+      // PM 2026-11-23：**自管生命週期**（autoStart=false）——修「退出重進
+      // 掃描頁黑畫面」：疊頁（完成掃描→確認→返回）同一 controller 正常；
+      // 銷毀重建時舊 session 釋放與新 start 競態 → texture 沒幀＝黑畫面。
+      // 延遲啟動＋重試見 [_startCamera]。
+      autoStart: false,
       // PM 2026-11-21：只掃 QR（發票左右碼）——排除底部一維條碼（Code 39）
       // 被誤判「非發票格式」的雜訊（PM 實測：拿雲端發票掃描誤中一維碼）。
       // 平台策略（scan_policy.dart）：QR（電子發票）＋Code39/128（紙本一維
@@ -77,16 +89,103 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
       cameraResolution: const Size(1920, 1080),
       autoZoom: true,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleStart());
+  }
+
+  /// 啟動排程（可取消——dispose 即取消，不留 pending Timer）。
+  Timer? _startTimer;
+  int _startGen = 0;
+
+  void _scheduleStart() {
+    final gen = ++_startGen;
+    _startTimer?.cancel();
+    // 延遲 300ms：給前一次 teardown（session 釋放）時間——快速退出重進
+    // 時舊 release 與新 start 競態 → texture 沒幀＝黑畫面。
+    _startTimer = Timer(const Duration(milliseconds: 300), () {
+      _startCamera(gen, attempt: 0);
+    });
+  }
+
+  /// **點擊對焦**（PM 2026-11-24）：tap 位置正規化 → setFocusPoint
+  /// （iOS＝focusPointOfInterest＋autoFocus；macOS 內建鏡頭固定對焦——
+  /// 呼叫靜默失敗）＋黃圈回饋 700ms。
+  void _onPreviewTap(Offset local, Size widgetSize) {
+    if (widgetSize.isEmpty) return;
+    final normalized = Offset(
+      (local.dx / widgetSize.width).clamp(0.0, 1.0),
+      (local.dy / widgetSize.height).clamp(0.0, 1.0),
+    );
+    unawaited(
+        _controller.setFocusPoint(normalized).catchError((Object _) {}));
+    _focusIndicatorReset?.cancel();
+    setState(() => _focusIndicator = local);
+    _focusIndicatorReset = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _focusIndicator = null);
+    });
+  }
+
+  /// 補光（手電筒）開關：mobile_scanner toggleTorch，無能力或相機未啟動
+  /// 時靜默失敗；狀態從 controller.value.torchState 讀取（on/off）。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() {
+        _torchOn = _controller.value.torchState == TorchState.on;
+      });
+    }
+  }
+
+  /// 行動平台（iOS/Android）才顯示補光按鈕：macOS 內建鏡頭無手電筒，
+  /// Web 走另一條線（web_camera_scan.dart，不在此頁）。
+  bool get _torchVisible => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+
+  /// 相機啟動（自管）：失敗重試一次（間隔 500ms）；雙敗 → 相機錯誤頁。
+  Future<void> _startCamera(int gen, {required int attempt}) async {
+    if (!mounted || gen != _startGen) return;
+    try {
+      await _controller.start();
+      if (mounted) setState(() => _cameraFailed = false);
+      return;
+    } catch (_) {
+      if (attempt == 0 && mounted) {
+        _startTimer?.cancel();
+        _startTimer = Timer(const Duration(milliseconds: 500), () {
+          _startCamera(gen, attempt: 1);
+        });
+        return;
+      }
+      if (mounted) setState(() => _cameraFailed = true);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _startGen++; // 失效排程中的啟動
+    _startTimer?.cancel();
     _dedupReset?.cancel();
     _pendingTimer?.cancel();
     _hintReset?.cancel();
     _boxReset?.cancel();
-    _controller.dispose();
+    // 明確 stop（session 釋放）→ dispose——方法通道保序，下次進入的
+    // start 不會與本次 release 競態（黑畫面防護）。
+    unawaited(_controller.stop().catchError((Object _) {}));
+    unawaited(_controller.dispose());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 前後台：背景停 session（省電＋避免占用）、回前台重啟。
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (!_cameraFailed) _scheduleStart();
+      case AppLifecycleState.inactive ||
+          AppLifecycleState.paused ||
+          AppLifecycleState.detached ||
+          AppLifecycleState.hidden:
+        unawaited(_controller.stop().catchError((Object _) {}));
+    }
   }
 
   void _flashHint(String text) {
@@ -302,85 +401,211 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner> {
     ref.listen(scanDraftsProvider, (prev, next) {
       if (next.isEmpty && _seenCodes.isNotEmpty) _seenCodes.clear();
     });
-    // PM 2026-11-22：**移除中央分析窗**——條碼不限中央（「換一張發票就
-    // 掃描不到」根因：上一批分析窗中途未移除，偏位的發票落在窗外被
-    // Vision 忽略）。全畫面偵測；遠距由相機 1080p preset（plugin patch）
-    // 解決。去重改**條碼原始內容**（_seenCodes）。
+    // PM 2026-11-23：**辨識區域引導框＝分析窗**（88%×42% 置中偏上——
+    // 發票雙 QR 橫排）。Vision regionOfInterest 裁切＝小條碼更靈敏
+    // （全畫面分析會稀釋偵測力——PM「容許度變很低」根因）；
+    // 框＝引導＝分析範圍，三者一致。寬幅設計：偏移容忍高。
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) => _CameraError(onFallback: () {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => const ImportPage()));
-            }),
-          ),
-          // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _BarcodeHighlightPainter(
-                  boxes: _boxes,
-                  imageSize: _boxImageSize,
-                ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final scanWindow = Rect.fromCenter(
+          center: Offset(constraints.biggest.width / 2,
+              constraints.biggest.height * 0.42),
+          width: constraints.biggest.width * 0.88,
+          height: constraints.biggest.height * 0.42,
+        );
+        if (_cameraFailed) {
+          return _CameraError(onFallback: () {
+            Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const ImportPage()));
+          });
+        }
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
+              scanWindow: scanWindow,
+              errorBuilder: (context, error) => _CameraError(onFallback: () {
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const ImportPage()));
+              }),
+            ),
+            // **點擊對焦**（PM 2026-11-24）：tap → 正規化座標 →
+            // setFocusPoint（iOS＝focusPointOfInterest；macOS 固定對焦
+            // 硬體無效——plugin 僅 iOS 分支）＋黃圈視覺回饋。
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapUp: (d) => _onPreviewTap(d.localPosition, constraints.biggest),
+                child: const SizedBox.expand(),
               ),
             ),
-          ),
-          // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
-          Positioned(
-            left: 8,
-            bottom: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text('偵測 $_events 次',
-                  style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ),
-          ),
-          // 紙本發票模式：手動開卡入口（PM 2026-11-21；雲端發票不需要
-          // 截圖——即時掃到即顯示，此鈕供無 QR 的紙本發票快速記帳）。
-          if (ref.watch(scanModeProvider) == ScanMode.paper)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 48,
-              child: Center(
-                child: FilledButton.icon(
-                  key: const Key('scan-manual-entry'),
-                  onPressed: _addBlankDraft,
-                  icon: const Icon(Icons.receipt_long),
-                  label: const Text('手動開一筆'),
-                ),
-              ),
-            ),
-          if (_hint != null)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(20),
+            if (_focusIndicator != null)
+              Positioned(
+                left: _focusIndicator!.dx - 28,
+                top: _focusIndicator!.dy - 28,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.yellowAccent, width: 2.5),
+                    ),
                   ),
-                  child: Text(_hint!,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+              ),
+            // 偵測高亮：綠框標記畫面上每個條碼（影像座標 → 預覽座標 cover 映射）。
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _BarcodeHighlightPainter(
+                    boxes: _boxes,
+                    imageSize: _boxImageSize,
+                  ),
                 ),
               ),
             ),
-        ],
-      ),
+            // 辨識區域引導框（與分析窗同一 rect——框內＝掃得到）。
+            Positioned.fromRect(
+              rect: scanWindow,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _CornerBracketsPainter(
+                      rect: scanWindow, color: Colors.white),
+                ),
+              ),
+            ),
+            // 變焦按鈕（PM 2026-11-23：條碼小/遠——變焦取代靠近鏡頭；
+            // setZoomScale 0~1 → videoZoomFactor，Mac/iOS 皆支援）。
+            Positioned(
+              right: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final (label, z) in const [
+                    ('1×', 0.0),
+                    ('2×', 0.5),
+                    ('3×', 1.0),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _zoom = z);
+                          unawaited(_controller
+                              .setZoomScale(z)
+                              .catchError((Object _) {}));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _zoom == z
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(label,
+                              style: TextStyle(
+                                  color: _zoom == z
+                                      ? Colors.black
+                                      : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ),
+                  if (_torchVisible)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: GestureDetector(
+                        onTap: () {
+                          unawaited(_toggleTorch());
+                        },
+                        child: Container(
+                          key: const Key('scan-torch-toggle'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _torchOn
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            _torchOn ? Icons.flash_on : Icons.flash_off,
+                            color: _torchOn ? Colors.black : Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
+            // 偵測計數（持續顯示——0 次＝連條碼都沒進來；有次數＝格式過濾問題）。
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                    '偵測 $_events 次'
+                    '${_boxImageSize.isEmpty ? '' : ' · ${_boxImageSize.width.round()}×${_boxImageSize.height.round()}'}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11)),
+              ),
+            ),
+            // 紙本發票模式：手動開卡入口（PM 2026-11-21）。
+            if (ref.watch(scanModeProvider) == ScanMode.paper)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 48,
+                child: Center(
+                  child: FilledButton.icon(
+                    key: const Key('scan-manual-entry'),
+                    onPressed: _addBlankDraft,
+                    icon: const Icon(Icons.receipt_long),
+                    label: const Text('手動開一筆'),
+                  ),
+                ),
+              ),
+            if (_hint != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(_hint!,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12)),
+                  ),
+                ),
+              ),
+          ],
+        );
+      }),
     );
   }
 }
@@ -429,6 +654,49 @@ class _BarcodeHighlightPainter extends CustomPainter {
   bool shouldRepaint(_BarcodeHighlightPainter oldDelegate) =>
       oldDelegate.imageSize != imageSize ||
       !listEquals(oldDelegate.boxes, boxes);
+}
+
+class _CornerBracketsPainter extends CustomPainter {
+  _CornerBracketsPainter({required this.rect, required this.color});
+
+  final Rect rect;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const len = 26.0;
+    const r = 6.0;
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      // 左上
+      ..moveTo(rect.left, rect.top + len)
+      ..lineTo(rect.left, rect.top + r)
+      ..quadraticBezierTo(rect.left, rect.top, rect.left + r, rect.top)
+      ..lineTo(rect.left + len, rect.top)
+      // 右上
+      ..moveTo(rect.right - len, rect.top)
+      ..lineTo(rect.right - r, rect.top)
+      ..quadraticBezierTo(rect.right, rect.top, rect.right, rect.top + r)
+      ..lineTo(rect.right, rect.top + len)
+      // 右下
+      ..moveTo(rect.right, rect.bottom - len)
+      ..lineTo(rect.right, rect.bottom - r)
+      ..quadraticBezierTo(rect.right, rect.bottom, rect.right - r, rect.bottom)
+      ..lineTo(rect.right - len, rect.bottom)
+      // 左下
+      ..moveTo(rect.left + len, rect.bottom)
+      ..lineTo(rect.left + r, rect.bottom)
+      ..quadraticBezierTo(rect.left, rect.bottom, rect.left, rect.bottom - r)
+      ..lineTo(rect.left, rect.bottom - len);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CornerBracketsPainter old) => old.rect != rect;
 }
 
 /// 相機錯誤（權限被拒／無相機）——訊息＋回退檔案匯入（不離開流程）。

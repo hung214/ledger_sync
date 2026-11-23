@@ -1,7 +1,7 @@
 name: ledger_sync
 description: "LedgerSync — 本地優先跨平台記帳 App（規格：SPEC v0.3 / techstack v0.3.1）"
 publish_to: 'none'
-version: 0.5.0+1
+version: 0.5.1+1
 
 environment:
   sdk: ^3.13.5
@@ -38,6 +38,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   file_selector_platform_interface: ^2.7.0
+  flutter_launcher_icons: ^0.14.4 # 圖示產生（LOGO/ICON 換裝 PM 2026-11-21；暫以草稿 A 評估——techstack §2.4）
 
 # 工具鏈註記（research TR-7，S0 實測）：drift/build_runner codegen 與 Dart 3.13.5
 # （Flutter 3.47.7）相容性問題——analyzer 7.x 無法序列化 SDK dot-shorthand、
@@ -51,7 +52,28 @@ flutter:
   # BDD feature 檔（integration_test 於 app 行程內讀取——macOS/桌面 CWD 非專案根，
   # File 相對路徑失效；以 rootBundle 資產載入，tool/sync_features.ps1 同步後入包）。
   assets:
+    # 品牌圖示（T69 定稿 PM 2026-11-23）——app 內側欄 brand 顯示。
+    - assets/icon/
     - integration_test/features/
     # PWA Spike（PM 2026-11-16）：sqlite3 wasm（與 sqlite3 套件同版本；
     # Web 執行時另由 web/sqlite3.wasm 以 URL 載入，此處供測試以 asset 讀取）。
     - web/sqlite3.wasm
+
+# 圖示產生（**定稿** PM 2026-11-23——jpg/icon01.png 滿版無圓角，
+# 系統自套圓角避免雙層；Android adaptive/PWA maskable 前景皆滿版原圖，
+# 內容在中央 75%，mask 裁角落只裁到漸層背景）。改圖後重跑：
+# `dart run flutter_launcher_icons`
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  ios: true
+  remove_alpha_ios: true
+  android: true
+  adaptive_icon_background: "#2E8DB3"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  macos:
+    generate: true
+  windows:
+    generate: true
+  web:
+    generate: true
+    favicon: true

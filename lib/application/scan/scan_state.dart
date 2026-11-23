@@ -1,5 +1,6 @@
 
 import 'package:flutter/foundation.dart';
+import 'dart:ui' show Rect;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/transaction_draft.dart';
@@ -19,13 +20,17 @@ final scanDraftsProvider =
         ScanDraftsNotifier.new);
 
 class ScannedItem {
-  const ScannedItem({required this.draft, this.photoBytes});
+  const ScannedItem({required this.draft, this.photoBytes, this.ocrBox});
 
   /// 解析草稿（QR：InvoiceQrParser；OCR：ReceiptFieldExtractor；回退：blank）。
   final TransactionDraft draft;
 
   /// 掃描影像（附件來源；null＝無原圖——手動輸入）。
   final Uint8List? photoBytes;
+
+  /// OCR 辨識行區域（**正規化 0~1**，top-left 原點——確認卡照片上框出
+  /// 辨識位置；T21，PM 2026-11-23。null＝無）。
+  final Rect? ocrBox;
 }
 
 class ScanDraftsNotifier extends Notifier<List<ScannedItem>> {
