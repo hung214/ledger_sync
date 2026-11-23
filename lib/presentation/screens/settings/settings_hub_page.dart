@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/appearance/theme_mode_state.dart';
 import '../../../application/lock/lock_fe_state.dart';
 import '../../../data/sqlite/app_database.dart';
+import '../../../presentation/theme/app_theme.dart';
 import '../../../application/providers.dart';
 import 'account_settings_page.dart';
 import 'category_settings_page.dart';
@@ -29,15 +30,10 @@ class SettingsHubPage extends ConsumerWidget {
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
-          const _SectionLabel('同步'),
-          ListTile(
-            key: const Key('settings-sync'),
-            leading: const Icon(Icons.cloud_sync_outlined),
-            title: const Text('雲端備份'),
-            subtitle: const Text('備份到 Google Drive、跨裝置同步、衝突檢視'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsSyncPage())),
+          const _SectionLabel('外觀'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: _ThemeModeToggle(currentMode: themeMode),
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           const _SectionLabel('資料'),
@@ -72,7 +68,7 @@ class SettingsHubPage extends ConsumerWidget {
             key: const Key('settings-data-management'),
             leading: const Icon(Icons.storage_outlined),
             title: const Text('資料管理'),
-            subtitle: const Text('清空資料（三重防護）'),
+            subtitle: const Text('／本地備份還原／匯入／清空資料'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const DataManagementPage())),
@@ -81,25 +77,15 @@ class SettingsHubPage extends ConsumerWidget {
           const _SectionLabel('安全（FR-X）'),
           const _SecurityCard(),
           const Divider(height: 1, indent: 16, endIndent: 16),
-          const _SectionLabel('外觀'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Wrap(
-              spacing: 8,
-              children: [
-                for (final (mode, label, key) in const [
-                  (ThemeMode.system, '跟隨系統', 'theme-system'),
-                  (ThemeMode.light, '淺色', 'theme-light'),
-                  (ThemeMode.dark, '深色', 'theme-dark'),
-                ])
-                  ChoiceChip(
-                    key: Key(key),
-                    label: Text(label),
-                    selected: themeMode == mode,
-                    onSelected: (_) => ref.read(themeModeProvider.notifier).set(mode),
-                  ),
-              ],
-            ),
+          const _SectionLabel('同步'),
+          ListTile(
+            key: const Key('settings-sync'),
+            leading: const Icon(Icons.cloud_sync_outlined),
+            title: const Text('雲端備份'),
+            subtitle: const Text('備份到 Google Drive、跨裝置同步、衝突檢視'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsSyncPage())),
           ),
         ],
       ),
@@ -219,6 +205,53 @@ class _SecurityCardState extends ConsumerState<_SecurityCard> {
             onChanged: (_) => ref.read(privacyMaskedProvider.notifier).toggle(),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+/// 三狀態主題切換按鈕：系統 → 淺色 → 深色 → 系統…
+class _ThemeModeToggle extends ConsumerWidget {
+  const _ThemeModeToggle({required this.currentMode});
+
+  final ThemeMode currentMode;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = AppTokens.of(context);
+    final ThemeMode nextMode;
+    final String label;
+    final IconData icon;
+    switch (currentMode) {
+      case ThemeMode.system:
+        nextMode = ThemeMode.light;
+        label = '跟隨系統';
+        icon = Icons.brightness_auto;
+      case ThemeMode.light:
+        nextMode = ThemeMode.dark;
+        label = '淺色';
+        icon = Icons.light_mode;
+      case ThemeMode.dark:
+        nextMode = ThemeMode.system;
+        label = '深色';
+        icon = Icons.dark_mode;
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        key: const Key('theme-mode-toggle'),
+        icon: Icon(icon, size: 20),
+        label: Text('主題：$label'),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          backgroundColor: tokens.cardBg,
+          foregroundColor: tokens.subText,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: tokens.divider),
+          ),
+        ),
+        onPressed: () => ref.read(themeModeProvider.notifier).set(nextMode),
       ),
     );
   }
