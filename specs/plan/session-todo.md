@@ -11,10 +11,13 @@
 
 ## 進行中（PM 2026-11-23：品牌定稿——ICON 換裝＋首頁左上 LOGO）
 
-- [ ] **T69 ICON/LOGO 定稿換裝**：icon 來源改 `jpg/icon01.png`
+- [x] **T69 ICON/LOGO 定稿換裝**：icon 來源改 `jpg/icon01.png`
   （滿版無圓角——系統自套圓角，避免雙層圓角）；logo.png → 首頁
-  左上角 LOGO（現為 📒 emoji 文字）。重跑 flutter_launcher_icons
-  覆蓋草稿 A 未 commit 產物（PM 授權接手）；清孤兒尺寸檔。
+  左上角 LOGO。✓flutter_launcher_icons 重產全平台（iOS 壓平/macOS/
+  Windows/Android adaptive/web favicon+maskable）✓側欄 📒→定稿圖示
+  ＋白字（Expanded 防 Ahem 溢出；desktop_shell_test 斷言同步更新）
+  ✓logo.png 白底直式不硬塞 AppBar（PM 同意）✓274 全綠＋analyze 0
+  ✓5aeda75→merge ios-pwa＋macOS 重建 PM 目視
 
 ## 進行中（PM 2026-11-23：相機修復完成——MR 回流＋發佈 0.5.1）
 
