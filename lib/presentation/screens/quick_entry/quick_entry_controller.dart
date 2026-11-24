@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/providers.dart';
 import '../../../data/sqlite/app_database.dart';
+import '../../../domain/entities/account.dart';
 import '../../../domain/entities/transaction.dart';
+import '../../../domain/services/balance_calculator.dart';
 import '../../../application/quick_entry/quick_entry_memory.dart';
 import 'amount_keypad.dart';
 
@@ -18,7 +20,7 @@ enum QuickEntryPhase {
 ///
 /// 「拆分」移至**明細→編輯交易**（FR-T6；入口另開任務）；「預算」設定回**預算頁**表單
 /// （預算頁本有新增/編輯表單，快記不再兼作預算輸入）。
-enum QuickEntryMode { expense, income, transfer }
+enum QuickEntryMode { expense, income, transfer, repay }
 
 /// 快記狀態（SDD §5.1；Sticky 欄位＝帳戶/分類/商家，金額/時間每筆重設）。
 class QuickEntryState {
@@ -115,6 +117,17 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
   /// 目前模式之分類清單。
   List<CategoryRow> get _categories =>
       ref.read(dbProvider).categoriesByKind(_catKind);
+
+  /// AccountRow → Account entity（creditUnpaidTotal 參數型別；
+  /// 同 credit_card_page._accountEntity——共享轉換屬 domain 重構，暫此）。
+  Account _accountEntity(AccountRow r) => Account(
+        id: r.id,
+        type: AccountType.values.byName(r.type),
+        name: r.name,
+        currency: r.currency,
+        openingAmountMinor: r.openingAmountMinor,
+        archived: r.archived,
+      );
 
   // ── 欄位輸入（Inputting） ─────────────────────────────────
 
@@ -218,6 +231,46 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     if (mode == state.mode) return;
     state = state.copyWith(
         mode: mode, clearToAccount: true, clearCategory: true);
+    if (mode == QuickEntryMode.repay) {
+      // **繳卡費初始化**（T77，PM 2026-11-24）：目標卡片＝首張信用卡
+      // （單卡自動選）；扣款帳戶＝linked_account_id ?: 首個非信用卡；
+      // **金額預設＝未繳合計**（creditUnpaidTotal，可改）；分類/商家清空。
+      final db = ref.read(dbProvider);
+      final cards = ref
+          .read(activeAccountsProvider)
+          .where((a) => a.type == 'credit' && !a.archived)
+          .toList();
+      final card = cards.isEmpty ? null : cards.first;
+      final calc = const BalanceCalculator();
+      String? fromId;
+      AccountRow? fromRow;
+      if (card != null) {
+        fromId = db.creditCardDetail(card.id)?.linkedAccountId;
+        fromId ??= ref
+            .read(activeAccountsProvider)
+            .where((a) => a.type != 'credit' && !a.archived)
+            .map((a) => a.id)
+            .firstOrNull;
+        if (fromId != null) {
+          for (final a in ref.read(activeAccountsProvider)) {
+            if (a.id == fromId) fromRow = a;
+          }
+        }
+      }
+      final unpaid = card == null
+          ? 0
+          : calc.creditUnpaidTotal(
+              card: _accountEntity(card),
+              txs: db.allTransactions().map(txEntity));
+      state = state.copyWith(
+        toAccount: card,
+        account: fromRow,
+        clearCategory: true,
+        merchant: '',
+        amount: unpaid > 0 ? '$unpaid' : '',
+      );
+      return;
+    }
     if (mode != QuickEntryMode.transfer) {
       final cats = _categories;
       if (cats.isNotEmpty) state = state.copyWith(category: cats.first);
@@ -267,6 +320,16 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
             kind: TxKind.transfer,
             toAccountId: state.toAccount!.id,
             note: state.note.isEmpty ? null : state.note,
+          );
+    } else if (state.mode == QuickEntryMode.repay) {
+      // **繳卡費**（T77）：走 RepayStatementUseCase——有未繳清帳單＝
+      // 帳單 paid 累加（繳清取消 N-5）；無帳單＝純 repayment 交易。
+      // kind='repayment' 不計收支統計；「未繳合計」自動扣減。
+      if (state.toAccount == null) return;
+      ref.read(repayStatementProvider).executeForCard(
+            cardAccountId: state.toAccount!.id,
+            amountMinor: amountMinor,
+            fromAccountId: state.account!.id,
           );
     } else {
       ref.read(saveTransactionProvider).execute(
