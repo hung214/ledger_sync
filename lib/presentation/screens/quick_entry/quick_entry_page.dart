@@ -169,17 +169,21 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 children: [
-                  // 模式列（PM 2026-10-24 定稿）：**僅 支出／收入／轉帳**。
-                  // 「拆分」移至明細→編輯交易；「預算」設定走預算頁表單。
+                  // 模式列（PM 2026-10-24 定稿）：支出／收入／轉帳；
+                  // **繳卡費**（T77 PM 2026-11-24）＝有信用卡帳戶才顯示。
                   SegmentedButton<QuickEntryMode>(
                     key: const Key('quick-entry-mode'),
-                    segments: const [
-                      ButtonSegment(
+                    segments: [
+                      const ButtonSegment(
                           value: QuickEntryMode.expense, label: Text('支出')),
-                      ButtonSegment(
+                      const ButtonSegment(
                           value: QuickEntryMode.income, label: Text('收入')),
-                      ButtonSegment(
+                      const ButtonSegment(
                           value: QuickEntryMode.transfer, label: Text('轉帳')),
+                      if (accounts.any((a) => a.type == 'credit'))
+                        const ButtonSegment(
+                            value: QuickEntryMode.repay,
+                            label: Text('繳卡費')),
                     ],
                     selected: {state.mode},
                     onSelectionChanged: (modes) =>
@@ -280,7 +284,9 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                             key: const Key('quick-entry-account'),
                             label: state.mode == QuickEntryMode.transfer
                                 ? '來源帳戶'
-                                : '帳戶',
+                                : state.mode == QuickEntryMode.repay
+                                    ? '扣款帳戶'
+                                    : '帳戶',
                             text: state.account?.name ?? '選擇帳戶',
                             entries: accounts
                                 .map((a) => (a.id, a.name, false))
@@ -304,6 +310,20 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                                   recent: const [],
                                   onSelected: controller.selectToAccountById,
                                 )
+                              : state.mode == QuickEntryMode.repay
+                                  // 繳卡費（T77）：右欄＝**繳費卡片**（僅信用卡）。
+                                  ? _pickerField(
+                                      key: const Key('quick-entry-target'),
+                                      label: '繳費卡片',
+                                      text: state.toAccount?.name ?? '選擇卡片',
+                                      entries: accounts
+                                          .where((a) => a.type == 'credit')
+                                          .map((a) => (a.id, a.name, false))
+                                          .toList(),
+                                      recent: const [],
+                                      onSelected:
+                                          controller.selectToAccountById,
+                                    )
                               // 分類欄（PM 2026-10-24）：點選 → 彈窗（上常用／左主／右子）；
                               // 顯示「主類別 emoji ＋ 類別名」（子類別＝主類別 emoji＋子名）。
                               : InkWell(
@@ -330,14 +350,17 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (state.mode == QuickEntryMode.transfer)
-                    // 轉帳：分類／商家不適用（原型 10 手機 B）。
+                  if (state.mode == QuickEntryMode.transfer ||
+                      state.mode == QuickEntryMode.repay)
+                    // 轉帳／繳卡費：分類／商家不適用（原型 10 手機 B）。
                     TextField(
                       enabled: false,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                           labelText: '分類／商家',
-                          hintText: '不適用（轉帳語意）',
-                          border: OutlineInputBorder(),
+                          hintText: state.mode == QuickEntryMode.repay
+                              ? '不適用（繳卡費語意）'
+                              : '不適用（轉帳語意）',
+                          border: const OutlineInputBorder(),
                           isDense: true),
                     )
                   else
@@ -613,6 +636,8 @@ bool quickEntrySaveEnabled(QuickEntryState state) {
   final amountOk = (AmountKeypadEvaluator.evaluate(state.amount) ?? 0) > 0;
   switch (state.mode) {
     case QuickEntryMode.transfer:
+    case QuickEntryMode.repay:
+      // 轉帳／繳卡費：另需目標帳戶（卡片）。
       return amountOk && state.toAccount != null;
     case QuickEntryMode.expense:
     case QuickEntryMode.income:

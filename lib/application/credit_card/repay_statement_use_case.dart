@@ -20,7 +20,7 @@ class RepayStatementUseCase {
   final AppDatabase _db;
   final NotificationService _notifier;
 
-  String execute({required String statementId, required int amountMinor}) {
+  String execute({required String statementId, required int amountMinor, String? fromAccountId}) {
     final statement = _db.statementById(statementId);
     if (statement == null) {
       throw StateError('繳款失敗：帳單不存在 $statementId');
@@ -29,7 +29,9 @@ class RepayStatementUseCase {
       throw StateError('繳款失敗：金額須為正');
     }
     final detail = _db.creditCardDetail(statement.accountId);
-    final fromAccount = detail?.linkedAccountId ?? _fallbackAccount();
+    // T77：快記繳卡費可指定扣款帳戶（使用者當下選擇優先）。
+    final fromAccount =
+        fromAccountId ?? detail?.linkedAccountId ?? _fallbackAccount();
     if (fromAccount == null) {
       throw StateError('繳款失敗：無扣款帳戶（linked_account_id 未設定且無其他帳戶）');
     }
@@ -109,5 +111,68 @@ class RepayStatementUseCase {
       if (a.type != 'credit' && !a.archived) return a.id;
     }
     return null;
+  }
+
+  /// **快記繳卡費**（T77，PM 2026-11-24）：對指定卡片繳款——
+  /// - 有未繳清帳單（最新一張 status != paid）→ 走帳單流程（paid 累加；
+  ///   繳清取消 N-5）；
+  /// - 無帳單（新卡/未出帳）→ 純 repayment 交易——「未繳合計」的抵扣
+  ///   本來就計 toAccountId 指向該卡之還款（creditUnpaidTotal），數字一致。
+  String executeForCard({
+    required String cardAccountId,
+    required int amountMinor,
+    String? fromAccountId,
+  }) {
+    final statements = _db
+        .statementsForCard(cardAccountId)
+        .where((s) => s.status != 'paid')
+        .toList();
+    if (statements.isNotEmpty) {
+      return execute(
+        statementId: statements.first.id,
+        amountMinor: amountMinor,
+        fromAccountId: fromAccountId,
+      );
+    }
+    // 無帳單：純 repayment 交易（不動帳單；未繳合計由還款抵扣自動減）。
+    if (amountMinor <= 0) {
+      throw StateError('繳款失敗：金額須為正');
+    }
+    final from = fromAccountId ?? _fallbackAccount();
+    if (from == null) {
+      throw StateError('繳款失敗：無扣款帳戶');
+    }
+    final now = Clock.now();
+    final nowMs = now.millisecondsSinceEpoch;
+    final hlc = Hlc.now('billing').toString();
+    final txId = const Uuid().v7();
+    final tx = TxRow(
+      id: txId,
+      kind: 'repayment',
+      amountMinor: amountMinor,
+      currency: 'TWD',
+      accountId: from,
+      toAccountId: cardAccountId,
+      categoryId: null,
+      merchant: null,
+      note: '信用卡繳款',
+      occurredAt: nowMs,
+      source: 'manual',
+      settlementStatus: 'none',
+      createdAt: nowMs,
+      updatedAt: nowMs,
+      hlc: hlc,
+    );
+    _db.runInTransaction(() {
+      _db.insertTransaction(tx);
+      _db.appendOp(OplogRow(
+        entity: 'transactions',
+        entityId: tx.id,
+        hlc: hlc,
+        payload: jsonEncode(tx.toSnapshot()),
+        packedSeq: null,
+      ));
+    });
+    return txId;
   }
 }
