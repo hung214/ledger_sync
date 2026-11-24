@@ -38,6 +38,27 @@
   4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
   analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
 
+## 進行中（PM 2026-11-24：T83 PWA 掃描技術替換——html5-qrcode＋tw-einvoice-qr）
+
+- [ ] **T83 掃描技術替換**（PM 指示；回退保險＝tag `pwa-0.5.2`）：
+  - [x] ①套件調研＋資源放置：web/scan/html5-qrcode.min.js（UMD 2.3.8）
+    ＋tw-einvoice.js（esbuild IIFE→window.TwEin，11.9KB——parseBarcode
+    驗證 ✓）
+  - [ ] ②web/index.html 引入兩個 script
+  - [ ] ③Dart 互操作層：html5qrcode_scanner.dart（條件匯出——stub
+    保 native 編譯；web 實作＝Html5Qrcode start/stop/torch＋TwEin
+    解析 dartify→純 Dart 結構）
+  - [ ] ④web_camera_scan 改造：掃描區換 reader div（platform view）、
+    onSuccess 驅動（移除 _loop/_tryDecode 舊迴圈）、累積窗重用＋
+    TwEin parseInvoiceQr→TransactionDraft 轉換、保留確認清單/節流/
+    去重/補光/診斷行/手動開一筆
+  - [ ] ⑤測試：analyze＋291 既有＋互操作測試
+  - [ ] ⑥headless 冒煙（假相機：載入/啟動/停止流程）
+  - [ ] ⑦部署 gh-pages＋CDN 驗證＋兩線同步
+  - [ ] ⑧PM 真機驗證（iOS PWA 掃真發票——左右碼＋Code39）
+  - **設計決策**：不建真分類沿用；解析走 TwEin（官方規格 v1.9 完整
+    實作——左右雙碼/品目/Base64/境外/對獎）；出問題回退 pwa-0.5.2
+
 ## 進行中（PM 2026-11-24：掃描發票覆盤——對焦/辨識優化）
 
 - [x] **T82 掃描覆盤優化**：覆盤結論——①發票 QR＝高密度 V13
