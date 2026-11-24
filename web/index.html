@@ -30,7 +30,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>LedgerSync 記帳本</title>
+  <title>LedgerSync 記帳本 · 1121i</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -56,6 +56,15 @@
       });
       setInterval(check, 60 * 60 * 1000);
       window.addEventListener('load', () => setTimeout(check, 3000));
+      // **T75 自動重載**（PM 2026-11-24）：新 SW skipWaiting 接管後，
+      // 當前頁面仍跑舊 JS（iOS PWA standalone 無法下拉重整——PM 看到
+      // 的一直是舊版）。controllerchange → 自動 reload 一次，更新免手動。
+      let _swRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_swRefreshing) return; // 防 reload 迴圈（重載後再觸發一次即停）。
+        _swRefreshing = true;
+        window.location.reload();
+      });
     }
   </script>
 </body>
