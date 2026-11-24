@@ -483,7 +483,7 @@ class _RecentTxRow extends StatelessWidget {
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.receipt_long_outlined),
-      title: Text(tx.kind == 'repayment'
+      title: Text(tx.kind == TxKind.repayment // T81 修正：Tx entity＝enum 比較（字串恆 false——T59 同款）。
           // T80：還款固定標籤（不建真分類）。
           ? '信用卡繳款'
           : tx.merchant ??

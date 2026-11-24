@@ -165,4 +165,42 @@ void main() {
     expect(find.text('應付 0'), findsOneWidget, reason: '繳款後平帳（T79）');
     expect(find.text('餘額 4,500'), findsOneWidget, reason: '現金扣減 500');
   });
+
+  testWidgets('T81 回歸：最近交易還款顯示「信用卡繳款」（Tx entity＝enum 比較）',
+      (tester) async {
+    Clock.freeze(DateTime(2026, 11, 24, 12));
+    final db = DbFixture.create();
+    addTearDown(() {
+      Clock.unfreeze();
+      db.close();
+    });
+    await DbFixture.seedAccount(db, id: 'a-cash', type: 'cash', name: '現金');
+    await DbFixture.seedAccount(db, id: 'a-card', type: 'credit', name: '示例卡');
+    // 還款交易（快記繳卡費/信用卡頁繳款之形態——categoryId=null）。
+    await DbFixture.seedTx(db,
+        id: 't-rep',
+        kind: 'repayment',
+        amountMinor: 500,
+        accountId: 'a-cash',
+        toAccountId: 'a-card',
+        occurredAt: Clock.now().millisecondsSinceEpoch);
+
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t')),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+          theme: buildAppTheme(Brightness.light), home: const OverviewPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('信用卡繳款'), findsOneWidget,
+        reason: 'T81——原碼 tx.kind == 字串（Tx entity 是 enum）恆 false → 顯示「交易」');
+    expect(find.text('交易'), findsNothing, reason: '不再顯示含糊後備');
+  });
 }

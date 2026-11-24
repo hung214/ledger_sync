@@ -83,10 +83,15 @@ class RecentDeletionsPage extends ConsumerWidget {
                     final t = visible[i];
                     return _Row(
                       tx: t,
-                      icon: iconOf(t.categoryId),
-                      categoryName: t.categoryId == null
-                          ? '未分類'
-                          : (db.categoryName(t.categoryId!) ?? '未分類'),
+                      // T80：還款固定標籤＋💳（與明細/總覽一致——原「未分類」）。
+                      icon: t.kind == 'repayment'
+                          ? '💳'
+                          : iconOf(t.categoryId),
+                      categoryName: t.kind == 'repayment'
+                          ? '信用卡繳款'
+                          : t.categoryId == null
+                              ? '未分類'
+                              : (db.categoryName(t.categoryId!) ?? '未分類'),
                       onRestore: () {
                         ref.read(restoreTransactionProvider).execute(t.id);
                         ref.invalidate(ledgerProvider);
