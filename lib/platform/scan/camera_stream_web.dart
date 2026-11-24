@@ -45,6 +45,11 @@ class WebCameraStreamController implements CameraStreamController {
   String _facing = 'environment'; // 目前鏡頭朝向（切換按鈕用）
   String? _switchNote; // 診斷：最近一次切換的結果（面板顯示）
   bool _torchOn = false; // 補光狀態
+  // **zoom 能力**（T82——getUserMedia capabilities 探測；iOS Safari 對
+  // zoom constraint 支援有限——不支援＝只顯示距離引導文案）。
+  bool _zoomSupported = false;
+  double _zoomMin = 1.0;
+  double _zoomMax = 3.0;
 
   @override
   String get diagInfo =>
@@ -112,6 +117,47 @@ class WebCameraStreamController implements CameraStreamController {
       _torchOn = !_torchOn;
     } catch (_) {
       // 無補光能力或相機未啟動——靜默。
+    }
+  }
+
+  @override
+  bool get zoomSupported => _zoomSupported;
+
+  /// zoom 能力探測（相機啟動後呼叫——capabilities.zoom 有 min/max 才支援）。
+  ///
+  /// 動態探測（dart2js 的 dynamic 調用直讀 JS 屬性——capabilities.zoom 是
+  /// 可選成員，硬體不支援時＝undefined → dynamic 讀為 null）。
+  void probeZoomCapabilities(web.MediaStreamTrack track) {
+    try {
+      final dynamic zoom = (track.getCapabilities() as dynamic).zoom;
+      if (zoom == null) {
+        _zoomSupported = false;
+        return;
+      }
+      _zoomMin = (zoom.min as num).toDouble();
+      _zoomMax = (zoom.max as num).toDouble();
+      _zoomSupported = _zoomMax > _zoomMin;
+    } catch (_) {
+      _zoomSupported = false; // 不支援（iOS Safari 常見）——只顯示距離引導。
+    }
+  }
+
+  @override
+  Future<void> setZoom(double normalized) async {
+    if (!_zoomSupported) return;
+    final track = _videoTracks().firstOrNull;
+    if (track == null) return;
+    final target =
+        _zoomMin + (_zoomMax - _zoomMin) * normalized.clamp(0.0, 1.0);
+    try {
+      final advanced = <web.MediaTrackConstraintSet>[
+        web.MediaTrackConstraintSet(zoom: target.toJS),
+      ].toJS;
+      await track
+          .applyConstraints(web.MediaTrackConstraints(advanced: advanced))
+          .toDart;
+    } catch (_) {
+      // 硬體拒絕（正值域外等）——靜默。
     }
   }
 
@@ -203,6 +249,9 @@ class WebCameraStreamController implements CameraStreamController {
     final gen = ++_openGen;
     _stopStreamTracks(); // 確保無殘留軌道（硬體鎖釋放後再取）
     _stream = await _acquireRearCamera();
+    // zoom 能力探測（T82）——capabilities.zoom 存在才支援變焦。
+    final firstTrack = _videoTracks().firstOrNull;
+    if (firstTrack != null) probeZoomCapabilities(firstTrack);
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。

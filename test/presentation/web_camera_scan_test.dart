@@ -156,6 +156,12 @@ class _FakeController implements CameraStreamController {
   bool get torchSupported => false;
 
   @override
+  bool get zoomSupported => false;
+
+  @override
+  Future<void> setZoom(double normalized) async {}
+
+  @override
   Future<void> toggleTorch() async {}
 
   @override
