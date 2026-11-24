@@ -483,9 +483,12 @@ class _RecentTxRow extends StatelessWidget {
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.receipt_long_outlined),
-      title: Text(tx.merchant ??
-          (tx.categoryId == null ? null : db.categoryName(tx.categoryId)) ??
-          '交易'),
+      title: Text(tx.kind == 'repayment'
+          // T80：還款固定標籤（不建真分類）。
+          ? '信用卡繳款'
+          : tx.merchant ??
+              (tx.categoryId == null ? null : db.categoryName(tx.categoryId)) ??
+              '交易'),
       subtitle: Text(
         '${DateFormat('M/d HH:mm').format(DateTime.fromMillisecondsSinceEpoch(tx.occurredAt))}'
         '${hasAttachment ? ' · 📷' : ''}',
