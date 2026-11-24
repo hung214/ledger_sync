@@ -11,11 +11,13 @@
 
 ## 進行中（PM 2026-11-24：快記直接繳卡費）
 
-- [ ] **T77 快記繳卡費**：快速記帳即可繳卡費（免進信用卡頁）。
+- [x] **T77 快記繳卡費**：快速記帳即可繳卡費（免進信用卡頁）。
   ①快記第四模式「繳卡費」（僅有信用卡帳戶時顯示）②金額預設
   帶入「未繳合計」（creditUnpaidTotal，可改）③儲存走
-  RepayStatementUseCase（有未繳清帳單→帳單累加；無→純 repayment
-  交易，仍抵扣未繳合計）④repayment 不計收支統計。
+  RepayStatementUseCase（有未繳清帳單→帳單累加＋繳清取消 N-5；無→
+  純 repayment 交易）✓execute 加 fromAccountId（使用者選擇優先）
+  ✓repayment 不計收支統計✓3 controller 測試＋288 全綠＋analyze 0
+  ✓部署 0.5.1-pwa.20261124h（CDN ✓）
 
 ## 進行中（PM 2026-11-24：預算摘要金額語意修正）
 

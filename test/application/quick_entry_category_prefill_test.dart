@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/providers.dart';
+import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_controller.dart';
 
 import '../helpers/db_fixture.dart';
+import '../helpers/in_memory_cloud_adapter.dart';
 
 /// 「子類別帶入」（PM 2026-11-21）：選分類 → 自動帶入**同分類最後一筆
 /// 交易**的商家＋金額（涵蓋掃描/匯入等非快記入帳——記憶只記快記流程）。
@@ -131,5 +133,50 @@ void main() {
     final state = container.read(quickEntryControllerProvider);
     expect(state.amount, '245', reason: '金額 0 → 照舊帶入');
     expect(state.merchant, '舊商家');
+  });
+
+  // ── 帶入範圍修訂（T78，PM 2026-11-24）：**帳戶不動** ──
+
+  test('T78：記憶帶入只帶金額/商家——帳戶維持使用者選擇（不被記憶覆蓋）', () {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    final day = DateTime(2026, 11, 24, 9);
+    DbFixture.seedAccount(db, id: 'a-1', type: 'cash', name: '現金');
+    DbFixture.seedAccount(db, id: 'a-2', type: 'bank', name: '薪轉');
+    DbFixture.seedCategory(db, id: 'c-b', kind: 'expense', name: '乙');
+    DbFixture.seedTx(db,
+        id: 't-b',
+        kind: 'expense',
+        amountMinor: 245,
+        accountId: 'a-1',
+        category: 'c-b',
+        merchant: '舊商家',
+        occurredAt: day.millisecondsSinceEpoch);
+
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      // save 的 afterSave 鉤子（FR-Y11）——防 UnimplementedError。
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t')),
+    ]);
+    addTearDown(container.dispose);
+    final sub = container.listen(quickEntryControllerProvider, (_, _) {});
+    addTearDown(sub.close);
+    final ctrl = container.read(quickEntryControllerProvider.notifier);
+
+    // 第一輪：選乙（帶入）→ 儲存 → **記憶含 accountId=a-1**。
+    ctrl.selectAccountById('a-1');
+    ctrl.selectCategoryById('c-b');
+    ctrl.setAmount('245');
+    ctrl.save();
+    // 使用者改選薪轉帳戶，金額歸 0 後再切分類（觸發記憶帶入）。
+    ctrl.selectAccountById('a-2');
+    ctrl.setAmount('0');
+    ctrl.selectCategoryById('c-b');
+
+    final state = container.read(quickEntryControllerProvider);
+    expect(state.account?.id, 'a-2',
+        reason: 'T78——帶入**不動帳戶**（舊碼會被記憶的 a-1 覆蓋）');
+    expect(state.merchant, '舊商家', reason: '商家照舊帶入');
   });
 }
