@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/providers.dart';
-import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../application/quick_entry/quick_entry_memory.dart';
@@ -304,14 +303,15 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     ref.refreshAllData();
   }
 
-  /// 繼續（FR-Q2/Q5）：Sticky 保留帳戶/分類/商家；時間重設為現在（FR-Q5）。
+  /// 繼續（FR-Q2/Q5；**T73 修訂** PM 2026-11-24）：Sticky 保留帳戶/分類/
+  /// 商家；**時間維持最後設定值**（補記場景——改過日期後連續記帳同日期；
+  /// 僅重新進入快記＝當日——autoDispose 重建即 preset.time）。
   /// 金額清空由 FE 欄位於相位轉移時處理（SavedDialog→Inputting）。
   void continueEntry() {
     state = state.copyWith(
       phase: QuickEntryPhase.inputting,
       amount: '',
       note: '',
-      occurredAt: Clock.now(),
     );
   }
 
