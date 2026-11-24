@@ -932,6 +932,8 @@ class TxTile extends StatelessWidget {
     final subtitle = [
       _timeLabel,
       if (accountName.isNotEmpty) accountName,
+      // **T81**（PM 2026-11-24）：還款/轉帳＝雙端流向——「現金 → 示例卡」。
+      if (_isTransferLike && toAccount != null) '→ ${toAccount!.name}',
       if ((tx.merchant ?? '').isNotEmpty) tx.merchant!,
       if ((note ?? '').isNotEmpty) note!,
       ..._tags,
