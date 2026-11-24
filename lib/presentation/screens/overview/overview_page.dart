@@ -313,8 +313,10 @@ class _BudgetSummaryItem extends StatelessWidget {
                       fontSize: 14, fontWeight: FontWeight.w700)),
             ),
             Text(
-              '${fmt.format(usageMinor ~/ 100)} / '
-              '${fmt.format(amountMinor ~/ 100)}（$pctText%）',
+              // **金額單位＝台幣元**（TWD zero-decimal——amountMinor 即元，
+              // PM 2026-11-24 指正；**不可 ~/ 100**，那是分→元語意）。
+              '${fmt.format(usageMinor)} / '
+              '${fmt.format(amountMinor)}（$pctText%）',
               style: TextStyle(fontSize: 12, color: accent),
             ),
           ],

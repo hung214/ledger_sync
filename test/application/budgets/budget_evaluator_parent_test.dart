@@ -48,42 +48,42 @@ void main() {
     BudgetService(db, deviceId: 't')
         .setCategoryBudget(
             categoryId: 'c-food',
-            amountMinor: 100000,
-            periodStartDay: 1); // 1000 元
-    await spend('c-breakfast', 10000); // 100 元
-    await spend('c-lunch', 20000); // 200 元
+            amountMinor: 1000,
+            periodStartDay: 1); // 1,000 元
+    await spend('c-breakfast', 100); // 100 元
+    await spend('c-lunch', 200); // 200 元
 
     final usage = BudgetEvaluator(db).categoryUsage('c-food')!;
-    expect(usage.totalMinor, 30000); // 早餐 100＋午餐 200 → 餐飲食品 300
+    expect(usage.totalMinor, 300); // 早餐 100＋午餐 200 → 餐飲食品 300
   });
 
   test('主分類自身的直接交易也計入加總', () async {
     BudgetService(db, deviceId: 't')
         .setCategoryBudget(
-            categoryId: 'c-food', amountMinor: 100000, periodStartDay: 1);
-    await spend('c-food', 5000); // 50 元（記在主分類本身）
-    await spend('c-lunch', 20000);
+            categoryId: 'c-food', amountMinor: 1000, periodStartDay: 1);
+    await spend('c-food', 50); // 50 元（記在主分類本身）
+    await spend('c-lunch', 200);
 
     final usage = BudgetEvaluator(db).categoryUsage('c-food')!;
-    expect(usage.totalMinor, 25000); // 50 + 200
+    expect(usage.totalMinor, 250); // 50 + 200
   });
 
   test('子分類預算維持精確比對（不含兄弟子分類）', () async {
     BudgetService(db, deviceId: 't')
         .setCategoryBudget(
-            categoryId: 'c-breakfast', amountMinor: 50000, periodStartDay: 1);
-    await spend('c-breakfast', 10000);
-    await spend('c-lunch', 20000);
+            categoryId: 'c-breakfast', amountMinor: 500, periodStartDay: 1);
+    await spend('c-breakfast', 100);
+    await spend('c-lunch', 200);
 
     final usage = BudgetEvaluator(db).categoryUsage('c-breakfast')!;
-    expect(usage.totalMinor, 10000); // 只算早餐自身
+    expect(usage.totalMinor, 100); // 只算早餐自身
   });
 
   test('其他主分類的交易不跨計', () async {
     BudgetService(db, deviceId: 't')
         .setCategoryBudget(
-            categoryId: 'c-food', amountMinor: 100000, periodStartDay: 1);
-    await spend('c-other', 99000);
+            categoryId: 'c-food', amountMinor: 1000, periodStartDay: 1);
+    await spend('c-other', 990);
 
     final usage = BudgetEvaluator(db).categoryUsage('c-food')!;
     expect(usage.totalMinor, 0);
@@ -92,12 +92,12 @@ void main() {
   test('pending 預扣照舊跨子分類合計', () async {
     BudgetService(db, deviceId: 't')
         .setCategoryBudget(
-            categoryId: 'c-food', amountMinor: 100000, periodStartDay: 1);
-    await spend('c-breakfast', 10000, settlementStatus: 'pending');
-    await spend('c-lunch', 20000);
+            categoryId: 'c-food', amountMinor: 1000, periodStartDay: 1);
+    await spend('c-breakfast', 100, settlementStatus: 'pending');
+    await spend('c-lunch', 200);
 
     final usage = BudgetEvaluator(db).categoryUsage('c-food')!;
-    expect(usage.totalMinor, 30000);
-    expect(usage.pendingMinor, 10000);
+    expect(usage.totalMinor, 300);
+    expect(usage.pendingMinor, 100);
   });
 }
