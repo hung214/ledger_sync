@@ -9,6 +9,13 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+## 進行中（PM 2026-11-24：PWA 更新看不到——SW 自動重載）
+
+- [ ] **T75 SW 自動重載**：iOS PWA standalone 開啟＝先吃舊快取，
+  SW 背景更新（skipWaiting）後頁面仍跑舊 JS（無 controllerchange
+  → reload）→ PM 要殺掉重開才看到。index.html 加 controllerchange
+  → location.reload()：新 SW 接管即自動重載，免手動重整。
+
 ## 進行中（PM 2026-11-24：總覽預算摘要對照雛型）
 
 - [x] **T74 總覽預算摘要修正**（對照 specs/plan/ui/01-dashboard.html）：
