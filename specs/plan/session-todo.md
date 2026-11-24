@@ -31,6 +31,13 @@
   手續費」，計入支出統計；零 schema 變更）。設計已評估，PM 決定
   先不做——需要時直接接手。
 
+- [x] **T82-② PWA zoom 補償**：PM 回報自動變焦只有 MAC APP 有、
+  PWA 沒有——T82 首輪只做 native 路徑。補齊＝CameraStreamController
+  介面加 zoomSupported/setZoom（capabilities.zoom 動態探測——iOS
+  Safari 常見不支援→只顯示距離引導）＋web_camera_scan 無偵測
+  4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
+  analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
+
 ## 進行中（PM 2026-11-24：掃描發票覆盤——對焦/辨識優化）
 
 - [x] **T82 掃描覆盤優化**：覆盤結論——①發票 QR＝高密度 V13
