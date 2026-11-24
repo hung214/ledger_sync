@@ -110,9 +110,11 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
           accountName: accountById[r.accountId]?.name ?? '',
           toAccount:
               r.toAccountId == null ? null : accountById[r.toAccountId!],
-          categoryName: r.categoryId == null
-              ? '未分類'
-              : (db.categoryName(r.categoryId!) ?? '未分類'),
+          categoryName: r.kind == 'repayment'
+              ? '信用卡繳款' // T80：還款固定標籤（不建真分類）。
+              : r.categoryId == null
+                  ? '未分類'
+                  : (db.categoryName(r.categoryId!) ?? '未分類'),
           categoryId: r.categoryId,
           categoryIcon: iconOf(r.categoryId),
           note: r.note,
@@ -920,7 +922,13 @@ class TxTile extends StatelessWidget {
     // PM 2026-10-26（手機版）：**標題＝分類（含子類別名）**、商家移入副標——
     // 原標題＝商家，但多數交易無商家 → 常態顯示「—」很奇怪；分類則幾乎必有，
     // 放標題更易掃讀（圖示圓已載 emoji，標題不重複 emoji）。
-    final title = tx.categoryId == null ? '未分類' : categoryName;
+    // **T80**（PM 2026-11-24）：repayment＝轉移語意（不建真分類，避免污染
+    // 分類統計/選擇器/預算）→ 固定標籤「信用卡繳款」（資料保持 categoryId=null）。
+    final title = tx.kind == 'repayment'
+        ? '信用卡繳款'
+        : tx.categoryId == null
+            ? '未分類'
+            : categoryName;
     final subtitle = [
       _timeLabel,
       if (accountName.isNotEmpty) accountName,
@@ -930,7 +938,11 @@ class TxTile extends StatelessWidget {
     ].join(' · ');
     return ListTile(
       onTap: onTap,
-      leading: _CatCircle(emoji: categoryIcon ?? '🧾'),
+      leading: _CatCircle(
+          // T80：還款＝💳 固定圖示（無分類圖示）。
+          emoji: tx.kind == 'repayment'
+              ? '💳'
+              : (categoryIcon ?? '🧾')),
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
