@@ -28,11 +28,11 @@ void main() {
     await DbFixture.seedCategory(db,
         id: 'c-food', kind: 'expense', name: '餐飲');
     BudgetService(db, deviceId: 't').setCategoryBudget(
-        categoryId: 'c-food', amountMinor: 800000, periodStartDay: 1); // 8,000
+        categoryId: 'c-food', amountMinor: 8000, periodStartDay: 1); // 8,000 元
     SaveTransactionUseCase(db).execute(
       accountId: 'a-1',
       categoryId: 'c-food',
-      amountMinor: 700000, // 7,000
+      amountMinor: 7000, // 7,000 元
       occurredAt: Clock.now(),
     );
 
@@ -73,19 +73,19 @@ void main() {
         id: 'c-b', kind: 'expense', name: '娛樂');
     BudgetService(db, deviceId: 't')
       ..setCategoryBudget(
-          categoryId: 'c-a', amountMinor: 100000, periodStartDay: 1) // 1,000
+          categoryId: 'c-a', amountMinor: 1000, periodStartDay: 1) // 1,000 元
       ..setCategoryBudget(
-          categoryId: 'c-b', amountMinor: 50000, periodStartDay: 1); // 500
+          categoryId: 'c-b', amountMinor: 500, periodStartDay: 1); // 500 元
     SaveTransactionUseCase(db)
       ..execute(
           accountId: 'a-1',
           categoryId: 'c-a',
-          amountMinor: 30000, // 300 → 30%
+          amountMinor: 300, // 300 元 → 30%
           occurredAt: Clock.now())
       ..execute(
           accountId: 'a-1',
           categoryId: 'c-b',
-          amountMinor: 60000, // 600 → 120%（超支）
+          amountMinor: 600, // 600 元 → 120%（超支）
           occurredAt: Clock.now());
 
     final container = ProviderContainer(overrides: [
