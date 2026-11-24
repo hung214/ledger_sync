@@ -84,6 +84,14 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   bool _diagExpanded = false; // 診斷行展開（PM：預設短格式）
   bool _torchOn = false; // 補光開關狀態
   bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
+  // **zoom 補償**（T82——PWA 端，與 APP 同款）：無偵測 5 輪（≈6s）→
+  // 1.5×→2×→2.5×（封頂）＋常駐引導；不支援 zoom 的瀏覽器（iOS Safari
+  // 常見）→ 只顯示距離引導文案。
+  static const List<double> _zoomSteps = [0.0, 0.25, 0.5, 0.75]; // 正規化
+  double _zoomNorm = 0.0;
+  int _noDetectRounds = 0;
+  String? _zoomHint;
+  bool _zoomSupported = false;
 
   @override
   void initState() {
@@ -105,6 +113,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _preview = preview;
         _state = _CamState.live;
         _torchSupported = _controller.torchSupported;
+        _zoomSupported = _controller.zoomSupported;
+        _zoomHint = '對準發票左下角 QR · 保持 15~20 公分'; // 初始引導
       });
       _loop = Timer.periodic(
           const Duration(milliseconds: 1200), (_) => _tryDecode());
@@ -120,6 +130,29 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _state = _CamState.failed;
         _error = '相機啟動失敗：$e';
       });
+    }
+  }
+
+  /// **zoom 升檔**（T82）：正規化 0→0.25→0.5→0.75（1×→1.5×→2×→2.5×）；
+  /// 不支援 zoom 的瀏覽器（iOS Safari 常見）→ 只換距離引導文案。
+  void _escalateZoom() {
+    if (!mounted) return;
+    final i = _zoomSteps.indexOf(_zoomNorm);
+    if (i < 0 || i >= _zoomSteps.length - 1) {
+      setState(() =>
+          _zoomHint = '請拉遠至 15~20 公分，對準發票左下角 QR');
+      return; // 封頂。
+    }
+    _zoomNorm = _zoomSteps[i + 1];
+    unawaited(
+        _controller.setZoom(_zoomNorm).catchError((Object _) {}));
+    if (_zoomSupported) {
+      final label = (_zoomNorm * 2 + 1).toStringAsFixed(1).replaceAll('.0x', 'x');
+      setState(() =>
+          _zoomHint = '已放大 $label——請拉遠至 15~20 公分對準條碼');
+    } else {
+      setState(() =>
+          _zoomHint = '此裝置不支援變焦——請拉遠至 15~20 公分對準條碼');
     }
   }
 
@@ -177,6 +210,18 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     sw.stop();
     _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
+    // **zoom 補償監看**（T82）：命中 → 重置；連續 4 輪（≈4.8s）無偵測 →
+    // 升一檔（cap 0.75＝2.5×——1080p 解析度下再遠模組會糊）。
+    if (texts.isNotEmpty) {
+      _noDetectRounds = 0;
+      if (_zoomHint != null && mounted) setState(() => _zoomHint = null);
+    } else if (_state == _CamState.live) {
+      _noDetectRounds++;
+      if (_noDetectRounds >= 4) {
+        _noDetectRounds = 0;
+        _escalateZoom();
+      }
+    }
     // **跨 tick 累積窗**（3 秒）——無法一次掃兩碼 → 各別辨識＋合併
     // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
     if (texts.isNotEmpty) {
@@ -432,6 +477,28 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                       onPressed: _addBlankDraft,
                       icon: const Icon(Icons.receipt_long),
                       label: const Text('手動開一筆'),
+                    ),
+                  ),
+                ),
+              // **zoom 引導**（T82）：常駐直到命中——「已放大 Nx——請拉遠」。
+              if (_zoomHint != null)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 44,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade800,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_zoomHint!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),
