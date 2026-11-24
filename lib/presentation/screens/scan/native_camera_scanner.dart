@@ -60,6 +60,15 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   bool _torchOn = false; // 補光開關（僅行動平台；無手電筒能力＝隱藏按鈕）
   Offset? _focusIndicator; // 點擊對焦回饋（preview 座標）
   Timer? _focusIndicatorReset;
+  // **跨平台 zoom 補償**（T82，PM 2026-11-24）：發票 QR＝高密度 V13
+  // （77×77 模組）——需拉近但撞 MOFO 物理對焦極限（機型差異 6~15cm，
+  // 「別人的手機靠太近無法對焦」根因）。解法＝**數位微距**：無偵測時
+  // 逐步變焦（拉遠至可對焦距離＋zoom 放大條碼，繞過 MOFO）。
+  // 重用既有 `_zoom`（正規化 0~1：0=1×、0.5=2×、1.0=3×——與手動按鈕
+  // 共用狀態，自動補償後按鈕高亮同步）。
+  static const List<double> _zoomSteps = [0.0, 0.25, 0.5, 0.75]; // 1×/1.5×/2×/2.5×
+  Timer? _zoomTimer; // 無偵測 → 5 秒升一檔
+  String? _zoomHint; // 變焦引導（常駐直到偵測到條碼）
   // 綠框高亮：最近一幀偵測到的條碼角點（影像座標，相對 _boxImageSize）。
   // 400ms 內無新偵測即清空——對準時 unrestricted 連續回呼，框持續顯示。
   List<List<Offset>> _boxes = const [];
@@ -83,11 +92,12 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
       // 平台策略（scan_policy.dart）：QR（電子發票）＋Code39/128（紙本一維
       // 條碼）同時開啟——模式分流在 _onDetect（不隨模式重建 controller）。
       formats: cameraFormats(detectScanPlatform()),
-      // 辨識距離（PM 2026-11-21：「要拉到很近才掃得到」）——提高分析解析度
-      // ＋條碼過小自動變焦。mobile_scanner 7.5 文件明載**僅 Android 支援**，
-      // iOS/macOS 忽略（上游未開參數；距離天花板屬外掛限制）。
+      // 辨識距離（PM 2026-11-21：「要拉到很近才掃得到」）——提高分析解析度。
+      // **autoZoom 改 Dart 層跨平台實作**（T82——上游僅 Android；iOS 的
+      // setZoomScale 完整支援（darwin plugin videoZoomFactor），統一由
+      // [_escalateZoom] 控管避免雙方打架）。
       cameraResolution: const Size(1920, 1080),
-      autoZoom: true,
+      autoZoom: false,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleStart());
   }
@@ -144,7 +154,11 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
     if (!mounted || gen != _startGen) return;
     try {
       await _controller.start();
-      if (mounted) setState(() => _cameraFailed = false);
+      if (mounted) {
+        setState(() => _cameraFailed = false);
+        // zoom 監看啟動（T82）：連續無偵測 → 逐步變焦補償。
+        _zoomTimer ??= Timer(const Duration(seconds: 5), _escalateZoom);
+      }
       return;
     } catch (_) {
       if (attempt == 0 && mounted) {
@@ -167,6 +181,7 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
     _pendingTimer?.cancel();
     _hintReset?.cancel();
     _boxReset?.cancel();
+    _zoomTimer?.cancel(); // T82：zoom 監看排程失效。
     // 明確 stop（session 釋放）→ dispose——方法通道保序，下次進入的
     // start 不會與本次 release 競態（黑畫面防護）。
     unawaited(_controller.stop().catchError((Object _) {}));
@@ -201,12 +216,39 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   /// 定位/分類邏輯集中於 `ImageQrScanner.extractOfficialLeft`（三路徑共用）。
   static final RegExp _invoiceNoPattern = RegExp(r'[A-Z]{2}[0-9]{8}');
 
+  /// **zoom 升檔**（T82）：無偵測 5 秒 → 1.5× → 2× → 2.5×（封頂——
+  /// 1080p 分析解析度下再遠模組會糊）＋引導文案（常駐直到偵測到條碼）。
+  /// `_zoom` 為正規化值（與手動按鈕共用）——倍率顯示＝1＋norm×2。
+  void _escalateZoom() {
+    if (!mounted) return;
+    final i = _zoomSteps.indexOf(_zoom);
+    if (i < 0 || i >= _zoomSteps.length - 1) {
+      setState(() => _zoomHint = '請拉遠至 15~20 公分，對準發票左下角 QR');
+      return; // 已封頂——保持 zoom 只換文案。
+    }
+    _zoom = _zoomSteps[i + 1];
+    unawaited(_controller.setZoomScale(_zoom).catchError((Object _) {}));
+    final label = '${(_zoom * 2 + 1).toStringAsFixed(1)}x'
+        .replaceAll('.0x', 'x');
+    setState(() => _zoomHint = '已放大 $label——請拉遠至 15~20 公分對準條碼');
+    _zoomTimer = Timer(const Duration(seconds: 5), _escalateZoom);
+  }
+
   /// 條碼偵測入口（連拍＋去重＋畫面回饋）。
   void _onDetect(BarcodeCapture capture) {
     // 掃描節流（PM 2026-11-22）：確認清單開啟中全停＋每筆入單後 0.3 秒暫停。
     if (ref.read(scanPausedProvider) ||
         DateTime.now().isBefore(_pausedUntil)) {
       return;
+    }
+    // **zoom 補償監看**（T82）：偵測到任何條碼 → 重置升檔計時＋收引導；
+    // 連續 5 秒無偵測（unrestricted 每幀回呼、空 barcodes）→ 升一檔 zoom。
+    if (capture.barcodes.isNotEmpty) {
+      _zoomTimer?.cancel();
+      _zoomTimer = null;
+      if (_zoomHint != null && mounted) setState(() => _zoomHint = null);
+    } else {
+      _zoomTimer ??= Timer(const Duration(seconds: 5), _escalateZoom);
     }
     // 綠框高亮＋偵測計數：**所有**偵測到的條碼都畫（含非發票碼——讓使用者
     // 看到「掃到什麼」；角點為影像座標，相對 [BarcodeCapture.size]）。
@@ -581,6 +623,29 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                     onPressed: _addBlankDraft,
                     icon: const Icon(Icons.receipt_long),
                     label: const Text('手動開一筆'),
+                  ),
+                ),
+              ),
+            // **zoom 引導**（T82）：常駐直到偵測到條碼——「已放大 Nx——請
+            // 拉遠至 15~20 公分」（數位微距——繞過 MOFO 物理對焦極限）。
+            if (_zoomHint != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 48,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade800,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(_zoomHint!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
