@@ -166,21 +166,13 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
         final entered =
             int.tryParse(state.amount.replaceAll(',', '')) ?? 0;
         if (entered <= 0) {
-          // 「記住上次」（PM 2026-10-24）：帶入該分類上次的**金額/帳戶/商家**
-          // （日期仍為現在）；無紀錄或空值 → 沿用 Sticky（上一筆）值。
+          // 「記住上次」（PM 2026-10-24；**範圍修訂 T78** PM 2026-11-24）：
+          // 帶入**僅金額/商家**——**帳戶不動**（使用者自選的帳戶不被覆蓋）。
           final mem = ref.read(quickEntryMemoryProvider).load(c.id);
           if (mem != null) {
             if (mem.amount.isNotEmpty) next = next.copyWith(amount: mem.amount);
             if (mem.merchant.isNotEmpty) {
               next = next.copyWith(merchant: mem.merchant);
-            }
-            if (mem.accountId != null) {
-              for (final a in ref.read(activeAccountsProvider)) {
-                if (a.id == mem.accountId) {
-                  next = next.copyWith(account: a);
-                  break;
-                }
-              }
             }
           }
           // 「子類別帶入」（PM 2026-11-21）：同分類**最後一筆交易**的商家/金額

@@ -176,7 +176,13 @@ class OverviewPage extends ConsumerWidget {
                         : null),
                 trailing: Text(
                   // F02-FE S2：餘額千分位；F08-FE S5：隱私遮蔽（●●●●）。
-                  '餘額 ${money(calc.assetBalance(account: accountEntity(row), txs: txs))}',
+                  // **T79 修復**（PM 2026-11-24）：信用卡列＝**負債語意**——
+                  // 顯示「應付 N」（creditUnpaidTotal，還款即扣減→平帳），
+                  // 與明細頁一致；原先誤用 assetBalance（repayment 信用卡端
+                  // 不計→繳款後恆顯示 −消費額，帳戶不平）。
+                  row.type == 'credit'
+                      ? '應付 ${money(calc.creditUnpaidTotal(card: accountEntity(row), txs: txs))}'
+                      : '餘額 ${money(calc.assetBalance(account: accountEntity(row), txs: txs))}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
