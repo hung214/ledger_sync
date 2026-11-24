@@ -453,7 +453,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                           ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
                               '命中 $_decodeHits · 解 $_decodeMs ms'
                               '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
-                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms · '
+                              '💡保持 15~20cm',
                       key: const Key('webcam-diag'),
                       style: const TextStyle(
                           color: Colors.white, fontSize: 11),
