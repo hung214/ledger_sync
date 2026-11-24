@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/budgets/budget_service.dart';
+import 'package:ledger_sync/application/credit_card/repay_statement_use_case.dart';
 import 'package:ledger_sync/application/providers.dart';
 import 'package:ledger_sync/application/quick_entry/save_transaction_use_case.dart';
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
@@ -108,5 +109,60 @@ void main() {
     expect(find.text('⚠ 已超出預算'), findsOneWidget, reason: '超支文案');
     // 30% 的交通預算無警示行（僅超支那一列有）。
     expect(find.text('⚠ 已達 80% 警告門檻（N-1 已發送一次）'), findsNothing);
+  });
+
+  testWidgets('T79 信用卡帳戶列＝負債語意：繳款後「應付」歸零（平帳）＋現金扣減',
+      (tester) async {
+    Clock.freeze(DateTime(2026, 11, 24, 12));
+    final db = DbFixture.create();
+    addTearDown(() {
+      Clock.unfreeze();
+      db.close();
+    });
+    await DbFixture.seedAccount(db,
+        id: 'a-cash', type: 'cash', name: '現金', opening: 5000);
+    await DbFixture.seedAccount(db, id: 'a-card', type: 'credit', name: '示例卡');
+    // 刷卡 500（預扣 pending）＝待繳額度。
+    await DbFixture.seedTx(db,
+        id: 't-pend',
+        kind: 'expense',
+        amountMinor: 500,
+        accountId: 'a-card',
+        settlementStatus: 'pending',
+        occurredAt: Clock.now().millisecondsSinceEpoch);
+
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+      syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t')),
+    ]);
+    addTearDown(container.dispose);
+
+    Future<void> pump() async {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: buildAppTheme(Brightness.light), home: const OverviewPage()),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    await pump();
+    expect(find.text('應付 500'), findsOneWidget,
+        reason: '信用卡列＝負債語意（T79——非 assetBalance 的 −500）');
+    expect(find.text('餘額 5,000'), findsOneWidget, reason: '現金列');
+
+    // 繳款（快記繳卡費同款路徑——executeForCard）。
+    RepayStatementUseCase(db, container.read(notificationProvider))
+        .executeForCard(
+      cardAccountId: 'a-card',
+      amountMinor: 500,
+      fromAccountId: 'a-cash',
+    );
+    container.read(dataVersionProvider.notifier).bump(); // 模擬快記刷新
+    await pump();
+
+    expect(find.text('應付 0'), findsOneWidget, reason: '繳款後平帳（T79）');
+    expect(find.text('餘額 4,500'), findsOneWidget, reason: '現金扣減 500');
   });
 }
