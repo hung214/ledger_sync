@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -11,7 +13,6 @@ import '../../../core/version.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/services/balance_calculator.dart';
 import '../../theme/app_theme.dart';
-import '../budget/budget_page.dart';
 import '../credit_card/credit_card_page.dart';
 import '../demo/demo_gallery_page.dart';
 import '../scan/scan_page.dart';
@@ -139,7 +140,9 @@ class OverviewPage extends ConsumerWidget {
                 if (b.categoryId != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: BudgetProgressBar(
+                    child: _BudgetSummaryItem(
+                      // 雛型 01-dashboard：名稱＋用量/額度（%）＋進度條＋
+                      // ⚠ 門檻警示（≥80% 琥珀／超支紅——AC-05）。
                       name: db.categoryName(b.categoryId!) ?? '分類預算',
                       usageMinor:
                           evaluator.categoryUsage(b.categoryId!)?.totalMinor ?? 0,
@@ -271,6 +274,75 @@ class OverviewPage extends ConsumerWidget {
 }
 
 /// 區塊卡（標題＋內容；對照雛型卡片樣式）。
+/// 預算摘要項（T74，PM 2026-11-24——對照雛型 01-dashboard）：
+/// 名稱（粗體）＋「用量 / 額度（%）」＋進度條（8px）＋⚠ 門檻警示行。
+/// 色階 AC-05：<80% 主色、≥80% 琥珀、≥100% 紅；門檻行 ≥80% 顯示。
+class _BudgetSummaryItem extends StatelessWidget {
+  const _BudgetSummaryItem({
+    required this.name,
+    required this.usageMinor,
+    required this.amountMinor,
+  });
+
+  final String name;
+  final int usageMinor;
+  final int amountMinor;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final fmt = NumberFormat('#,###');
+    final pct = amountMinor <= 0 ? 0.0 : usageMinor * 100 / amountMinor;
+    final over = usageMinor > amountMinor;
+    final warn = pct >= 80;
+    final accent = over
+        ? tokens.danger
+        : (warn ? tokens.warning : AppTokens.brandSeed);
+    // 百分比：整數值顯示整數（50%），含小數顯示一位（87.5%）。
+    final pctText =
+        pct % 1 == 0 ? pct.toStringAsFixed(0) : pct.toStringAsFixed(1);
+    return Column(
+      key: Key('budget-progress-$name'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(name,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700)),
+            ),
+            Text(
+              '${fmt.format(usageMinor ~/ 100)} / '
+              '${fmt.format(amountMinor ~/ 100)}（$pctText%）',
+              style: TextStyle(fontSize: 12, color: accent),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 8,
+            child: LinearProgressIndicator(
+              value: pct <= 0 ? 0 : min(pct / 100, 1.0),
+              color: accent,
+              backgroundColor: tokens.track,
+            ),
+          ),
+        ),
+        if (warn) ...[
+          const SizedBox(height: 6),
+          Text(
+            over ? '⚠ 已超出預算' : '⚠ 已達 80% 警告門檻（N-1 已發送一次）',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF98A5A4)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
   const _Section({this.title, this.trailing, required this.child});
 
