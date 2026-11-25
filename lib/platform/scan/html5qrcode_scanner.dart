@@ -80,4 +80,18 @@ abstract class Html5QrScanner {
   /// 台灣發票解析（TwEin）——[texts] 為累積窗條碼文字；無法組出完整
   /// 發票（缺左碼等）回 null（呼叫端引導對準另一碼）。
   TwEinInvoice? parseInvoice(List<String> texts);
+
+  /// 檢查 reader div 是否已進入 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
+  Future<bool> checkReaderDivReady(String elementId);
+
+  /// 切換鏡頭（前/後；pwa-0.5.2 版面按鈕——`webcam-switch-camera`）。
+  /// 未啟動＝靜默；iOS 走整頁重載式切換（T65——毒化管線唯一可靠路徑，
+  /// facing 存 sessionStorage 跨重載）；桌面同 session 直接重啟。
+  Future<void> switchCamera();
+
+  /// 目前鏡頭 facing（'environment'／'user'——診斷面板顯示）。
+  String get facingLabel;
+
+  /// 已處理幀數（html5-qrcode 每幀回呼——未偵測也計；診斷「幀數流動」）。
+  int get frameCount;
 }

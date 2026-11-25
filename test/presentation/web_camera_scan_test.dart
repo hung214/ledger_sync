@@ -168,6 +168,9 @@ class _FakeScanner implements Html5QrScanner {
   void registerReaderView(String viewType) {}
 
   @override
+  Future<bool> checkReaderDivReady(String elementId) async => true; // fake: div ready
+
+  @override
   TwEinInvoice? parseInvoice(List<String> texts) {
     parseCalls++;
     lastParsedTexts = texts;
@@ -186,4 +189,13 @@ class _FakeScanner implements Html5QrScanner {
     }
     return null; // 只有右碼——缺左碼。
   }
+
+  @override
+  Future<void> switchCamera() async {}
+
+  @override
+  String get facingLabel => 'environment';
+
+  @override
+  int get frameCount => 0;
 }

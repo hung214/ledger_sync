@@ -216,21 +216,22 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
   /// 定位/分類邏輯集中於 `ImageQrScanner.extractOfficialLeft`（三路徑共用）。
   static final RegExp _invoiceNoPattern = RegExp(r'[A-Z]{2}[0-9]{8}');
 
-  /// **zoom 升檔**（T82）：無偵測 5 秒 → 1.5× → 2× → 2.5×（封頂——
-  /// 1080p 分析解析度下再遠模組會糊）＋引導文案（常駐直到偵測到條碼）。
+  /// **zoom 升檔**（T82；T84 移除距離文案——PM 2026-11-25「不需要提示
+  /// 15~20CM 距離」）：無偵測 5 秒 → 1.5× → 2× → 2.5×（封頂——
+  /// 1080p 分析解析度下再遠模組會糊），僅短暫提示放大倍率。
   /// `_zoom` 為正規化值（與手動按鈕共用）——倍率顯示＝1＋norm×2。
   void _escalateZoom() {
     if (!mounted) return;
     final i = _zoomSteps.indexOf(_zoom);
     if (i < 0 || i >= _zoomSteps.length - 1) {
-      setState(() => _zoomHint = '請拉遠至 15~20 公分，對準發票左下角 QR');
-      return; // 已封頂——保持 zoom 只換文案。
+      if (_zoomHint != null) setState(() => _zoomHint = null);
+      return; // 已封頂——不再顯示引導。
     }
     _zoom = _zoomSteps[i + 1];
     unawaited(_controller.setZoomScale(_zoom).catchError((Object _) {}));
     final label = '${(_zoom * 2 + 1).toStringAsFixed(1)}x'
         .replaceAll('.0x', 'x');
-    setState(() => _zoomHint = '已放大 $label——請拉遠至 15~20 公分對準條碼');
+    setState(() => _zoomHint = '已自動放大 $label');
     _zoomTimer = Timer(const Duration(seconds: 5), _escalateZoom);
   }
 
@@ -626,8 +627,8 @@ class _NativeCameraScannerState extends ConsumerState<NativeCameraScanner>
                   ),
                 ),
               ),
-            // **zoom 引導**（T82）：常駐直到偵測到條碼——「已放大 Nx——請
-            // 拉遠至 15~20 公分」（數位微距——繞過 MOFO 物理對焦極限）。
+            // **zoom 引導**（T82；T84 移除距離文案——僅顯示放大倍率，
+            // 偵測到條碼即收）。
             if (_zoomHint != null)
               Positioned(
                 left: 12,

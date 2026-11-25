@@ -31,10 +31,22 @@ class Html5QrScannerImpl implements Html5QrScanner {
   void registerReaderView(String viewType) {}
 
   @override
+  Future<bool> checkReaderDivReady(String elementId) async => false;
+
+  @override
   Future<void> toggleTorch() async {}
 
   @override
   TwEinInvoice? parseInvoice(List<String> texts) => null;
+
+  @override
+  Future<void> switchCamera() async {}
+
+  @override
+  String get facingLabel => 'environment';
+
+  @override
+  int get frameCount => 0;
 }
 
 final Html5QrScanner html5QrScanner = const Html5QrScannerImpl();
