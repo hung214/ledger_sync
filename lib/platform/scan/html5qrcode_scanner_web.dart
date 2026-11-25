@@ -109,13 +109,14 @@ class Html5QrScannerImpl implements Html5QrScanner {
   @override
   void registerReaderView(String viewType) {
     // 直接建立 container div（html5-qrcode 需要 element 存在才能 start）。
+    // 使用非空斷言，若 body 為 null 會拋出錯誤，由上層捕獲。
     final div = web.document.getElementById('ls-h5q-reader');
     if (div == null) {
       final newDiv = (web.document.createElement('div') as web.HTMLDivElement)
         ..id = 'ls-h5q-reader'
         ..style.width = '100%'
         ..style.height = '100%';
-      web.document.body?.append(newDiv);
+      web.document.body!.append(newDiv); // 非空斷言，若 body 為 null 會拋出錯誤
     }
   }
 
