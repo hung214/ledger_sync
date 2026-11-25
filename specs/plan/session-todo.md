@@ -44,18 +44,21 @@
   - [x] ①套件調研＋資源放置：web/scan/html5-qrcode.min.js（UMD 2.3.8）
     ＋tw-einvoice.js（esbuild IIFE→window.TwEin，11.9KB——parseBarcode
     驗證 ✓）
-  - [ ] ②web/index.html 引入兩個 script
-  - [ ] ③Dart 互操作層：html5qrcode_scanner.dart（條件匯出——stub
+  - [x] ②web/index.html 引入兩個 script
+  - [x] ③Dart 互操作層：html5qrcode_scanner.dart（條件匯出——stub
     保 native 編譯；web 實作＝Html5Qrcode start/stop/torch＋TwEin
     解析 dartify→純 Dart 結構）
-  - [ ] ④web_camera_scan 改造：掃描區換 reader div（platform view）、
+  - [x] ④web_camera_scan 改造：掃描區換 reader div（platform view）、
     onSuccess 驅動（移除 _loop/_tryDecode 舊迴圈）、累積窗重用＋
     TwEin parseInvoiceQr→TransactionDraft 轉換、保留確認清單/節流/
     去重/補光/診斷行/手動開一筆
-  - [ ] ⑤測試：analyze＋291 既有＋互操作測試
-  - [ ] ⑥headless 冒煙（假相機：載入/啟動/停止流程）
-  - [ ] ⑦部署 gh-pages＋CDN 驗證＋兩線同步
-  - [ ] ⑧PM 真機驗證（iOS PWA 掃真發票——左右碼＋Code39）
+  - [x] ⑤測試：analyze＋292 全綠＋互操作測試（fake scanner 5 情境）
+  - [x] ⑥headless 冒煙：JS globals（html5qrcode function／TwEin object
+    14 API）✓零 JS 錯誤✓（serve 目錄修正後——base-href 前綴陷阱）
+  - [x] ⑦部署 0.5.1-pwa.20261125a（CDN 驗證＋scan/ 資源 200 ✓）＋
+    兩線同步＋tag pwa-0.5.3-techno（新技術基準）
+  - [ ] ⑧**PM 真機驗證**（iOS PWA 掃真發票——左右碼＋Code39；
+    出問題回退 pwa-0.5.2）
   - **設計決策**：不建真分類沿用；解析走 TwEin（官方規格 v1.9 完整
     實作——左右雙碼/品目/Base64/境外/對獎）；出問題回退 pwa-0.5.2
 
