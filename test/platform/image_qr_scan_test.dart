@@ -144,4 +144,26 @@ void main() {
     expect(ImageQrScanner.draftFromQrTexts(const []), isNull,
         reason: '無左碼 → null（呼叫端回退空白卡）');
   });
+
+  test('T89 RGBA 直入：像素直接建圖（跳過 JPEG 編解碼鏈）——同樣解出', () {
+    final png = qrPng(InvoiceQrFixtures.leftQr77);
+    final decoded = img.decodeImage(png)!;
+    final rgba = decoded.getBytes(order: img.ChannelOrder.rgba);
+
+    final r = const ImageQrScanner()
+        .draftFromCameraFrameRgba(rgba, decoded.width, decoded.height);
+    expect(r, isNotNull);
+    expect(r!.texts, contains(InvoiceQrFixtures.leftQr77));
+
+    // 時間預算版（寬鬆預算不影響結果——預算只會「提早停」不會改解法）。
+    final r2 = const ImageQrScanner().draftFromCameraFrameRgba(
+        rgba, decoded.width, decoded.height,
+        budget: const Duration(seconds: 30));
+    expect(r2, isNotNull);
+    expect(r2!.texts, contains(InvoiceQrFixtures.leftQr77));
+
+    // 無效輸入 → null（不擲例外）。
+    expect(const ImageQrScanner().draftFromCameraFrameRgba(
+        Uint8List(0), 10, 10), isNull);
+  });
 }

@@ -520,6 +520,72 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   key: const Key('webcam-preview'),
                   child: KeyedSubtree(
                       key: ValueKey<int>(_previewEpoch), child: _preview!)),
+              // 電子發票的左右 QR 碼位於同一列；固定取景框示意兩碼應放置的位置。
+              if (mode == ScanMode.eInvoice && _codeBoxes.isEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final guideWidth = constraints.maxWidth * 0.88;
+                        final guideHeight = constraints.maxHeight * 0.27;
+                        return Center(
+                          child: SizedBox(
+                            width: guideWidth,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.72),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.center_focus_strong,
+                                          color: Colors.white, size: 17),
+                                      SizedBox(width: 7),
+                                      Text(
+                                        '把左右 QR 條碼放進框內',
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  height: guideHeight,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x1600BFA5),
+                                    border: Border.all(
+                                        color: const Color(0xDD00BFA5),
+                                        width: 2.5),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      _buildQrGuideIcon(),
+                                      Container(
+                                          width: 1,
+                                          height: guideHeight * 0.58,
+                                          color: Colors.white54),
+                                      _buildQrGuideIcon(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               // **T88 偵測框**（PM：掃到條碼顯示框）——video 像素座標經
               // object-fit:cover 映射後繪製（與 camera_stream_web 的 video
               // CSS 同步：100%×100%＋cover）；左右雙 QR 各一框。
@@ -685,6 +751,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       ],
     );
   }
+
+  Widget _buildQrGuideIcon() => Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.32),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.qr_code_2, color: Colors.white, size: 42),
+      );
 
   Widget _buildFailed(BuildContext context) {
     return Center(
