@@ -27,7 +27,7 @@ class _NativeCameraController implements CameraStreamController {
   bool get hasNativeBarcodeDetector => false;
 
   @override
-  Future<List<String>> detectNativeBarcodes() async => const [];
+  Future<List<DetectedCode>> detectNativeBarcodes() async => const [];
 
   @override
   bool get torchSupported => false;

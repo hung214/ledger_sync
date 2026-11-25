@@ -53,6 +53,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   final _noteFocus = FocusNode();
   bool _textEditing = false;
 
+  // **照片預設不顯示**（PM 2026-11-25：原直接顯示＋BoxFit.fill 變形
+  // 「照片感覺有變形」→ 按鈕選擇顯示）；逐張重設（每張預設收合）。
+  bool _showPhoto = false;
+
   void _onTextFocusChanged() {
     final editing = _merchantFocus.hasFocus || _noteFocus.hasFocus;
     if (editing != _textEditing && mounted) {
@@ -87,6 +91,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final draft = widget.items[i].draft;
     _expr = draft.totalMinor.value?.toString() ?? '';
     _amountCtrl.text = _expr;
+    _showPhoto = false; // 照片預設收合（逐張）。
     _date = draft.date.value ?? Clock.now();
     // PM 2026-11-23：掃描草稿（QR/OCR）**沒有時間資訊**（時間＝00:00）——
     // 時間預設＝**當下時刻**（例：現在 12:35 → 任何日期都配 12:35），
@@ -210,13 +215,37 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 children: [
-                  Text('第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
-                      key: const Key('review-progress'),
-                      style: Theme.of(context).textTheme.titleMedium),
-                  // **照片預覽＋OCR 辨識區域框**（T21，PM：辨識的文字要有框
-                  // ——讓使用者看到辨識到哪段）。BoxFit.fill＝正規化框直接
-                  // 映射（縮放失真可接受——指示用）。
-                  if (widget.items[_index].photoBytes != null)
+                  Row(children: [
+                    Expanded(
+                      child: Text(
+                          '第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
+                          key: const Key('review-progress'),
+                          style: Theme.of(context).textTheme.titleMedium),
+                    ),
+                    // **照片顯示切換**（PM 2026-11-25：預設不顯示，按鈕選擇）。
+                    if (widget.items[_index].photoBytes != null)
+                      TextButton.icon(
+                        key: const Key('review-photo-toggle'),
+                        onPressed: () =>
+                            setState(() => _showPhoto = !_showPhoto),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        icon: Icon(
+                            _showPhoto ? Icons.visibility_off : Icons.photo,
+                            size: 18),
+                        label: Text(_showPhoto ? '隱藏照片' : '顯示照片',
+                            style: const TextStyle(fontSize: 13)),
+                      ),
+                  ]),
+                  // **照片預覽（預設隱藏——按鈕切換）＋OCR 辨識區域框**（T21）。
+                  // 顯示時：一般照片 BoxFit.contain（**不變形**——原 fill 把
+                  // 16:9 相機幀塞 4:3 框＝拉扁，PM 2026-11-25「照片感覺有
+                  // 變形」）；含 OCR 框項目保留 fill（正規化框精確映射——
+                  // 框對位用途，失真可接受）。
+                  if (widget.items[_index].photoBytes != null && _showPhoto)
                     Padding(
                       padding: const EdgeInsets.only(top: 6, bottom: 4),
                       child: LayoutBuilder(builder: (context, box) {
@@ -233,7 +262,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                   widget.items[_index].photoBytes!,
                                   width: w,
                                   height: h,
-                                  fit: BoxFit.fill,
+                                  fit: ocrBox != null
+                                      ? BoxFit.fill
+                                      : BoxFit.contain,
                                   errorBuilder: (context, error,
                                           stackTrace) =>
                                       const SizedBox.shrink()),

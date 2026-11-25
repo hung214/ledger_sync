@@ -11,6 +11,7 @@ import 'package:ledger_sync/domain/entities/transaction_draft.dart';
 import 'package:ledger_sync/platform/scan/camera_stream.dart';
 import 'package:ledger_sync/presentation/screens/scan/import_page.dart';
 import 'package:ledger_sync/presentation/screens/scan/review_page.dart';
+import 'package:ledger_sync/presentation/screens/scan/scan_box_mapper.dart';
 import 'package:ledger_sync/presentation/screens/scan/web_camera_scan.dart';
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
 
@@ -118,13 +119,54 @@ void main() {
     expect(find.byKey(const Key('webcam-preview')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('T88 cover 映射：video 1280×720 → 顯示 640×480（放大置中、裁切區負座標）', () {
+    // scale = max(640/1280, 480/720) = 2/3；dx = (640 − 853.33)/2 ≈ −106.67
+    final r = mapVideoRectToDisplay(const Rect.fromLTWH(640, 360, 300, 150),
+        const Size(1280, 720), const Size(640, 480));
+    expect(r.left, closeTo(426.67 - 106.67, 0.01)); // 640×⅔ − dx
+    expect(r.top, closeTo(240, 0.01));
+    expect(r.width, closeTo(200, 0.01));
+    expect(r.height, closeTo(100, 0.01));
+    // cover 左緣裁切區的框 → 負座標（Stack 裁切，允許）
+    final r2 = mapVideoRectToDisplay(const Rect.fromLTWH(0, 0, 160, 90),
+        const Size(1280, 720), const Size(640, 480));
+    expect(r2.left, closeTo(-106.67, 0.01));
+    // 無畫面 → Rect.zero（不繪）
+    expect(
+        mapVideoRectToDisplay(
+            const Rect.fromLTWH(0, 0, 10, 10), Size.zero, const Size(1, 1)),
+        Rect.zero);
+  });
+
+  testWidgets('T88 偵測框：原生偵測回框 → CustomPaint 掛載', (tester) async {
+    await pumpPage(tester,
+        controller: _FakeController(
+          nativeCodes: [
+            const DetectedCode(text: 'LEFT', box: Rect.fromLTWH(100, 100, 200, 120)),
+            const DetectedCode(text: 'RIGHT'), // 無框（不繪）
+          ],
+          res: '1280x720',
+        ),
+        decode: (_) => null); // 不命中——停留掃描頁看框
+    await tester.pump(const Duration(milliseconds: 1300)); // 解碼迴圈第一輪
+    expect(find.byKey(const Key('code-boxes-paint')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 /// fake 相機控制器：start 可丟例外；captureFrame 回填位資料。
+/// [nativeCodes] 非空＝模擬原生 BarcodeDetector（T88 偵測框）。
 class _FakeController implements CameraStreamController {
-  _FakeController({this.throwOnStart = false});
+  _FakeController({
+    this.throwOnStart = false,
+    this.nativeCodes = const [],
+    this.res = '',
+  });
 
   final bool throwOnStart;
+  final List<DetectedCode> nativeCodes;
+  final String res;
 
   @override
   bool get zoomSupported => false; // T82 zoom 介面——fake 不支援（靜默）。
@@ -150,13 +192,13 @@ class _FakeController implements CameraStreamController {
   String get diagInfo => '';
 
   @override
-  String get resolutionInfo => '';
+  String get resolutionInfo => res;
 
   @override
-  bool get hasNativeBarcodeDetector => false;
+  bool get hasNativeBarcodeDetector => nativeCodes.isNotEmpty;
 
   @override
-  Future<List<String>> detectNativeBarcodes() async => const [];
+  Future<List<DetectedCode>> detectNativeBarcodes() async => nativeCodes;
 
   @override
   bool get torchSupported => false;
