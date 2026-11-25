@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -123,10 +124,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     setState(() {
       _zoomHint = '對準發票左下角 QR · 保持 15~20 公分'; // 初始引導
     });
-    try {
-      // 等 platform view 掛載進 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
-      await Future.delayed(const Duration(milliseconds: 600));
+    // 輪詢等待 div 進入 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
+    for (int i = 0; i < 50; i++) {
       if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 100));
+      final divReady = await _checkReaderDivReady();
+      if (divReady) break;
+    }
+    if (!mounted) return;
+    try {
       await _scanner.start(
         elementId: 'ls-h5q-reader',
         onDecoded: _onHtml5Decoded,
@@ -143,6 +149,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _state = _CamState.failed;
         _error = '相機啟動失敗：$e';
       });
+    }
+  }
+
+  /// 檢查 reader div 是否已進入 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
+  Future<bool> _checkReaderDivReady() async {
+    try {
+      return await _scanner.checkReaderDivReady('ls-h5q-reader');
+    } catch (_) {
+      return false;
     }
   }
 
