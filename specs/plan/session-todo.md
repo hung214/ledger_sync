@@ -38,6 +38,20 @@
   4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
   analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
 
+## 已完成（PM 2026-11-25：T83 掃描技術替換完成——待 PM 真機驗證）
+
+- [x] **T83 掃描技術替換**（PM 2026-11-24 指示；回退保險＝tag `pwa-0.5.2`）：
+  - html5-qrcode (UMD) 相機掃描＋tw-einvoice-qr (IIFE) 官方規格解析
+  - 移除 platform view 改直接建立 div，registerReaderView 直接掛載 DOM
+  - TwEin 解析（左碼/右碼/Code39/77碼/品目/Base64/境外/對獎）＋既有解析器後備
+  - 保留確認清單/節流/去重/補光/診斷/手動開一筆
+  - 292 測試全綠＋analyze 0✓部署 `0.5.1-pwa.20261125k`（CDN ✓）
+  - headless 驗證：JS globals（Html5Qrcode function＋TwEin 14 API）零錯誤
+  - 回退保險：`pwa-0.5.2`（舊技術）＋`pwa-0.5.3-techno`（新技術基準）
+
+- [ ] **PM 真機驗證**（iOS PWA 掃真發票——左右碼＋Code39）
+  - 有問題即回退 `pwa-0.5.2`（一鍵回退）
+
 ## 進行中（PM 2026-11-24：T83 PWA 掃描技術替換——html5-qrcode＋tw-einvoice-qr）
 
 - [ ] **T83 掃描技術替換**（PM 指示；回退保險＝tag `pwa-0.5.2`）：
