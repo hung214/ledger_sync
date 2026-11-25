@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 文件版本 | v0.3.12（**I4/I5 匯入入口**：dev 新增 file_selector_platform_interface 2.7.0（widget 測試 mock file_selector）。PM 決策 2026-11-16 |**P6 平台降級**：archive 4.7.1（純 Dart raw deflate）；SyncCoordinator/WipeService 改 BlobStore；scan_state 去 dart:io。PM 決策 2026-11-16 |**P5 Web 同步**：新增 http 1.6.0（Drive REST）；GIS OAuth（web 專用檔，非套件依賴）；PM 決策 2026-11-16 |**PWA 可行性 Spike**（PM 決策 2026-11-16）：新增 `web` 1.1.2＋`web/sqlite3.wasm` 2.9.4；僅供 Spike 入口 `lib/main_web_spike.dart`，未影響既有四平台） |
+| 文件版本 | v0.3.13（**圖示產生**：dev 新增 flutter_launcher_icons 0.14.4（§2.4）——一鍵重產四平台＋PWA 圖示＋favicon；**暫以草稿 A 評估**。LOGO/ICON 換裝啟動 2026-11-21 | v0.3.12（**I4/I5 匯入入口**：dev 新增 file_selector_platform_interface 2.7.0（widget 測試 mock file_selector）。PM 決策 2026-11-16 |**P6 平台降級**：archive 4.7.1（純 Dart raw deflate）；SyncCoordinator/WipeService 改 BlobStore；scan_state 去 dart:io。PM 決策 2026-11-16 |**P5 Web 同步**：新增 http 1.6.0（Drive REST）；GIS OAuth（web 專用檔，非套件依賴）；PM 決策 2026-11-16 |**PWA 可行性 Spike**（PM 決策 2026-11-16）：新增 `web` 1.1.2＋`web/sqlite3.wasm` 2.9.4；僅供 Spike 入口 `lib/main_web_spike.dart`，未影響既有四平台） |
 | 日期 | 2026-11-16 |
 | 性質 | **原始碼技術棧的唯一事實來源**。SDD §3 為設計說明；本檔記錄「將寫進程式碼」的定案（含版本）。兩者不一致時以本檔為準並回修 SDD |
 | 變更規則 | 僅能經 PR 變更；新增/升級依賴需通過授權審查（research.md D14）+ 全測試綠燈；每次變更記錄於 §8 變更記錄 |
@@ -90,6 +90,7 @@
 | 測試 | flutter_test、mocktail、integration_test | mocktail 1.0.5（lock） |
 | BDD | 自製 Gherkin runner（`test/helpers/gherkin/`，BE/FE 共用；T-H7） | —（⚠ TR-9 暫緩：flutter_gherkin 3.x 執行期相容性未證明，不入 pubspec；dsl.md 登記句型不變） |
 | Codegen | build_runner（drift_dev/freezed/json_serializable） | build_runner 2.5.4（lock） |
+| 圖示產生 | flutter_launcher_icons（iOS／Android 自適應／macOS／Windows／PWA＋favicon 一鍵重產；config 於 pubspec.yaml 檔尾） | 0.14.4（lock；**暫以草稿 A 評估**） |
 | CI | GitHub Actions：**CI**（analyze/test）、**tag-on-main**（合併 main 自動 `v` 版本標籤）、**release**（四平台產物 → GitHub Release） | — |
 | 發佈 | Codemagic 或 Fastlane（iOS 簽名/上架） | 🔬 SP-7 |
 
@@ -167,3 +168,4 @@
 | 2026-11-16 | v0.3.11 | P6 平台降級：archive 4.7.1（image 之傳遞依賴晉升直接；raw deflate 跨平台）；WipeService／SyncCoordinator 附件源統一 BlobStore（+deleteAll）；scan_state 去 dart:io（defaultTargetPlatform）；data_management 去 blobsDirProvider | feature/ios-pwa |
 | 2026-11-16 | v0.3.10 | P5 Web 同步：新增 http 1.6.0（Drive REST v3 直呼＋resumable）；GIS token client（web 專用檔 `google_oauth_web.dart`——非套件）；SyncCoordinator 附件源改 BlobStore（平台分流） | feature/ios-pwa |
 | 2026-11-16 | v0.3.9 | **PWA 可行性 Spike**（PM 決策 2026-11-16，iOS 免付費發佈評估）：新增 `web` 1.1.2＋`web/sqlite3.wasm`（2.9.4，714K，與 sqlite3 套件同版本）；Spike 入口 `lib/main_web_spike.dart`（不影響既有四平台；實測結果見 §6）。若 PM 決定不採 PWA → 移除 web/、wasm、web 依賴 | fix/quick-entry-v3-ledger-display |
+| 2026-11-21 | v0.3.13 | LOGO/ICON 換裝啟動（PM 2026-11-21 提問「LOGO/ICON 應該怎麼做」）：dev 新增 flutter_launcher_icons 0.14.4（§2.4）——一鍵產生 iOS／Android 自適應／macOS／Windows／PWA＋favicon；**暫以草稿 A**（specs/plan/ui/logo-drafts/ 評估中）套用，定稿後換 assets/icon/app_icon.png 重跑即成；maskable 兩枚重算安全邊距（web/icons/Icon-maskable-192/512） | feature/ios-pwa |
