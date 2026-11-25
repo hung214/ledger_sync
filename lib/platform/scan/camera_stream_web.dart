@@ -619,7 +619,7 @@ class WebCameraStreamController implements CameraStreamController {
       _video?.srcObject = null;
     } catch (_) {}
     _stopStreamTracks();
-    await Future.delayed(const Duration(milliseconds: 600)); // iOS 硬體釋放
+    await Future.delayed(const Duration(milliseconds: 100)); // iOS 硬體釋放
     final gen = ++_previewGen;
     final vt = '$_sharedViewType-$gen';
     final video = (web.document.createElement('video') as web.HTMLVideoElement)
