@@ -23,6 +23,7 @@ extension type _BarcodeDetector._(JSObject _) implements JSObject {
 
 extension type _BarcodeResultJS._(JSObject _) implements JSObject {
   external JSString? get rawValue;
+  external JSObject? get boundingBox; // DOMRectReadOnly（video 像素座標）。
 }
 
 /// web（PWA）相機控制器：`getUserMedia`（後鏡頭）＋`<video>` 預覽＋canvas 取幀。
@@ -80,17 +81,38 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
-  Future<List<String>> detectNativeBarcodes() async {
+  Future<List<DetectedCode>> detectNativeBarcodes() async {
     final v = _video;
     final detector = _getNativeDetector();
     if (v == null || v.videoWidth == 0 || detector == null) return const [];
     try {
       final results = await detector.detect(v).toDart;
       return [
-        for (final r in results.toDart) r.rawValue?.toDart ?? '',
-      ].where((t) => t.isNotEmpty).toList();
+        for (final r in results.toDart)
+          if ((r.rawValue?.toDart ?? '').isNotEmpty)
+            DetectedCode(
+              text: r.rawValue!.toDart,
+              box: _rectFromDomRect(r.boundingBox),
+            ),
+      ];
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
+    }
+  }
+
+  /// DOMRectReadOnly（video 像素座標）→ dart:ui Rect（T88 偵測框）。
+  static Rect? _rectFromDomRect(JSObject? box) {
+    if (box == null) return null;
+    try {
+      final d = box.dartify() as Map<Object?, Object?>;
+      final x = (d['x'] as num?)?.toDouble();
+      final y = (d['y'] as num?)?.toDouble();
+      final w = (d['width'] as num?)?.toDouble();
+      final h = (d['height'] as num?)?.toDouble();
+      if (x == null || y == null || w == null || h == null) return null;
+      return Rect.fromLTWH(x, y, w, h);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -193,11 +215,20 @@ class WebCameraStreamController implements CameraStreamController {
       }
     } catch (_) {/* sessionStorage 不可用——照原流程 */}
     // video 元素：整個 session 只建立一次。
+    // **T87 尺寸修復**（PM 2026-11-25「鏡頭畫面變小；第二次掃描又更小」）：
+    // video 無 CSS 時以**原生解析度**渲染（1920×1080 在預覽槽內＝放大
+    // 裁切，且每次重取相機談判解析度不同→每次進頁觀感都變）。固定
+    // 100%×100%＋object-fit:cover＝相機 App 標準填滿行為——解析度變動
+    // 不再影響畫面觀感（解碼用全幀，與顯示裁切無關——辨識不受影響）。
     _sharedVideo ??=
         (web.document.createElement('video') as web.HTMLVideoElement)
           ..autoplay = true
           ..muted = true
-          ..playsInline = true;
+          ..playsInline = true
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.setProperty('object-fit', 'cover')
+          ..style.setProperty('object-position', 'center');
     if (!_factoryRegistered) {
       ui_web.platformViewRegistry.registerViewFactory(
           _sharedViewType, (int viewId) => _sharedVideo!);
@@ -256,6 +287,7 @@ class WebCameraStreamController implements CameraStreamController {
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
     video.style.setProperty('transform', 'none');
+    _assertPreviewCss(video);
     try {
       await video.play().toDart;
     } catch (_) {
@@ -343,9 +375,16 @@ class WebCameraStreamController implements CameraStreamController {
           }
           // iOS：session 釋放需時間——立即重取會拿到同一顆/黑畫面。
           await Future.delayed(const Duration(milliseconds: 600));
+          // **T86 根因修復（紅米 Note 11 Pro 5G 辨識不到）**：deviceId 精選
+          // 重取**必須帶 hiRes 約束**——原寫法只給 deviceId＝裝置**預設檔
+          // （Android Chrome 常 640×480）**，QR 模組過小無法辨識。PM 實測
+          // 「切換鏡頭再切回來就變好」＝switchCamera 路徑走
+          // _tryGetUserMedia（有 hiRes）→ 解析度升級——與此根因吻合。
           stream = await md.getUserMedia(web.MediaStreamConstraints(
               video: {
             'deviceId': {'exact': rearId},
+            'width': {'ideal': 1920, 'max': 1920},
+            'height': {'ideal': 1080, 'max': 1080},
           }.jsify()!)).toDart;
         }
       }
@@ -360,9 +399,12 @@ class WebCameraStreamController implements CameraStreamController {
       web.MediaDevices md, Map<String, Object>? facing) {
     // width/height ideal：拉高取像解析度（預設常 640×480——
     // 解碼距離不足的主因，PM 2026-11-21「無法正確掃描」）。
+    // **T87**：加 **max 上限**——ideal 允許更高（4K 裝置會給 3840×2160：
+    // 截幀 JPEG→base64 每 tick 拖慢解碼＋顯示觀感跳動）；上限不會
+    // OverconstrainedError（裝置 max 較低時照給）。
     final hiRes = {
-      'width': {'ideal': 1920},
-      'height': {'ideal': 1080},
+      'width': {'ideal': 1920, 'max': 1920},
+      'height': {'ideal': 1080, 'max': 1080},
     };
     final video = facing == null
         ? hiRes.jsify()!
@@ -409,6 +451,7 @@ class WebCameraStreamController implements CameraStreamController {
       // 前鏡頭鏡像（自拍慣例；擷取幀不鏡像——解碼不受影響）。
       video.style.setProperty(
           'transform', target == 'user' ? 'scaleX(-1)' : 'none');
+      _assertPreviewCss(video);
       try {
         await video.play().toDart;
       } catch (_) {}
@@ -519,7 +562,9 @@ class WebCameraStreamController implements CameraStreamController {
   @override
   Future<Uint8List?> captureFrame() async {
     final v = _video;
-    if (v == null || v.videoWidth == 0) return null;
+    // **T86**：readyState<2（幀未就緒）時 drawImage/toDataURL 可能擲例外
+    // ——呼叫端 tick 死鎖防護（配合頁面 try/finally 雙保險）。
+    if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;
     // 全解析度取幀：發票 QR 模組細密——1280 縮取樣會把模組壓小 33%
     // ＋JPEG 糊化 → zxing 全解不出（PM 2026-11-21「全部掃描失敗」
     // 回歸根因）。上限 1920 僅防極端 4K 串流。
@@ -532,9 +577,135 @@ class WebCameraStreamController implements CameraStreamController {
           ..height = h;
     final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
     ctx.drawImage(v, 0, 0, w, h);
+    // **T89**：本函式現在**只在入單時擷一次**（照片附件）——每 tick 的
+    // 解碼已改走 captureAnalysisFrame（RGBA 直入，零編解碼）。同步
+    // toDataURL 的 100–300ms 從「每 tick」變「每張發票一次」＝可接受，
+    // 並保留 T86 readyState 防護（toDataURL toBlob callback API 差異多，
+    // 收益已不需要——維持簡單）。
     final dataUrl = canvas.toDataURL('image/jpeg', 0.8.toJS);
     final b64 = dataUrl.split(',').last;
     return Uint8List.fromList(base64Decode(b64));
+  }
+
+  web.HTMLCanvasElement? _analysisCanvas; // 重用（免每 tick 建 canvas）
+
+  static bool? _isIOSCache;
+  bool get _isIOS {
+    if (_isIOSCache != null) return _isIOSCache!;
+    try {
+      final ua = web.window.navigator.userAgent.toLowerCase();
+      return _isIOSCache =
+          ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    } catch (_) {
+      return _isIOSCache = false;
+    }
+  }
+
+  int _previewGen = 0; // T89c：iOS 返回完全重建世代（viewType 後綴）
+
+  @override
+  Future<Widget?> restartPreviewFresh() async {
+    if (!_isIOS) return null; // 非 iOS——維持 epoch＋resume 輕量路徑。
+    // **T89c**（PM：iPhone 掃一張返回後預覽又變小——Android/桌面已好）：
+    // WebKit 對「重掛的 video/slot」殘留轉場/尺寸狀態，同元素重掛治不了
+    // → **完全重建**：新 video 元素（含 CSS）＋新串流＋新 viewType slot
+    // ＝「第一次啟動行為」（整頁重載同款，PM 已驗證可靠）。
+    _watchdog?.cancel();
+    try {
+      web.document.removeEventListener('visibilitychange', _visibilityHandler);
+      _visibilityHandler = null;
+    } catch (_) {}
+    final gen = ++_previewGen;
+    final vt = '$_sharedViewType-$gen';
+    final video = (web.document.createElement('video') as web.HTMLVideoElement)
+      ..autoplay = true
+      ..muted = true
+      ..playsInline = true;
+    _assertPreviewCss(video);
+    _sharedVideo = video;
+    _video = video;
+    ui_web.platformViewRegistry
+        .registerViewFactory(vt, (int viewId) => _sharedVideo!);
+    try {
+      // 確認清單期間掃描頁仍持有相機：優先將活串流接到新 video，避免
+      // 停軌、等待硬體釋放、重新 getUserMedia（iPhone 上約需一秒）。
+      final stream = _stream;
+      if (stream != null && stream.active) {
+        video.srcObject = stream;
+        _assertPreviewCss(video);
+        try {
+          await video.play().toDart;
+        } catch (_) {}
+        if (video.videoWidth == 0) await _openOn(video);
+      } else {
+        await _openOn(video);
+      }
+    } catch (_) {
+      return null; // 重取失敗——不換 widget（舊畫面維持，看門狗自癒）。
+    }
+    _attachVisibilityRevival(video);
+    _healCount = 0;
+    _startWatchdog(video);
+    return HtmlElementView(viewType: vt);
+  }
+
+  @override
+  Future<void> resumePreview() async {
+    final v = _video;
+    if (v == null) return;
+    _assertPreviewCss(v);
+    // 行動版瀏覽器：video 被重掛（確認清單返回的 platform view 重建）
+    // 後播放管線可能中斷＝黑畫面（PM 2026-11-25「辨識完回來鏡頭消失，
+    // 要切換鏡頭才會顯示」）——重綁串流（null→回）＋補 play＝與切換
+    // 鏡頭同原理但**不重新談判相機**（快、無硬體抖動）。串流已死才
+    // 走完整重取（黑畫面自癒同款）。
+    final s = _stream;
+    if (s != null && s.active) {
+      try {
+        v.srcObject = null;
+        v.srcObject = s;
+        try {
+          await v.play().toDart;
+        } catch (_) {}
+        return;
+      } catch (_) {/* 落到完整重取 */}
+    }
+    try {
+      await _openOn(v);
+    } catch (_) {}
+  }
+
+  @override
+  Future<AnalysisFrame?> captureAnalysisFrame() async {
+    final v = _video;
+    if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;
+    // 上限同 captureFrame（1920 防 4K）；drawImage＋getImageData 皆遠比
+    // JPEG 編解碼便宜（getImageData 1280×720 約 5–20ms）。
+    final scale = v.videoWidth > 1920 ? 1920 / v.videoWidth : 1.0;
+    final w = (v.videoWidth * scale).round();
+    final h = (v.videoHeight * scale).round();
+    final canvas = _analysisCanvas ??=
+        web.document.createElement('canvas') as web.HTMLCanvasElement;
+    if (canvas.width != w || canvas.height != h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+    ctx.drawImage(v, 0, 0, w, h);
+    final data = ctx.getImageData(0, 0, w, h);
+    final clamped = data.data.toDart; // Uint8ClampedList
+    return AnalysisFrame(
+        rgba: Uint8List.sublistView(clamped), width: w, height: h);
+  }
+
+  /// **T89**：重斷言預覽 CSS（冪等）——重掛／切換／自癒後一律維持
+  /// 100%×100%＋cover（行動版瀏覽器 slot 重建時樣式可能失效；
+  /// PM 2026-11-25「返回掃描頁畫面變小」防禦）。
+  static void _assertPreviewCss(web.HTMLVideoElement video) {
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.setProperty('object-fit', 'cover');
+    video.style.setProperty('object-position', 'center');
   }
 
   /// **黑畫面看門狗**（PM 2026-11-23：每次進掃描頁重新渲染鏡頭——
@@ -551,6 +722,7 @@ class WebCameraStreamController implements CameraStreamController {
     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) async {
       final v = _video;
       if (v == null || v.videoWidth == 0) return;
+      _assertPreviewCss(v); // 每秒重斷言（任何路徑掉樣式 1 秒內自癒）
       if (v.readyState < 2) {
         _blackStreak++;
       } else {
