@@ -631,11 +631,11 @@ class WebCameraStreamController implements CameraStreamController {
     _video = video;
     ui_web.platformViewRegistry
         .registerViewFactory(vt, (int viewId) => _sharedVideo!);
-    try {
-      await _openOn(video);
-    } catch (_) {
-      return null; // 重取失敗——不換 widget（舊畫面維持，看門狗自癒）。
-    }
+    // try {
+    //   await _openOn(video);
+    // } catch (_) {
+    //   return null; // 重取失敗——不換 widget（舊畫面維持，看門狗自癒）。
+    // }
     _attachVisibilityRevival(video);
     _healCount = 0;
     _startWatchdog(video);
