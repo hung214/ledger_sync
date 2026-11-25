@@ -5,9 +5,120 @@
 >
 > **分支現況**：
 > - `feature/ios-pwa`（主線／APP）：全部最新功能（266→270 測試全綠）
+> - `feat/pwa-scan-ui-fix`（T84 修復分支，待 MR→ios-pwa）：掃描頁三重根因修復
+>   （部署 0.5.1-pwa.20261125m；線上 E2E 已驗證）
 > - `pwa-accumulate`（PWA 線）：8596c27 基底＋T52 明細修改＋累積合併＋看門狗
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
+
+- [x] **T89c iPhone 返回後預覽又變小**（PM 2026-11-25 實測 20261125r：
+  「紅米鏡頭大小＋辨識速度都正常✓；iPhone 掃一張後鏡頭又變小、沒有
+  貼滿」＝epoch 重建（同元素重掛）在 Android/桌面有效、**WebKit 不買帳**
+  ——重掛的 video/slot 殘留轉場/尺寸狀態）→ 新介面
+  `restartPreviewFresh()`：**僅 iOS** 走完全重建（停舊串流＋新 video
+  元素含 CSS＋新串流＋新 viewType slot＝「第一次啟動行為」——整頁重載
+  同款可靠路徑；`_isIOS`＝userAgent）；Android/桌面維持 epoch＋resume
+  輕量路徑不動（已正常）。✓294 全綠＋analyze 0✓E2E＋尺寸實測✓部署
+  **20261125s**。
+
+- [x] **T89b 真機回饋修正**（PM 2026-11-25 實測 20261125q：「速度有上升
+  ✓，但辨識又變差＋辨識完回來鏡頭消失、要切換鏡頭才會顯示」）：
+  ①**鏡頭消失**＝platform view 重建後行動版瀏覽器重掛 video **中斷播放
+  管線**（桌面無此現象＝E2E 沒抓到）→ 新介面 `resumePreview()`：重綁
+  串流（null→回）＋補 play——與切換鏡頭同原理但**不重新談判相機**；
+  `_openReview` 返回時於 epoch 重建後呼叫。②**辨識變差**＝T89 的 700ms
+  預算在紅米 dart2js 上**把核心 3 區（整張＋切半）都砍了**（單區可達
+  數百 ms）＝右碼丟失 → 核心 3 區**不受預算限制**（辨識底線），預算只管
+  深度升級區並放寬 900ms。✓294 全綠＋analyze 0✓E2E＋尺寸實測✓部署
+  **20261125r**。
+
+- [x] **T89 返回掃描頁預覽變小＋紅米卡頓**（PM 2026-11-25：①「掃第一張
+  →確認清單→返回掃描頁→鏡頭變小、跟原本不一致；切換鏡頭時先原本
+  大小、突然放大到貼滿」②「辨識幀率能變快嗎？紅米很卡」）：
+  **①尺寸**＝E2E 實測（桌面返回後 videoRect 1280×600 cover 全正常）
+  →**行動版瀏覽器特有**：確認清單蓋住掃描頁時 platform view slot 被卸
+  載，返回後未重新佈局。修復＝`_openReview` 返回時 `_previewEpoch++`
+  （HtmlElementView 依 key 重建→註冊工廠重新掛 video→slot 重新量測）
+  ＋`_assertPreviewCss` 冪等重斷言（_openOn／switchCamera／看門狗每秒）
+  ＝任何路徑掉樣式 1 秒內自癒。**②卡頓根因**＝每 tick 同步
+  `toDataURL`（1920 幀 JPEG 編碼 100–300ms）＋`img.decodeImage` ×2
+  ＋最多 7 區×3 變體 zxing（沒對準的 tick 最重＝紅米主執行緒卡 0.5–1.5s）。
+  修復＝a.**RGBA 直入**（`captureAnalysisFrame` getImageData→
+  `draftFromCameraFrameRgba`——完全跳過 JPEG 編解碼鏈；canvas 重用）
+  b.**原生偵測命中即跳過後備**（T86 併聯→條件式；iPhone/新 Android 每
+  tick 只剩原生偵測＝零卡頓；紅米偵測器死仍走 RGBA 後備）
+  c.**時間預算 700ms**（預算只「提早帶成果收工」不丟已解文字——初版
+  400ms 丟成果＋dart2js 單區數百 ms＝全部白掃，已修正）
+  d.**照片只在入單時擷一次**（舊版每 tick 擷＋同步編碼）
+  e.tick **1200→1000ms**（成本降→辨識間隔同步變快）。
+  教訓：初版 E2E 未命中＝**伺服器根目錄切換後 e2e_full BASE 未同步**
+  （測到的是目錄列表）＋stage① 提前解析＝右碼永遠讀不到（測試抓到）。
+  ✓294 全綠＋analyze 0✓E2E 全流程（RGBA 路徑）＋尺寸實測 M1–M5 全過
+  ✓部署 **20261125q**。
+
+- [x] **T87 預覽貼邊＋解析度上限**（PM 2026-11-25「鏡頭畫面變小；第二次
+  掃描又更小；要左右貼邊」）：**根因**＝video 元素無 CSS——以**原生
+  解析度**渲染（1920×1080 在預覽槽＝放大裁切；且每次重取相機談判解析度
+  不同——ideal 允許更高（4K）→每次進頁觀感跳動）。**修復**：①video CSS
+  固定 100%×100%＋object-fit:cover（相機 App 標準填滿、置中裁切——
+  解析度變動不再影響觀感；解碼吃全幀不受顯示裁切影響）②約束加
+  **max 1920×1080**（三路徑：初次/facingMode、deviceId 精選、切換——
+  防 4K 截幀拖慢 tick＋穩定談判）。E2E 量測 videoRect＝slotRect（貼邊）。
+
+- [x] **T88 掃描偵測框**（PM 2026-11-25「掃到條碼要有框」）：原生
+  BarcodeDetector 的 **boundingBox**（video 像素座標）接入——
+  DetectedCode（camera_stream 介面＋native/stub）→ 頁面 Stack 疊
+  CustomPaint（_CodeBoxesPainter：object-fit:cover 映射後畫 teal 圓角
+  框＋淡填充，左右雙 QR 各一框；無偵測＝清空）。**註**：zxing2 後備
+  路徑無框（image_qr_scan 未回座標——未來增強）；前鏡頭鏡像未映射
+  （掃描主流＝後鏡頭）。
+
+- [x] **T86 紅米辨識修復＋雙引擎＋tick 死鎖防護＋照片按鈕**（PM 2026-11-25
+  三線索：①紅米 Note 11 Pro 5G 辨識不到（iPhone 17 Pro 可）②「切換鏡頭
+  再切回來就突然變得容易辨識」③「第一張掃到之後其他張就順＋感覺有
+  功能卡住」——**根因**：`_acquireRearCamera` 的 deviceId 精選重取
+  **丟失 hiRes 約束**（只給 deviceId＝Android Chrome 開 640×480 預設檔，
+  QR 模組過小；多後鏡頭機型必觸發）——switchCamera 路徑走
+  _tryGetUserMedia（有 hiRes）→ 切換來回後解析度升級＝PM 觀察的「變好」。
+  **修復**：a. 精選重取帶回 width/height ideal 1920×1080
+  b. **雙引擎併聯**——原生 BarcodeDetector 沒中→同 tick zxing2 擷幀
+  （Android Chrome 偵測器存在但底層不作用時不再卡死；每 tick 截圖＝
+  照片附件來源；診斷行加「引擎 原生/後備」）
+  c. **tick 死鎖防護**——_tryDecode 包 try/finally（原寫法擷幀/解碼擲
+  例外＝_decoding 永遠 true＝掃描迴圈死鎖＝「功能卡住」）＋captureFrame
+  readyState 檢查＋解碼器例外防護
+  d. **確認清單照片**（PM：有變形＋不用直接顯示）——預設隱藏＋
+  「顯示照片」按鈕（逐張重設）；顯示時一般照片 BoxFit.contain
+  （原 fill 把 16:9 幀塞 4:3 框＝拉扁）；OCR 框項目保留 fill（T21 對位）
+  ✓291 全綠＋analyze 0✓本機＋線上 E2E（照片按鈕截圖）✓部署
+  **0.5.1-pwa.20261125o** → 待 PM 真機驗收（紅米重開 PWA 待 SW 換版，
+  版本戳 20261125o；診斷行解析度應為 1280×720 以上）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（PM 2026-11-25 指示
+  「回到 pwa-0.5.2 重新處理」——T84 修復版（html5-qrcode）實機仍三問題：
+  ①半透明方框遮罩＋video 溢出遮住選單按鈕 ②辨識良率沒變好 ③中央
+  掃描窗是一維條碼式框選，不是電子發票用。**定調**：遮罩/掃描窗/video
+  溢出皆 html5-qrcode 內建行為（無法關）——整組退役；真正有價值的是
+  TwEin 官方解析（與引擎無關）→ 疊回 pwa-0.5.2 架構）：
+  - **回歸**：web_camera_scan＋測試 checkout pwa-0.5.2（PM 驗證版——
+    無遮罩/無掃描窗/無距離提示/全畫面偵測）；camera_stream* 保留
+    （＝pwa-0.5.2＋T82 zoom 介面，1920×1080 約束 pwa-0.5.2 已內建）
+  - **TwEin 保留**：新 `tw_ein_parse.dart`（web/stub 條件匯出；解析層與
+    引擎解耦）——累積窗文字 → safeParseInvoiceQr（右碼可缺＝省略參數）
+    → 草稿；後備＝既有 ImageQrScanner.draftFromQrTexts
+  - **退役**：html5qrcode_scanner*.dart＋web/scan/html5-qrcode.min.js
+    ＋index.html script（tw-einvoice.js 留）
+  **驗證**：291 全綠＋analyze 0＋本機 E2E（假相機 PM 真發票 IMG_2073）：
+  video 在 flutter-view 1280×720、**無 qr-shaded-region**、TwEin success
+  （發票號/日期/金額 21）→ 自動進確認清單 ✓；空白鏡頭截圖：模式切換/
+  底部按鈕全可見＝**遮擋根除**。✓部署 **0.5.1-pwa.20261125n**（14:26
+  CDN ✓）＋線上 E2E 同測通過 → 待 PM 真機驗收（版本戳 20261125n）
+  → MR feat/pwa-scan-ui-fix → feature/ios-pwa
+
+- [x] **T84 PWA 掃描頁修復**（被 T85 取代——三重根因修復證明了
+  html5-qrcode 整合層能動，但其內建遮罩/掃描窗/video 溢出不符合
+  發票掃描 UX，最終由 T85 回歸 pwa-0.5.2 架構；經驗留存：JS 互操作
+  全域必須顯式名、callMethodVarArgs、platform view 掛 Flutter 樹內）
 
 - [x] **T80 繳款顯示標籤**：repayment 不建真分類（轉移語意——掛
   expense/income 會污染分類統計/選擇器/預算）→ **顯示層固定標籤
@@ -38,7 +149,26 @@
   4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
   analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
 
-## 已完成（PM 2026-11-25：T83 掃描技術替換完成——待 PM 真機驗證）
+## 已完成（PM 2026-11-25：T89 返回變小修復＋紅米卡頓——待 PM 真機驗證）
+
+- [x] **T89 返回掃描頁預覽變小＋紅米卡頓**（詳見本檔頂部區塊）：
+  尺寸＝返回掃描頁強制重建 platform view＋CSS 每秒重斷言；
+  卡頓＝RGBA 直入解碼（跳過 JPEG 編解碼鏈）＋原生命中即免後備＋
+  700ms 時間預算＋照片改入單時擷＋tick 1000ms。
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳 **20261125s**）：
+  ①**iPhone**：掃一張→確認清單→返回：預覽**貼滿＋有畫面**（重新取相機
+  約 1–2 秒屬正常）②**紅米**：維持現狀（尺寸＋速度＋辨識都正常）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（詳見本檔頂部區塊）：
+  分支 `feat/pwa-scan-ui-fix`（待 MR→ios-pwa）✓291 全綠＋analyze 0✓
+  部署 **0.5.1-pwa.20261125n**（14:26 CDN ✓）✓本機＋線上 E2E：
+  解碼→TwEin success→草稿→確認清單（金額 21／日期 10/17／發票號
+  SR30393603）＋空白鏡頭截圖無遮擋 ✓
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳 **20261125n**；
+  驗收：①掃描頁無遮擋——選單/按鈕全可點 ②掃真發票良率 ③無掃描窗
+  框選（全畫面偵測）④可正常退出掃描頁）
 
 - [x] **T83 掃描技術替換**（PM 2026-11-24 指示；回退保險＝tag `pwa-0.5.2`）：
   - html5-qrcode (UMD) 相機掃描＋tw-einvoice-qr (IIFE) 官方規格解析

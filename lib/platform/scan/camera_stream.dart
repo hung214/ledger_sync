@@ -19,6 +19,34 @@ export 'camera_stream_stub.dart'
     if (dart.library.io) 'camera_stream_native.dart'
     if (dart.library.js_interop) 'camera_stream_web.dart';
 
+/// 原生偵測結果（T88——PM 2026-11-25「掃到條碼要有框」）。
+class DetectedCode {
+  const DetectedCode({required this.text, this.box});
+
+  /// 條碼原始文字。
+  final String text;
+
+  /// 偵測框（**video 像素座標系**——native BarcodeDetector boundingBox；
+  /// 繪製時由呼叫端做 object-fit:cover 映射。native/stub 無框＝null）。
+  final Rect? box;
+}
+
+/// 分析用幀（**RGBA 直入**——T89 紅米卡頓修復：跳過 JPEG 編碼＋解碼鏈，
+/// 像素直接交 zxing2；native/stub 不提供＝null，呼叫端退回 JPEG 路徑）。
+class AnalysisFrame {
+  const AnalysisFrame(
+      {required this.rgba, required this.width, required this.height});
+
+  /// 像素（RGBA，每像素 4 bytes，row-major）。
+  final Uint8List rgba;
+
+  /// 幀寬（px）。
+  final int width;
+
+  /// 幀高（px）。
+  final int height;
+}
+
 class CameraUnavailableException implements Exception {
   const CameraUnavailableException(this.message);
   final String message;
@@ -34,6 +62,22 @@ abstract interface class CameraStreamController {
 
   /// 擷取目前畫面（JPEG bytes）；無畫面回 null。
   Future<Uint8List?> captureFrame();
+
+  /// 擷取**分析用**幀（RGBA 直入——僅 web 實作；native/stub 回 null）。
+  /// 與 [captureFrame] 分離：解碼 tick 用 RGBA（零轉檔），照片只在
+  /// 命中時擷一次 JPEG（T89）。
+  Future<AnalysisFrame?> captureAnalysisFrame();
+
+  /// 預覽**播放恢復**（T89b——行動版瀏覽器 video 元素被重掛（確認清單
+  /// 返回的 platform view 重建）後播放管線可能中斷＝黑畫面；重綁串流
+  /// ＋補 play（不重新談判相機）。native/stub：no-op。
+  Future<void> resumePreview();
+
+  /// 預覽**完全重建**（T89c——iOS WebKit 對重掛的 video/slot 殘留
+  /// 轉場/尺寸狀態，重掛同元素治不了）：新 video 元素＋新串流＋新
+  /// viewType slot＝「第一次啟動行為」。**僅 web/iOS 實作**——非 iOS
+  /// 回 null（呼叫端維持 [resumePreview] 輕量路徑）。native/stub：null。
+  Future<Widget?> restartPreviewFresh();
 
   /// 停止串流並釋放。
   void dispose();
@@ -53,8 +97,8 @@ abstract interface class CameraStreamController {
   /// Chrome/Edge/Safari 17+；品質遠勝 zxing2。僅 web 實作回 true。）
   bool get hasNativeBarcodeDetector;
 
-  /// 以原生偵測器掃描目前畫面 → rawValue 清單（不支援/無結果/錯誤 → 空）。
-  Future<List<String>> detectNativeBarcodes();
+  /// 以原生偵測器掃描目前畫面 → 條碼清單（不支援/無結果/錯誤 → 空）。
+  Future<List<DetectedCode>> detectNativeBarcodes();
 
   /// 相機**補光（手電筒）**是否可用？（web：track capabilities 有 torch；
   /// native：mobile_scanner torch）。無能力 → 開關隱藏。

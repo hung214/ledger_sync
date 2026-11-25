@@ -14,6 +14,15 @@ class _StubCameraController implements CameraStreamController {
   Future<Uint8List?> captureFrame() async => null;
 
   @override
+  Future<AnalysisFrame?> captureAnalysisFrame() async => null;
+
+  @override
+  Future<void> resumePreview() async {}
+
+  @override
+  Future<Widget?> restartPreviewFresh() async => null;
+
+  @override
   Future<void> switchCamera() async =>
       throw const CameraUnavailableException('此平台未支援相機串流');
 
@@ -27,7 +36,7 @@ class _StubCameraController implements CameraStreamController {
   bool get hasNativeBarcodeDetector => false;
 
   @override
-  Future<List<String>> detectNativeBarcodes() async => const [];
+  Future<List<DetectedCode>> detectNativeBarcodes() async => const [];
 
   @override
   bool get torchSupported => false;
