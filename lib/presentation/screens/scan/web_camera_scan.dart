@@ -24,13 +24,14 @@ final webCameraDecodeProvider = Provider<
     (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
 
 /// RGBA 直入解碼函式 provider（測試可覆寫；T89——**跳過 JPEG 編解碼鏈**
-/// ＋700ms 時間預算＝行動裝置主執行緒卡頓上限（dart2js 單區可達數百 ms；
-/// 預算只「提早帶成果收工」，不丟已解出的文字），超時下一 tick 續掃）。
+/// ＋900ms 時間預算＝行動裝置主執行緒卡頓上限（**只管深度升級區**——
+/// 核心 3 區整張＋切半不受限＝辨識底線；預算只「提早帶成果收工」，
+/// 不丟已解出的文字），超時下一 tick 續掃）。
 final webCameraDecodeRgbaProvider = Provider<
         ({TransactionDraft? draft, List<String> texts})? Function(
             AnalysisFrame)>((ref) => (af) =>
     ImageQrScanner().draftFromCameraFrameRgba(af.rgba, af.width, af.height,
-        budget: const Duration(milliseconds: 700)));
+        budget: const Duration(milliseconds: 900)));
 
 /// 相機控制器 provider（測試可覆寫 fake）。
 final webCameraControllerProvider =
@@ -358,6 +359,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 換 epoch key → HtmlElementView 重建 → 註冊工廠重新掛載 video →
     // slot 重新量測＝恢復貼滿。CSS 另由看門狗每秒重斷言（雙保險）。
     setState(() => _previewEpoch++);
+    // **T89b**（PM：重建後「鏡頭消失，要切換鏡頭才會顯示」）——行動版
+    // 重掛 video 中斷播放管線：重綁串流＋補 play（不重新談判相機）。
+    await _controller.resumePreview();
   }
 
   Future<void> _finish() async {

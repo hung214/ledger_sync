@@ -68,6 +68,11 @@ abstract interface class CameraStreamController {
   /// 命中時擷一次 JPEG（T89）。
   Future<AnalysisFrame?> captureAnalysisFrame();
 
+  /// 預覽**播放恢復**（T89b——行動版瀏覽器 video 元素被重掛（確認清單
+  /// 返回的 platform view 重建）後播放管線可能中斷＝黑畫面；重綁串流
+  /// ＋補 play（不重新談判相機）。native/stub：no-op。
+  Future<void> resumePreview();
+
   /// 停止串流並釋放。
   void dispose();
 

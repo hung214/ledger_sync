@@ -590,6 +590,32 @@ class WebCameraStreamController implements CameraStreamController {
   web.HTMLCanvasElement? _analysisCanvas; // 重用（免每 tick 建 canvas）
 
   @override
+  Future<void> resumePreview() async {
+    final v = _video;
+    if (v == null) return;
+    _assertPreviewCss(v);
+    // 行動版瀏覽器：video 被重掛（確認清單返回的 platform view 重建）
+    // 後播放管線可能中斷＝黑畫面（PM 2026-11-25「辨識完回來鏡頭消失，
+    // 要切換鏡頭才會顯示」）——重綁串流（null→回）＋補 play＝與切換
+    // 鏡頭同原理但**不重新談判相機**（快、無硬體抖動）。串流已死才
+    // 走完整重取（黑畫面自癒同款）。
+    final s = _stream;
+    if (s != null && s.active) {
+      try {
+        v.srcObject = null;
+        v.srcObject = s;
+        try {
+          await v.play().toDart;
+        } catch (_) {}
+        return;
+      } catch (_) {/* 落到完整重取 */}
+    }
+    try {
+      await _openOn(v);
+    } catch (_) {}
+  }
+
+  @override
   Future<AnalysisFrame?> captureAnalysisFrame() async {
     final v = _video;
     if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;

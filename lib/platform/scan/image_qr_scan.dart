@@ -214,11 +214,12 @@ class ImageQrScanner {
     // ① 輕量 3 區：整張＋左右半（含降採樣後備——同 decodeQrTexts
     // fullScan:false 層；去重＋上限同源）。**三區全收完才解析**——
     // 左右雙碼要齊（提前解析＝左碼就回傳，右碼商家/明細永遠讀不到）。
+    // **不受預算限制**（T89b——PM「辨識又變差」：dart2js 上單區可達
+    // 數百 ms，預算把切半砍掉＝右碼丟失；核心 3 區為辨識底線）。
     for (final region in _regions(decoded, fullScan: false)) {
       final t = _decodeRegion(region) ?? _decodeDownscaled(region);
       if (t != null && !texts.contains(t)) texts.add(t);
       if (texts.length >= _maxCodes) break;
-      if (over()) return collected();
     }
     var draft = draftFromQrTexts(texts);
     if (draft != null) return (draft: draft, texts: texts);
