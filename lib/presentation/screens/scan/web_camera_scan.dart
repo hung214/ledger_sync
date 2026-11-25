@@ -112,7 +112,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 直接建立 container div（html5-qrcode 會在其中建立 video 元素）。
     // 不再使用 platform view，直接在 DOM 建立 container div。
     if (kIsWeb) {
-      _scanner.registerReaderView(_readerViewType); // 現在只建立 container div
+      _scanner.registerReaderView(_readerViewType); // 現在直接建立 container div
+      // 給 DOM 一點時間渲染 div
+      await Future.delayed(const Duration(milliseconds: 100));
     } else {
       // VM 測試用佔位
     }
