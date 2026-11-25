@@ -99,8 +99,15 @@ class Html5QrScannerImpl implements Html5QrScanner {
 
   @override
   void registerReaderView(String viewType) {
-    // 不再使用 platform view，改直接在 start() 中建立 div。
-    // 這裡保留空實作以滿足介面要求。
+    // 直接建立 container div（html5-qrcode 需要 element 存在才能 start）。
+    final div = web.document.getElementById('ls-h5q-reader');
+    if (div == null) {
+      final newDiv = (web.document.createElement('div') as web.HTMLDivElement)
+        ..id = 'ls-h5q-reader'
+        ..style.width = '100%'
+        ..style.height = '100%';
+      web.document.body?.append(newDiv);
+    }
   }
 
   @override
