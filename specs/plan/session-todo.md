@@ -5,9 +5,37 @@
 >
 > **分支現況**：
 > - `feature/ios-pwa`（主線／APP）：全部最新功能（266→270 測試全綠）
+> - `feat/pwa-scan-ui-fix`（T84 修復分支，待 MR→ios-pwa）：掃描頁三重根因修復
+>   （部署 0.5.1-pwa.20261125m；線上 E2E 已驗證）
 > - `pwa-accumulate`（PWA 線）：8596c27 基底＋T52 明細修改＋累積合併＋看門狗
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（PM 2026-11-25 指示
+  「回到 pwa-0.5.2 重新處理」——T84 修復版（html5-qrcode）實機仍三問題：
+  ①半透明方框遮罩＋video 溢出遮住選單按鈕 ②辨識良率沒變好 ③中央
+  掃描窗是一維條碼式框選，不是電子發票用。**定調**：遮罩/掃描窗/video
+  溢出皆 html5-qrcode 內建行為（無法關）——整組退役；真正有價值的是
+  TwEin 官方解析（與引擎無關）→ 疊回 pwa-0.5.2 架構）：
+  - **回歸**：web_camera_scan＋測試 checkout pwa-0.5.2（PM 驗證版——
+    無遮罩/無掃描窗/無距離提示/全畫面偵測）；camera_stream* 保留
+    （＝pwa-0.5.2＋T82 zoom 介面，1920×1080 約束 pwa-0.5.2 已內建）
+  - **TwEin 保留**：新 `tw_ein_parse.dart`（web/stub 條件匯出；解析層與
+    引擎解耦）——累積窗文字 → safeParseInvoiceQr（右碼可缺＝省略參數）
+    → 草稿；後備＝既有 ImageQrScanner.draftFromQrTexts
+  - **退役**：html5qrcode_scanner*.dart＋web/scan/html5-qrcode.min.js
+    ＋index.html script（tw-einvoice.js 留）
+  **驗證**：291 全綠＋analyze 0＋本機 E2E（假相機 PM 真發票 IMG_2073）：
+  video 在 flutter-view 1280×720、**無 qr-shaded-region**、TwEin success
+  （發票號/日期/金額 21）→ 自動進確認清單 ✓；空白鏡頭截圖：模式切換/
+  底部按鈕全可見＝**遮擋根除**。✓部署 **0.5.1-pwa.20261125n**（14:26
+  CDN ✓）＋線上 E2E 同測通過 → 待 PM 真機驗收（版本戳 20261125n）
+  → MR feat/pwa-scan-ui-fix → feature/ios-pwa
+
+- [x] **T84 PWA 掃描頁修復**（被 T85 取代——三重根因修復證明了
+  html5-qrcode 整合層能動，但其內建遮罩/掃描窗/video 溢出不符合
+  發票掃描 UX，最終由 T85 回歸 pwa-0.5.2 架構；經驗留存：JS 互操作
+  全域必須顯式名、callMethodVarArgs、platform view 掛 Flutter 樹內）
 
 - [x] **T80 繳款顯示標籤**：repayment 不建真分類（轉移語意——掛
   expense/income 會污染分類統計/選擇器/預算）→ **顯示層固定標籤
@@ -38,7 +66,17 @@
   4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
   analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
 
-## 已完成（PM 2026-11-25：T83 掃描技術替換完成——待 PM 真機驗證）
+## 已完成（PM 2026-11-25：T85 掃描回歸 pwa-0.5.2＋TwEin——待 PM 真機驗證 0.5.1-pwa.20261125n）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（詳見本檔頂部區塊）：
+  分支 `feat/pwa-scan-ui-fix`（待 MR→ios-pwa）✓291 全綠＋analyze 0✓
+  部署 **0.5.1-pwa.20261125n**（14:26 CDN ✓）✓本機＋線上 E2E：
+  解碼→TwEin success→草稿→確認清單（金額 21／日期 10/17／發票號
+  SR30393603）＋空白鏡頭截圖無遮擋 ✓
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳 **20261125n**；
+  驗收：①掃描頁無遮擋——選單/按鈕全可點 ②掃真發票良率 ③無掃描窗
+  框選（全畫面偵測）④可正常退出掃描頁）
 
 - [x] **T83 掃描技術替換**（PM 2026-11-24 指示；回退保險＝tag `pwa-0.5.2`）：
   - html5-qrcode (UMD) 相機掃描＋tw-einvoice-qr (IIFE) 官方規格解析

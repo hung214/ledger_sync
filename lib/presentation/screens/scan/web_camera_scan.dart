@@ -1,48 +1,42 @@
 import 'dart:async';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/scan/scan_state.dart';
 import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
-import '../../../platform/scan/html5qrcode_scanner.dart';
+import '../../../platform/scan/camera_stream.dart';
 import '../../../platform/scan/image_qr_scan.dart';
+import '../../../platform/scan/tw_ein_parse.dart';
 import 'import_page.dart';
 import 'review_page.dart';
 
-/// html5-qrcode 掃描器 provider（測試可覆寫 fake——T83）。
-final html5QrScannerProvider =
-    Provider<Html5QrScanner>((ref) => html5QrScanner);
+/// TwEin 解析器 provider（測試可覆寫 fake；VM 測試＝stub 恆 null）。
+final twEinParserProvider = Provider<TwEinParser>((ref) => twEinParser);
+
+/// 解碼函式 provider（測試可覆寫；預設＝**相機幀分層解碼**——輕量 3 區 →
+/// 中央變焦 → 四象限，回傳草稿＋**解出的原始文字**（去重 key 用））。
+final webCameraDecodeProvider = Provider<
+        ({TransactionDraft? draft, List<String> texts})? Function(Uint8List)>(
+    (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
+
+/// 相機控制器 provider（測試可覆寫 fake）。
+final webCameraControllerProvider =
+    Provider<CameraStreamController>((ref) => createCameraController());
 
 /// 部署版本（dart-define 帶入；掃描診斷面板顯示——確認更新已生效）。
 const String kWebScanAppVersion =
     String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 
-/// **PWA 即時相機掃描**（F14；T83 技術替換＋**T84 修復** PM 2026-11-25）。
+/// **PWA 即時相機掃描**（F14；PM 2026-11-17 決策 A）。
 ///
-/// **版面基準＝tag `pwa-0.5.2`**（PM 2026-11-25 指示「掃描頁面的版面我要
-/// 以 tag pwa-0.5.2 為主」）——模式切換置頂／預覽 Stack（已加入 Chip、
-/// 切換鏡頭、補光、提示 pill、手動開一筆、診斷面板）／清單列＋連續掃描／
-/// 底部操作列；引擎換為 T83 html5-qrcode＋TwEin。
+/// 流程：開相機（getUserMedia 後鏡頭）→ **自動解碼迴圈**（每 1.2s 取幀→zxing2）
+/// → 命中發票 QR → 加入草稿（同張去重）→ 「完成掃描」→ 確認清單（ReviewPage，
+/// 與檔案匯入同一流程）。相機不可用（拒絕/無 https）→ **回退檔案匯入**。
 ///
-/// 流程：**html5-qrcode**（相機連續掃描——自帶取幀/解碼迴圈，跨平台含
-/// iOS Safari）→ onSuccess 驅動 → **累積窗合併**（左碼/右碼/Code 39 各別
-/// 解出）→ **TwEin 解析**（@hsuan741220/tw-einvoice-qr——官方規格 v1.9：
-/// 77 碼欄位/品目/Base64/境外電商）→ 加入草稿（同張去重）→ 「完成掃描」
-/// → 確認清單（ReviewPage）。相機不可用 → **回退檔案匯入**。
-///
-/// **T84 掛載修復**：reader div 以 `HtmlElementView` platform view 掛在
-/// **Flutter 樹內**——T83 直接 append 到 `document.body` 使 video 渲染在
-/// App 畫布之外（整頁 UI 破版）。iOS 相機管線保護（停軌毒化 → 重進整頁
-/// 重載＋自動回掃描）回補，架構對齊 camera_stream_web（T65 PM 驗證版）。
-///
-/// 解析雙保險：TwEin 組不出（缺左碼等）→ 既有解析器
-/// [ImageQrScanner.draftFromQrTexts] 接手；再不行 → 引導對準左碼。
-///
-/// 測試 keys：`webcam-preview`／`webcam-count`／`webcam-switch-camera`／
-/// `webcam-torch-toggle`／`webcam-diag`／`webcam-done`／`webcam-fallback-file`。
+/// 測試 keys：`webcam-preview`／`webcam-count`／`webcam-done`／`webcam-fallback-file`。
 class WebCameraScanPage extends ConsumerStatefulWidget {
   const WebCameraScanPage({super.key});
 
@@ -54,17 +48,16 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   _CamState _state = _CamState.starting;
   String? _error;
   Widget? _preview;
-  late final Html5QrScanner _scanner = ref.read(html5QrScannerProvider);
-
-  /// 掛載 div（html5-qrcode 在此 element 內建 video）。
-  static const String _readerViewType = 'html5qrcode-reader';
-
+  late final CameraStreamController _controller =
+      ref.read(webCameraControllerProvider);
+  Timer? _loop;
   /// **session 級去重＝條碼原始內容**（PM 2026-11-22 修「換一張發票就
-  /// 掃描不到」：不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
+  /// 掃描不到」：舊指紋 total|date|merchant 會把**同店家/同金額/同日期的
+  /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
   final Set<String> _seenCodes = <String>{};
 
   /// **跨 tick 累積窗**（PM 2026-11-23：無法一次掃兩碼 → 各別辨識＋合併——
-  /// 左碼/右碼分次解出，3 秒窗內合併成完整明細；與 APP 累積窗同款）。
+  /// 左碼/右碼分 tick 解出，3 秒窗內合併成完整明細；與 APP 累積窗同款）。
   final Map<String, DateTime> _recentTexts = {};
 
   /// 已入單的**左碼**（發票身分）——同一張不重複加入；資料對應不起來
@@ -82,18 +75,20 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       if (mounted) setState(() => _hint = null);
     });
   }
-
-  // 診斷面板（PM 2026-11-21「無法正確掃描」定位用；pwa-0.5.2 格式）：
-  String _frameInfo = '—'; // 掃描器狀態摘要（引擎＋facing）
+  int _addedFromThisSession = 0;
+  // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
+  int _frames = 0; // 取幀計數
+  String _frameInfo = '—'; // 最近取幀狀態（大小／無畫面）
   int _decodeHits = 0; // 解碼命中次數
-  Timer? _diagTicker; // 幀數流動可觀測（1 秒刷新——pwa-0.5.2 同款節奏）
+  bool _decoding = false; // 解碼中跳過新幀（同步解碼塞主執行緒——疊加即卡死）
 
   /// 每次命中後的掃描暫停（PM 2026-11-22：每掃到一張暫停 0.3 秒）＋
   /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
   bool _diagExpanded = false; // 診斷行展開（PM：預設短格式）
   bool _torchOn = false; // 補光開關狀態
-  bool _torchSupported = false; // 補光能力（html5-qrcode track torch）
+  bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
 
   @override
   void initState() {
@@ -108,49 +103,21 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   Future<void> _start() async {
     setState(() => _state = _CamState.starting);
-    // JS 套件未載（資源缺失）→ 直接回退檔案匯入（不卡死）。
-    if (!_scanner.jsLoaded) {
+    try {
+      final preview = await _controller.start();
+      if (!mounted) return;
+      setState(() {
+        _preview = preview;
+        _state = _CamState.live;
+        _torchSupported = _controller.torchSupported;
+      });
+      _loop = Timer.periodic(
+          const Duration(milliseconds: 1200), (_) => _tryDecode());
+    } on CameraUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
         _state = _CamState.failed;
-        _error = '掃描元件載入失敗（web/scan/ 資源缺失）——請使用檔案匯入';
-      });
-      return;
-    }
-    // **T84 修復**：reader div 以 platform view 掛在 Flutter 樹內
-    // （HtmlElementView——工廠建立 div，html5-qrcode 在其中建 video）。
-    // T83 直接 append 到 body 會讓 video 渲染在 App 畫布外＝整頁破版。
-    if (kIsWeb) {
-      _scanner.registerReaderView(_readerViewType); // 註冊工廠（冪等）
-      _preview = const HtmlElementView(viewType: _readerViewType);
-    } else {
-      // VM 測試用佔位（fake onDecoded 照常驅動）
-      _preview = const SizedBox(key: Key('fake-preview'));
-    }
-    setState(() {}); // 掛載 platform view（工廠於下一幀建立 reader div）
-    // 輪詢等待 div 進入 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
-    for (int i = 0; i < 50; i++) {
-      if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 100));
-      final divReady = await _checkReaderDivReady();
-      if (divReady) break;
-    }
-    if (!mounted) return;
-    try {
-      await _scanner.start(
-        elementId: 'ls-h5q-reader',
-        onDecoded: _onHtml5Decoded,
-      );
-      if (!mounted) return;
-      setState(() {
-        _state = _CamState.live;
-        _torchSupported = _scanner.torchSupported;
-        _frameInfo = 'html5qrcode · facing=${_scanner.facingLabel}';
-      });
-      // 幀數流動可觀測（1 秒刷新——pwa-0.5.2 診斷節奏）。
-      _diagTicker?.cancel();
-      _diagTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted && _state == _CamState.live) setState(() {});
+        _error = e.message;
       });
     } catch (e) {
       if (!mounted) return;
@@ -161,112 +128,23 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     }
   }
 
-  /// 切換鏡頭（pwa-0.5.2 版面按鈕；iOS 走整頁重載式——頁面會重載，
-  /// 本 Future 永不完成；桌面同 session 秒切）。
-  Future<void> _switchCamera() async {
-    try {
-      await _scanner.switchCamera();
-      if (!mounted) return;
-      setState(() {
-        _torchOn = _scanner.torchOn;
-        _frameInfo = 'html5qrcode · facing=${_scanner.facingLabel}';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _state = _CamState.failed;
-        _error = '切換鏡頭失敗：$e';
-      });
+  /// 補光（手電筒）開關：web MediaStreamTrack.applyConstraints torch，
+  /// 無能力或相機未啟動 → 靜默失敗。
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch().catchError((Object _) {});
+    if (mounted) {
+      setState(() => _torchOn = _controller.torchOn);
     }
   }
 
-  /// 檢查 reader div 是否已進入 DOM（html5-qrcode 需要 element 存在＋有尺寸）。
-  Future<bool> _checkReaderDivReady() async {
-    try {
-      return await _scanner.checkReaderDivReady('ls-h5q-reader');
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// **解碼入口**（T83——html5-qrcode onSuccess 驅動，取代 1.2s 取幀迴圈；
-  /// T84——**等右碼**：左碼先現時不入單，等右碼進窗湊完整明細（與 APP
-  /// F03 同款），窗尾 2.4 秒仍無右碼才以左碼先入單）。
-  void _onHtml5Decoded(String text) {
-    // 掃描節流（確認清單開啟中全停＋每筆入單後 0.3 秒暫停——與 APP 同款）。
-    if (ref.read(scanPausedProvider) ||
-        DateTime.now().isBefore(_pausedUntil)) {
-      return;
-    }
-    // **跨 tick 累積窗**（3 秒——左碼/右碼/一維各別解出後合併，重用既有）。
-    final now = DateTime.now();
-    _recentTexts.removeWhere(
-        (_, t) => now.difference(t) > const Duration(seconds: 3));
-    _recentTexts[text] = now;
-    final accumulated = _recentTexts.keys.toList();
-    if (accumulated.isEmpty) return;
-    // 去重＝條碼原始內容（同一張還在畫面中不重複加入）。
-    if (accumulated.every(_seenCodes.contains)) return;
-
-    // **解析主路徑＝TwEin**（官方規格 v1.9；右碼可缺——省略參數）；
-    // 後備＝既有解析器（雙保險）。
-    final inv = _scanner.parseInvoice(accumulated);
-    TransactionDraft? draft;
-    if (inv != null) {
-      draft = _twEinToDraft(inv);
-    } else {
-      draft = ImageQrScanner.draftFromQrTexts(accumulated);
-    }
-
-    // 左碼在窗但明細未齊（右碼還沒掃到）→ **續等右碼**；窗內左碼已待
-    // 超過 2.4 秒仍無右碼 → 左碼先入單（總額/日期/發票號不丟）。
-    DateTime? leftSince;
-    for (final e in _recentTexts.entries) {
-      if (ImageQrScanner.extractOfficialLeft(e.key) != null) {
-        if (leftSince == null || e.value.isBefore(leftSince)) {
-          leftSince = e.value;
-        }
-      }
-    }
-    if (draft == null) {
-      if (leftSince != null &&
-          now.difference(leftSince) <
-              const Duration(milliseconds: 2400)) {
-        return; // 續等右碼進窗（T84——html5-qrcode 每碼各別回呼）。
-      }
-      if (leftSince == null) {
-        // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
-        if (accumulated.any((t) => t.startsWith('**'))) {
-          _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票號那格）');
-        }
-        return;
-      }
-      // 窗尾：左碼先入單（後備解析器）。
-      draft = ImageQrScanner.draftFromQrTexts(accumulated);
-      if (draft == null) return;
-    }
-
-    // 左碼＝發票身分：已入單的發票不重複加入。
-    String? leftCode;
-    for (final t in accumulated) {
-      final l = ImageQrScanner.extractOfficialLeft(t);
-      if (l != null) {
-        leftCode = l;
-        break;
-      }
-    }
-    if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
-      return;
-    }
-    if (leftCode != null) _committedLeftCodes.add(leftCode);
-    for (final t in accumulated) {
-      _seenCodes.add(t);
-    }
-    ref.read(scanDraftsProvider.notifier).add(ScannedItem(draft: draft));
-    _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
-    setState(() {
-      _decodeHits++;
-    });
+  /// **解析主路徑＝TwEin**（@hsuan741220/tw-einvoice-qr 官方規格 v1.9：
+  /// 77 碼欄位/品目/Base64/境外電商；右碼可缺——省略參數契約）；
+  /// **後備＝既有解析器** [ImageQrScanner.draftFromQrTexts]（TwEin 組不出
+  /// 時接手——缺左碼／舊式格式等）。回 null＝兩層都組不出（呼叫端引導）。
+  TransactionDraft? _draftFromTexts(List<String> texts) {
+    final inv = ref.read(twEinParserProvider).parseInvoice(texts);
+    if (inv != null) return _twEinToDraft(inv);
+    return ImageQrScanner.draftFromQrTexts(texts);
   }
 
   /// TwEin 解析結果 → 確認清單草稿（**金額單位＝台幣元**——TWD
@@ -290,13 +168,96 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         ],
       );
 
-  /// 補光（手電筒）開關：html5-qrcode applyVideoConstraints torch，
-  /// 無能力或相機未啟動 → 靜默失敗。
-  Future<void> _toggleTorch() async {
-    await _scanner.toggleTorch();
-    if (mounted) {
-      setState(() => _torchOn = _scanner.torchOn);
+  Future<void> _tryDecode() async {
+    if (_state != _CamState.live || _decoding) return;
+    if (ref.read(scanPausedProvider) ||
+        DateTime.now().isBefore(_pausedUntil)) {
+      return;
     }
+    _decoding = true;
+    final sw = Stopwatch()..start();
+    Uint8List? photoBytes;
+    TransactionDraft? draft;
+    var texts = const <String>[];
+    // **瀏覽器原生偵測器優先**（T10，PM 2026-11-22「Mac PWA 還是無法讀取」
+    // 主修法）：BarcodeDetector API 直接吃 video 全解析度幀——無 canvas/
+    // JPEG 轉檔損耗、品質遠勝 zxing2；不支援的瀏覽器 → 既有 zxing2 後備。
+    if (_controller.hasNativeBarcodeDetector) {
+      texts = await _controller.detectNativeBarcodes();
+      if (mounted) {
+        setState(() {
+          _frames++;
+          _frameInfo = _controller.resolutionInfo;
+        });
+      }
+      if (texts.isNotEmpty) {
+        draft = _draftFromTexts(texts);
+      }
+    } else {
+      final bytes = await _controller.captureFrame();
+      if (mounted) {
+        setState(() {
+          _frames++;
+          _frameInfo = bytes == null
+              ? '無畫面'
+              : '${_controller.resolutionInfo} · ${bytes.length} B';
+        });
+      }
+      if (bytes != null) {
+        photoBytes = bytes;
+        final result = ref.read(webCameraDecodeProvider)(bytes);
+        draft = result?.draft;
+        texts = result?.texts ?? const [];
+      }
+    }
+    sw.stop();
+    _decoding = false;
+    if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
+    // **跨 tick 累積窗**（3 秒）——無法一次掃兩碼 → 各別辨識＋合併
+    // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
+    if (texts.isNotEmpty) {
+      final now2 = DateTime.now();
+      _recentTexts.removeWhere((_, t) =>
+          now2.difference(t) > const Duration(seconds: 3));
+      for (final t in texts) {
+        _recentTexts[t] = now2;
+      }
+    }
+    final accumulated = _recentTexts.keys.toList();
+    if (accumulated.isEmpty) return;
+    if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
+    // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
+    if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
+    // 累積優先：右碼補齊後合併成完整明細。
+    final merged = _draftFromTexts(accumulated) ?? draft;
+    if (merged == null) {
+      // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
+      if (accumulated.any((t) => t.startsWith('**'))) {
+        _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票號那格）');
+      }
+      return;
+    }
+    if (mounted) setState(() => _decodeHits++);
+    // 左碼＝發票身分：已入單的發票不重複加入（對應不起來＝另一張）。
+    String? leftCode;
+    for (final t in accumulated) {
+      final l = ImageQrScanner.extractOfficialLeft(t);
+      if (l != null) {
+        leftCode = l;
+        break;
+      }
+    }
+    if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
+      return;
+    }
+    ref.read(scanDraftsProvider.notifier).add(
+        ScannedItem(draft: merged, photoBytes: photoBytes));
+    for (final t in accumulated) {
+      _seenCodes.add(t);
+    }
+    if (leftCode != null) _committedLeftCodes.add(leftCode);
+    if (mounted) setState(() => _addedFromThisSession++);
+    _pausedUntil = DateTime.now().add(const Duration(milliseconds: 300));
   }
 
   bool _navigating = false;
@@ -314,13 +275,17 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   }
 
   Future<void> _finish() async {
+    _loop?.cancel();
     final items = ref.read(scanDraftsProvider).toList();
     await _openReview(items);
     if (!mounted) return;
     ref.read(scanDraftsProvider.notifier).reset();
     setState(() {
+      _addedFromThisSession = 0;
       _seenCodes.clear();
     });
+    _loop = Timer.periodic(
+        const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
   }
 
   /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
@@ -331,17 +296,17 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   }
 
   void _fallbackToFile() {
-    _diagTicker?.cancel();
-    unawaited(_scanner.stop());
+    _loop?.cancel();
+    _controller.dispose();
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
         builder: (_) => const ImportPage()));
   }
 
   @override
   void dispose() {
+    _loop?.cancel();
     _hintReset?.cancel();
-    _diagTicker?.cancel();
-    unawaited(_scanner.stop()); // T83：html5-qrcode 停止＋釋放相機。
+    _controller.dispose();
     super.dispose();
   }
 
@@ -354,13 +319,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           (_seenCodes.isNotEmpty ||
               _committedLeftCodes.isNotEmpty ||
               _recentTexts.isNotEmpty)) {
-        setState(() {
-          _seenCodes.clear();
-          _committedLeftCodes.clear();
-          _recentTexts.clear();
-        });
+        _seenCodes.clear();
+        _committedLeftCodes.clear();
+        _recentTexts.clear();
       }
-      // **連續掃描**（關閉＝預設）：掃到第一張 → 自動進確認清單。
       if (!ref.read(continuousScanProvider) &&
           (prev == null || prev.isEmpty) &&
           next.isNotEmpty) {
@@ -369,7 +331,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     });
     final drafts = ref.watch(scanDraftsProvider);
     final count = drafts.length;
-    final mode = ref.watch(scanModeProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('掃描發票'),
@@ -385,206 +346,195 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             ),
         ],
       ),
-      // **T84**：預覽固定於同一樹狀位置（Column[模式, Expanded(Stack[預覽…])]），
-      // 狀態變化只換 Stack 內覆蓋層——platform view 不搬移，video 播放不中斷
-      //（starting→live 若搬移子樹，video 被拔離 DOM＝play() 中斷、解碼停擺）。
-      body: _preview == null
-          ? (_state == _CamState.failed
-              ? _buildFailed(context)
-              : const Center(child: CircularProgressIndicator()))
-          : Column(
-              children: [
-                // 掃描模式（pwa-0.5.2：置頂按鈕方式）。
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  child: SegmentedButton<ScanMode>(
-                    key: const Key('scan-mode-toggle'),
-                    segments: const [
-                      ButtonSegment(
-                          value: ScanMode.eInvoice,
-                          icon: Icon(Icons.qr_code_scanner),
-                          label: Text('電子發票 QR')),
-                      ButtonSegment(
-                          value: ScanMode.paper,
-                          icon: Icon(Icons.receipt_long),
-                          label: Text('紙本發票')),
-                    ],
-                    selected: {mode},
-                    onSelectionChanged: (selection) =>
-                        ref.read(scanModeProvider.notifier).set(selection.first),
+      body: switch (_state) {
+        _CamState.starting => const Center(child: CircularProgressIndicator()),
+        _CamState.failed => _buildFailed(context),
+        _CamState.live => _buildLive(context),
+      },
+    );
+  }
+
+  Widget _buildLive(BuildContext context) {
+    final drafts = ref.watch(scanDraftsProvider);
+    final count = drafts.length;
+    final mode = ref.watch(scanModeProvider);
+    return Column(
+      children: [
+        // 掃描模式（PM 2026-11-22：與 APP 同款按鈕方式——**置頂**，
+        // 不在下方）：電子發票＝QR；紙本發票＝相機續掃＋「手動開一筆」。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: SegmentedButton<ScanMode>(
+            key: const Key('scan-mode-toggle'),
+            segments: const [
+              ButtonSegment(
+                  value: ScanMode.eInvoice,
+                  icon: Icon(Icons.qr_code_scanner),
+                  label: Text('電子發票 QR')),
+              ButtonSegment(
+                  value: ScanMode.paper,
+                  icon: Icon(Icons.receipt_long),
+                  label: Text('紙本發票')),
+            ],
+            selected: {mode},
+            onSelectionChanged: (selection) =>
+                ref.read(scanModeProvider.notifier).set(selection.first),
+          ),
+        ),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              KeyedSubtree(
+                  key: const Key('webcam-preview'), child: _preview!),
+              if (drafts.isNotEmpty)
+                Positioned(
+                  left: 12,
+                  top: 12,
+                  child: Chip(
+                    avatar: const Icon(Icons.check_circle,
+                        color: Colors.green, size: 18),
+                    label: Text('已加入 ${drafts.length} 張'),
                   ),
                 ),
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      KeyedSubtree(
-                          key: const Key('webcam-preview'), child: _preview!),
-                      // starting：不透明覆蓋層（reader div 掛載中——
-                      // html5-qrcode start 前置條件）。
-                      if (_state == _CamState.starting)
-                        ColoredBox(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            child: const Center(
-                                child: CircularProgressIndicator())),
-                      // failed：不透明覆蓋層（蓋住預覽——與 pwa-0.5.2 同觀感）。
-                      if (_state == _CamState.failed)
-                        ColoredBox(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            child: _buildFailed(context)),
-                      if (_state == _CamState.live) ...[
-                        if (drafts.isNotEmpty)
-                          Positioned(
-                            left: 12,
-                            top: 12,
-                            child: Chip(
-                              avatar: const Icon(Icons.check_circle,
-                                  color: Colors.green, size: 18),
-                              label: Text('已加入 ${drafts.length} 張'),
-                            ),
-                          ),
-                        // 切換鏡頭（pwa-0.5.2 版面；iOS＝整頁重載式切換）。
-                        Positioned(
-                          right: 12,
-                          top: 12,
-                          child: IconButton(
-                            key: const Key('webcam-switch-camera'),
-                            tooltip: '切換鏡頭',
-                            onPressed: _switchCamera,
-                            icon: const Icon(Icons.cameraswitch),
-                            color: Colors.white,
-                          ),
-                        ),
-                        // 補光開關（pwa-0.5.2 位置——right:72 讓位切換鏡頭）。
-                        if (_torchSupported)
-                          Positioned(
-                            right: 72,
-                            top: 12,
-                            child: GestureDetector(
-                              key: const Key('webcam-torch-toggle'),
-                              onTap: () => unawaited(_toggleTorch()),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: _torchOn
-                                      ? Colors.white
-                                      : Colors.black54,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  _torchOn ? Icons.flash_on : Icons.flash_off,
-                                  color: _torchOn
-                                      ? Colors.black
-                                      : Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        // 畫面提示（只掃到明細碼等——與 APP 同款）。
-                        if (_hint != null)
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            bottom: 12,
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black87,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(_hint!,
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 12)),
-                              ),
-                            ),
-                          ),
-                        // 紙本發票模式：手動開卡入口。
-                        if (mode == ScanMode.paper)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 48,
-                            child: Center(
-                              child: FilledButton.icon(
-                                key: const Key('webcam-manual-entry'),
-                                onPressed: _addBlankDraft,
-                                icon: const Icon(Icons.receipt_long),
-                                label: const Text('手動開一筆'),
-                              ),
-                            ),
-                          ),
-                        // 診斷面板（pwa-0.5.2 格式：幀 N · 命中 N）。
-                        Positioned(
-                          left: 12,
-                          bottom: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(6)),
-                            child: GestureDetector(
-                              onTap: () => setState(
-                                  () => _diagExpanded = !_diagExpanded),
-                              child: Text(
-                                _diagExpanded
-                                    ? '[$kWebScanAppVersion] 幀 ${_scanner.frameCount} · '
-                                        '$_frameInfo · 命中 $_decodeHits'
-                                    : '幀 ${_scanner.frameCount} · 命中 $_decodeHits',
-                                key: const Key('webcam-diag'),
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 11),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+              // 切換鏡頭（PM 2026-11-21 按鈕需求）。
+              Positioned(
+                right: 12,
+                top: 12,
+                child: IconButton(
+                  key: const Key('webcam-switch-camera'),
+                  tooltip: '切換鏡頭',
+                  onPressed: () => _controller.switchCamera(),
+                  icon: const Icon(Icons.cameraswitch),
+                  color: Colors.white,
                 ),
-                if (_state == _CamState.live) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(children: [
-                      Text('已掃 $count 張',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const Spacer(),
-                      const Text('連續掃描', style: TextStyle(fontSize: 13)),
-                      Switch(
-                        key: const Key('scan-continuous-toggle'),
-                        value: ref.watch(continuousScanProvider),
-                        onChanged: (v) => ref
-                            .read(continuousScanProvider.notifier)
-                            .set(v),
+              ),
+              // 補光開關（web：MediaStreamTrack.applyConstraints torch；
+              // 支援度有限——無能力則隱藏）。
+              if (_torchSupported)
+                Positioned(
+                  right: 72,
+                  top: 12,
+                  child: GestureDetector(
+                    key: const Key('webcam-torch-toggle'),
+                    onTap: () => unawaited(_toggleTorch()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _torchOn
+                            ? Colors.white
+                            : Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ]),
-                  ),
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(children: [
-                        TextButton(
-                          key: const Key('webcam-fallback-file'),
-                          onPressed: _fallbackToFile,
-                          child: const Text('改用檔案匯入'),
-                        ),
-                        const Spacer(),
-                        FilledButton.icon(
-                          key: const Key('webcam-done'),
-                          onPressed: drafts.isEmpty ? null : _finish,
-                          icon: const Icon(Icons.done_all),
-                          label: const Text('完成掃描'),
-                        ),
-                      ]),
+                      child: Icon(
+                        _torchOn ? Icons.flash_on : Icons.flash_off,
+                        color: _torchOn ? Colors.black : Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
-                ],
-              ],
+                ),
+              // 畫面提示（只掃到明細碼等——與 APP 同款）。
+              if (_hint != null)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_hint!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                  ),
+                ),
+              // 紙本發票模式：手動開卡入口（web 無線性條碼解碼——
+              // scan_policy 平台分流；金額/日期/商家/發票號手動輸入）。
+              if (mode == ScanMode.paper)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 48,
+                  child: Center(
+                    child: FilledButton.icon(
+                      key: const Key('webcam-manual-entry'),
+                      onPressed: _addBlankDraft,
+                      icon: const Icon(Icons.receipt_long),
+                      label: const Text('手動開一筆'),
+                    ),
+                  ),
+                ),
+              // 診斷面板（定位「無法正確掃描」：取幀是否流動／解碼是否命中）。
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6)),
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _diagExpanded = !_diagExpanded),
+                    child: Text(
+                      _diagExpanded
+                          ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
+                              '命中 $_decodeHits · 解 $_decodeMs ms'
+                              '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
+                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                      key: const Key('webcam-diag'),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [
+            Text('已掃 $count 張',
+                style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            const Text('連續掃描', style: TextStyle(fontSize: 13)),
+            Switch(
+              key: const Key('scan-continuous-toggle'),
+              value: ref.watch(continuousScanProvider),
+              onChanged: (v) =>
+                  ref.read(continuousScanProvider.notifier).set(v),
             ),
+          ]),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              TextButton(
+                key: const Key('webcam-fallback-file'),
+                onPressed: _fallbackToFile,
+                child: const Text('改用檔案匯入'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                key: const Key('webcam-done'),
+                onPressed: drafts.isEmpty ? null : _finish,
+                icon: const Icon(Icons.done_all),
+                label: const Text('完成掃描'),
+              ),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 
@@ -605,8 +555,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             OutlinedButton.icon(
               key: const Key('webcam-retry'),
               onPressed: () {
-                unawaited(_scanner
-                    .stop()); // 停止舊掃描——重新請求（權限被拒後可再試）
+                _controller.dispose(); // 停止舊串流——重新請求（權限被拒後可再試）
                 _start();
               },
               icon: const Icon(Icons.refresh),
