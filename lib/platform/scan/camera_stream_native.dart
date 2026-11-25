@@ -27,10 +27,16 @@ class _NativeCameraController implements CameraStreamController {
   bool get hasNativeBarcodeDetector => false;
 
   @override
-  Future<List<String>> detectNativeBarcodes() async => const [];
+  Future<List<DetectedCode>> detectNativeBarcodes() async => const [];
 
   @override
   bool get torchSupported => false;
+
+  @override
+  bool get zoomSupported => false; // native 掃描頁自管 zoom（mobile_scanner 按鈕）。
+
+  @override
+  Future<void> setZoom(double normalized) async {}
 
   @override
   Future<void> toggleTorch() async {}

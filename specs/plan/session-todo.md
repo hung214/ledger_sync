@@ -5,9 +5,267 @@
 >
 > **分支現況**：
 > - `feature/ios-pwa`（主線／APP）：全部最新功能（266→270 測試全綠）
+> - `feat/pwa-scan-ui-fix`（T84 修復分支，待 MR→ios-pwa）：掃描頁三重根因修復
+>   （部署 0.5.1-pwa.20261125m；線上 E2E 已驗證）
 > - `pwa-accumulate`（PWA 線）：8596c27 基底＋T52 明細修改＋累積合併＋看門狗
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
+
+- [x] **T87 預覽貼邊＋解析度上限**（PM 2026-11-25「鏡頭畫面變小；第二次
+  掃描又更小；要左右貼邊」）：**根因**＝video 元素無 CSS——以**原生
+  解析度**渲染（1920×1080 在預覽槽＝放大裁切；且每次重取相機談判解析度
+  不同——ideal 允許更高（4K）→每次進頁觀感跳動）。**修復**：①video CSS
+  固定 100%×100%＋object-fit:cover（相機 App 標準填滿、置中裁切——
+  解析度變動不再影響觀感；解碼吃全幀不受顯示裁切影響）②約束加
+  **max 1920×1080**（三路徑：初次/facingMode、deviceId 精選、切換——
+  防 4K 截幀拖慢 tick＋穩定談判）。E2E 量測 videoRect＝slotRect（貼邊）。
+
+- [x] **T88 掃描偵測框**（PM 2026-11-25「掃到條碼要有框」）：原生
+  BarcodeDetector 的 **boundingBox**（video 像素座標）接入——
+  DetectedCode（camera_stream 介面＋native/stub）→ 頁面 Stack 疊
+  CustomPaint（_CodeBoxesPainter：object-fit:cover 映射後畫 teal 圓角
+  框＋淡填充，左右雙 QR 各一框；無偵測＝清空）。**註**：zxing2 後備
+  路徑無框（image_qr_scan 未回座標——未來增強）；前鏡頭鏡像未映射
+  （掃描主流＝後鏡頭）。
+
+- [x] **T86 紅米辨識修復＋雙引擎＋tick 死鎖防護＋照片按鈕**（PM 2026-11-25
+  三線索：①紅米 Note 11 Pro 5G 辨識不到（iPhone 17 Pro 可）②「切換鏡頭
+  再切回來就突然變得容易辨識」③「第一張掃到之後其他張就順＋感覺有
+  功能卡住」——**根因**：`_acquireRearCamera` 的 deviceId 精選重取
+  **丟失 hiRes 約束**（只給 deviceId＝Android Chrome 開 640×480 預設檔，
+  QR 模組過小；多後鏡頭機型必觸發）——switchCamera 路徑走
+  _tryGetUserMedia（有 hiRes）→ 切換來回後解析度升級＝PM 觀察的「變好」。
+  **修復**：a. 精選重取帶回 width/height ideal 1920×1080
+  b. **雙引擎併聯**——原生 BarcodeDetector 沒中→同 tick zxing2 擷幀
+  （Android Chrome 偵測器存在但底層不作用時不再卡死；每 tick 截圖＝
+  照片附件來源；診斷行加「引擎 原生/後備」）
+  c. **tick 死鎖防護**——_tryDecode 包 try/finally（原寫法擷幀/解碼擲
+  例外＝_decoding 永遠 true＝掃描迴圈死鎖＝「功能卡住」）＋captureFrame
+  readyState 檢查＋解碼器例外防護
+  d. **確認清單照片**（PM：有變形＋不用直接顯示）——預設隱藏＋
+  「顯示照片」按鈕（逐張重設）；顯示時一般照片 BoxFit.contain
+  （原 fill 把 16:9 幀塞 4:3 框＝拉扁）；OCR 框項目保留 fill（T21 對位）
+  ✓291 全綠＋analyze 0✓本機＋線上 E2E（照片按鈕截圖）✓部署
+  **0.5.1-pwa.20261125o** → 待 PM 真機驗收（紅米重開 PWA 待 SW 換版，
+  版本戳 20261125o；診斷行解析度應為 1280×720 以上）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（PM 2026-11-25 指示
+  「回到 pwa-0.5.2 重新處理」——T84 修復版（html5-qrcode）實機仍三問題：
+  ①半透明方框遮罩＋video 溢出遮住選單按鈕 ②辨識良率沒變好 ③中央
+  掃描窗是一維條碼式框選，不是電子發票用。**定調**：遮罩/掃描窗/video
+  溢出皆 html5-qrcode 內建行為（無法關）——整組退役；真正有價值的是
+  TwEin 官方解析（與引擎無關）→ 疊回 pwa-0.5.2 架構）：
+  - **回歸**：web_camera_scan＋測試 checkout pwa-0.5.2（PM 驗證版——
+    無遮罩/無掃描窗/無距離提示/全畫面偵測）；camera_stream* 保留
+    （＝pwa-0.5.2＋T82 zoom 介面，1920×1080 約束 pwa-0.5.2 已內建）
+  - **TwEin 保留**：新 `tw_ein_parse.dart`（web/stub 條件匯出；解析層與
+    引擎解耦）——累積窗文字 → safeParseInvoiceQr（右碼可缺＝省略參數）
+    → 草稿；後備＝既有 ImageQrScanner.draftFromQrTexts
+  - **退役**：html5qrcode_scanner*.dart＋web/scan/html5-qrcode.min.js
+    ＋index.html script（tw-einvoice.js 留）
+  **驗證**：291 全綠＋analyze 0＋本機 E2E（假相機 PM 真發票 IMG_2073）：
+  video 在 flutter-view 1280×720、**無 qr-shaded-region**、TwEin success
+  （發票號/日期/金額 21）→ 自動進確認清單 ✓；空白鏡頭截圖：模式切換/
+  底部按鈕全可見＝**遮擋根除**。✓部署 **0.5.1-pwa.20261125n**（14:26
+  CDN ✓）＋線上 E2E 同測通過 → 待 PM 真機驗收（版本戳 20261125n）
+  → MR feat/pwa-scan-ui-fix → feature/ios-pwa
+
+- [x] **T84 PWA 掃描頁修復**（被 T85 取代——三重根因修復證明了
+  html5-qrcode 整合層能動，但其內建遮罩/掃描窗/video 溢出不符合
+  發票掃描 UX，最終由 T85 回歸 pwa-0.5.2 架構；經驗留存：JS 互操作
+  全域必須顯式名、callMethodVarArgs、platform view 掛 Flutter 樹內）
+
+- [x] **T80 繳款顯示標籤**：repayment 不建真分類（轉移語意——掛
+  expense/income 會污染分類統計/選擇器/預算）→ **顯示層固定標籤
+  「信用卡繳款」**（明細手機標題／桌面分類欄／總覽最近交易——
+  原「未分類」/「交易」；圖示圓 💳），資料保持 categoryId=null。
+  ✓290 全綠＋analyze 0✓部署 0.5.1-pwa.20261124j（CDN ✓）
+
+- [x] **T81 還款/轉帳流向顯示**：明細列副標加「→ 目標帳戶」
+  （「現金 → 示例卡 · 已繳」——雙端流向一目了然；統計口徑不變
+  ——還款不計收支的會計語意已向 PM 說明並同意）✓290 全綠
+  ✓部署 0.5.1-pwa.20261124k（CDN ✓）
+
+- [x] **T81-② 標籤覆蓋補完**：PM 回報①最近刪除顯示「未分類」
+  ②總覽顯示「交易」。②根因＝**T80 總覽用了字串比較（Tx entity 是
+  enum）恆 false——T59 同款陷阱**（明細頁 TxRow 字串 ✓ 所以正常）。
+  修復＝enum 比較＋最近刪除頁固定標籤＋💳＋回歸 widget 測試。
+  ✓291 全綠＋analyze 0✓部署 0.5.1-pwa.20261124l（CDN ✓）。
+
+- **未來項（PM 2026-11-24 暫緩）**：**轉帳手續費**——快記轉帳加
+  手續費欄，儲存時自動產生一筆手續費支出（推薦挂系統分類「轉帳
+  手續費」，計入支出統計；零 schema 變更）。設計已評估，PM 決定
+  先不做——需要時直接接手。
+
+- [x] **T82-② PWA zoom 補償**：PM 回報自動變焦只有 MAC APP 有、
+  PWA 沒有——T82 首輪只做 native 路徑。補齊＝CameraStreamController
+  介面加 zoomSupported/setZoom（capabilities.zoom 動態探測——iOS
+  Safari 常見不支援→只顯示距離引導）＋web_camera_scan 無偵測
+  4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
+  analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
+
+## 已完成（PM 2026-11-25：T87/T88 預覽貼邊＋掃描偵測框——待 PM 真機驗證）
+
+- [x] **T87 預覽貼邊＋解析度上限**／**T88 掃描偵測框**（詳見本檔頂部
+  區塊）：PM 實測 T86「成功機率變快很多」✓；新回饋「鏡頭畫面變小、
+  第二次更小、要左右貼邊」＋「掃到條碼要有框」→ video CSS cover＋
+  max 上限＋boundingBox 偵測框。
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳見部署）：
+  ①鏡頭預覽**左右（上下）貼滿**預覽區，且每次進掃描頁尺寸一致
+  ②掃到條碼時畫面上出現**teal 圓角框**（雙 QR 兩框）
+  ③紅米辨識率維持 T86 水準（診斷行解析度 ≤1920×1080）
+
+- [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（詳見本檔頂部區塊）：
+  分支 `feat/pwa-scan-ui-fix`（待 MR→ios-pwa）✓291 全綠＋analyze 0✓
+  部署 **0.5.1-pwa.20261125n**（14:26 CDN ✓）✓本機＋線上 E2E：
+  解碼→TwEin success→草稿→確認清單（金額 21／日期 10/17／發票號
+  SR30393603）＋空白鏡頭截圖無遮擋 ✓
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳 **20261125n**；
+  驗收：①掃描頁無遮擋——選單/按鈕全可點 ②掃真發票良率 ③無掃描窗
+  框選（全畫面偵測）④可正常退出掃描頁）
+
+- [x] **T83 掃描技術替換**（PM 2026-11-24 指示；回退保險＝tag `pwa-0.5.2`）：
+  - html5-qrcode (UMD) 相機掃描＋tw-einvoice-qr (IIFE) 官方規格解析
+  - 移除 platform view 改直接建立 div，registerReaderView 直接掛載 DOM
+  - TwEin 解析（左碼/右碼/Code39/77碼/品目/Base64/境外/對獎）＋既有解析器後備
+  - 保留確認清單/節流/去重/補光/診斷/手動開一筆
+  - 292 測試全綠＋analyze 0✓部署 `0.5.1-pwa.20261125k`（CDN ✓）
+  - headless 驗證：JS globals（Html5Qrcode function＋TwEin 14 API）零錯誤
+  - 回退保險：`pwa-0.5.2`（舊技術）＋`pwa-0.5.3-techno`（新技術基準）
+
+- [ ] **PM 真機驗證**（iOS PWA 掃真發票——左右碼＋Code39）
+  - 有問題即回退 `pwa-0.5.2`（一鍵回退）
+
+## 進行中（PM 2026-11-24：T83 PWA 掃描技術替換——html5-qrcode＋tw-einvoice-qr）
+
+- [ ] **T83 掃描技術替換**（PM 指示；回退保險＝tag `pwa-0.5.2`）：
+  - [x] ①套件調研＋資源放置：web/scan/html5-qrcode.min.js（UMD 2.3.8）
+    ＋tw-einvoice.js（esbuild IIFE→window.TwEin，11.9KB——parseBarcode
+    驗證 ✓）
+  - [x] ②web/index.html 引入兩個 script
+  - [x] ③Dart 互操作層：html5qrcode_scanner.dart（條件匯出——stub
+    保 native 編譯；web 實作＝Html5Qrcode start/stop/torch＋TwEin
+    解析 dartify→純 Dart 結構）
+  - [x] ④web_camera_scan 改造：掃描區換 reader div（platform view）、
+    onSuccess 驅動（移除 _loop/_tryDecode 舊迴圈）、累積窗重用＋
+    TwEin parseInvoiceQr→TransactionDraft 轉換、保留確認清單/節流/
+    去重/補光/診斷行/手動開一筆
+  - [x] ⑤測試：analyze＋292 全綠＋互操作測試（fake scanner 5 情境）
+  - [x] ⑥headless 冒煙：JS globals（html5qrcode function／TwEin object
+    14 API）✓零 JS 錯誤✓（serve 目錄修正後——base-href 前綴陷阱）
+  - [x] ⑦部署 0.5.1-pwa.20261125a（CDN 驗證＋scan/ 資源 200 ✓）＋
+    兩線同步＋tag pwa-0.5.3-techno（新技術基準）
+  - [ ] ⑧**PM 真機驗證**（iOS PWA 掃真發票——左右碼＋Code39；
+    出問題回退 pwa-0.5.2）
+  - **設計決策**：不建真分類沿用；解析走 TwEin（官方規格 v1.9 完整
+    實作——左右雙碼/品目/Base64/境外/對獎）；出問題回退 pwa-0.5.2
+
+## 進行中（PM 2026-11-24：掃描發票覆盤——對焦/辨識優化）
+
+- [x] **T82 掃描覆盤優化**：覆盤結論——①發票 QR＝高密度 V13
+  （77×77 模組）→ 需拉近但撞 MOFO 物理對焦極限（機型差異 6~15cm）
+  ②autoZoom=true **僅 Android**（上游限制——iOS 無變焦補償）
+  ③QR＋Code39＋Code128 同開→MLKit 每幀負載↑（單一 QR 快的對照）。
+  **優化**：Dart 層跨平台 zoom 補償（無偵測 5s→1.5×→2×→2.5×＋
+  常駐引導「拉遠 15~20cm」——繞過 MOFO 的數位微距）＋autoZoom=false
+  （統一 Dart 層控——重用既有正規化 zoom 狀態，與手動 1×/2×/3× 按鈕
+  同步）＋web 診斷行距離提示。✓291 全綠＋analyze 0✓部署 20261124m。
+  **待 PM 真機驗證**（其他手機：靠太近 → 5 秒後自動變焦＋引導）。
+
+## 進行中（PM 2026-11-24：平帳修復＋帶入收窄＋輸入提示）
+
+- [x] **T79 信用卡平帳修復**：PM 回報繳款後總覽帳戶沒有平帳。
+  根因＝總覽帳戶列**信用卡行誤用 assetBalance**（repayment 信用卡
+  端屬負債面不計——公式註解明載）→ 繳款後恆顯示 −消費額。修復＝
+  信用卡列改「應付 N」（creditUnpaidTotal，與明細頁一致；還款即
+  扣減）✓1 widget 測試（應付 500→0＋現金 5,000→4,500）✓部署
+  0.5.1-pwa.20261124i（CDN ✓）
+- [x] **T78-① 帶入範圍收窄**：選分類帶入**僅金額/商家**——
+  帳戶不動（PM 指正）。✓selectCategoryById 移除記憶帳戶帶入
+  ✓回歸測試（記憶 accountId 路徑不再覆蓋）
+- [ ] **T78-② 商家/備註輸入提示**：輸入文字時即時提示歷史內容
+  （可點選填入、可繼續打字）——實作中。
+
+## 進行中（PM 2026-11-24：快記直接繳卡費）
+
+- [x] **T77 快記繳卡費**：快速記帳即可繳卡費（免進信用卡頁）。
+  ①快記第四模式「繳卡費」（僅有信用卡帳戶時顯示）②金額預設
+  帶入「未繳合計」（creditUnpaidTotal，可改）③儲存走
+  RepayStatementUseCase（有未繳清帳單→帳單累加＋繳清取消 N-5；無→
+  純 repayment 交易）✓execute 加 fromAccountId（使用者選擇優先）
+  ✓repayment 不計收支統計✓3 controller 測試＋288 全綠＋analyze 0
+  ✓部署 0.5.1-pwa.20261124h（CDN ✓）
+
+## 進行中（PM 2026-11-24：預算摘要金額語意修正）
+
+- [x] **T76 預算摘要金額語意修正**：**PM 指正——金額是台幣，
+  不用除 100**。本專案 amountMinor 單位＝台幣元（TWD zero-
+  decimal，非「分」）。T74 的 `~/ 100` 顯示縮小 100 倍（8,000 元
+  顯示 80）＝「數字不是完整的數字」根因。✓移除 ~/ 100 直接
+  format ✓修正 T74/T71 測試的 ×100 錯誤語意 ✓285 全綠＋
+  analyze 0✓部署 0.5.1-pwa.20261124g（CDN ✓）。
+  **教訓**：金額單位語意先查 BDD 資料流（f05 `_amount`=直接
+  parse），勿以「minor=分」慣例假設。
+
+## 進行中（PM 2026-11-24：PWA 更新看不到——SW 自動重載）
+
+- [ ] **T75 SW 自動重載**：iOS PWA standalone 開啟＝先吃舊快取，
+  SW 背景更新（skipWaiting）後頁面仍跑舊 JS（無 controllerchange
+  → reload）→ PM 要殺掉重開才看到。index.html 加 controllerchange
+  → location.reload()：新 SW 接管即自動重載，免手動重整。
+
+## 進行中（PM 2026-11-24：總覽預算摘要對照雛型）
+
+- [x] **T74 總覽預算摘要修正**（對照 specs/plan/ui/01-dashboard.html）：
+  原本只有光禿進度條 → 雛型樣式＝名稱（粗體）＋「7,000 / 8,000
+  （87.5%）」＋8px 進度條＋⚠ 門檻警示行（≥80% 琥珀、超支紅換文案、
+  <80% 無行）；色階 AC-05；百分比一位小數。BudgetProgressBar 維持
+  純進度條（budget_page 自帶名稱列）。2 widget 測試＋285 全綠＋
+  analyze 0。部署 0.5.1-pwa.20261124e（CDN ✓）。
+  ⚠流程註記：T74 commit 誤在 ios-pwa 直線提交（漏開分支），
+  內容已同步 pwa-accumulate；下輪恢復「新分支→合併」流程。
+
+## 進行中（PM 2026-11-24：快記連續記帳保留日期）
+
+- [x] **T73 快記日期保留**：「繼續」不再重設時間為現在——
+  維持最後設定日期（補記場景）；重新進入快記（首頁＋）＝當日
+  （autoDispose 重建即 preset.time）。同步驗收文件 S1.7。
+
+## 進行中（PM 2026-11-24：快記切分類保留已輸入金額）
+
+- [x] **T72 快記帶入守衛**：選分類帶入上次資料（金額/帳戶/商家）
+  現會覆蓋已輸入金額——金額非 0 時**不帶入**；金額 0/空照舊。
+
+## 進行中（PM 2026-11-24：預算主分類加總）
+
+- [x] **T71 預算主分類加總**：PM 需求——預算可選主分類，
+  已花費＝該主分類＋其全部子分類加總（早餐100＋午餐200 →
+  「餐飲食品」顯示 300）。✓evaluator 主分類 self+children 集合比對
+  （子分類預算維持精確；pending 照舊）✓選擇器 pickMainLabel 參數
+  （預算＝「整個主分類（含子類別）」）✓清單列標示「（含子類）」
+  ✓5 新測試＋279 全綠＋analyze 0✓部署 0.5.1-pwa.20261124b（CDN ✓）
+
+## 進行中（PM 2026-11-23：iOS PWA 選檔修正）
+
+- [x] **T70 iOS PWA 選檔修正**：PM 實測——資料管理「從檔案還原」
+  筆電/桌機正常、iPhone 找不到檔案。根因＝file_selector 的
+  openFile() 依賴 File System Access API（iOS Safari 僅支援
+  image/video）。修復＝web 分流 `<input type="file">`（條件匯出
+  web_file_picker*，cancel 事件監聽）；還原 .db/.json＋CSV 匯入
+  兩處接線；274 全綠＋analyze 0；部署 0.5.1-pwa.20261123a
+  （CDN 驗證 ✓）；iPhone 檔案來源＝檔案 App/iCloud/AirDrop。
+
+## 進行中（PM 2026-11-23：品牌定稿——ICON 換裝＋首頁左上 LOGO）
+
+- [x] **T69 ICON/LOGO 定稿換裝**：icon 來源改 `jpg/icon01.png`
+  （滿版無圓角——系統自套圓角，避免雙層圓角）；logo.png → 首頁
+  左上角 LOGO。✓flutter_launcher_icons 重產全平台（iOS 壓平/macOS/
+  Windows/Android adaptive/web favicon+maskable）✓側欄 📒→定稿圖示
+  ＋白字（Expanded 防 Ahem 溢出；desktop_shell_test 斷言同步更新）
+  ✓logo.png 白底直式不硬塞 AppBar（PM 同意）✓274 全綠＋analyze 0
+  ✓5aeda75→merge ios-pwa＋macOS 重建 PM 目視
 
 ## 進行中（PM 2026-11-23：相機修復完成——MR 回流＋發佈 0.5.1）
 
@@ -15,8 +273,10 @@
   → merge 回 feature/ios-pwa ✓（web_camera_scan＋camera_stream 系列取凍結線
   測試版；補完 5 檔衝突解決——c82b344；274 全綠＋analyze 0）
   ✓**pwaCmara.md** 處理全記錄文件（根因三層＋解法演進＋教訓）
-- [ ] **T68 發佈 0.5.1**：pubspec 0.5.1+1＋CHANGELOG＋全測試 →
-  merge main＋tag v0.5.1＋push（CI 發佈）＋macOS 重建＋PWA 標章 0.5.1
+- [x] **T68 發佈 0.5.1**：pubspec 0.5.1+1＋CHANGELOG＋全測試 →
+  ✓merge main（894c56d）＋**tag v0.5.1 已推**（CI 發佈）＋macOS 重建 ✓
+  ✓PWA 標章 0.5.1 部署（CDN 驗證）✓CHANGELOG 0.5.1 區段
+  ✓pwaCmara.md 處理全記錄
 
 ## 🔴 進行中（PM 2026-11-23：PWA 相機黑畫面復發——T57 回歸）
 

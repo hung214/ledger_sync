@@ -243,13 +243,28 @@ class _DesktopSideNav extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text('📒 LedgerSync',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800)),
+          // 品牌區（T69 定稿 PM 2026-11-23）：📒 emoji → 定稿圖示
+          // （assets/icon/app_icon.png——與各平台 launcher icon 同源）。
+          // Expanded：窄側欄/測試 Ahem 字體下可換行，避免 RenderFlex 溢出。
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Image.asset('assets/icon/app_icon.png',
+                      width: 26, height: 26, fit: BoxFit.cover),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('LedgerSync',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 18),
           for (final (i, (label, icon)) in tabs.indexed)

@@ -19,6 +19,18 @@ export 'camera_stream_stub.dart'
     if (dart.library.io) 'camera_stream_native.dart'
     if (dart.library.js_interop) 'camera_stream_web.dart';
 
+/// 原生偵測結果（T88——PM 2026-11-25「掃到條碼要有框」）。
+class DetectedCode {
+  const DetectedCode({required this.text, this.box});
+
+  /// 條碼原始文字。
+  final String text;
+
+  /// 偵測框（**video 像素座標系**——native BarcodeDetector boundingBox；
+  /// 繪製時由呼叫端做 object-fit:cover 映射。native/stub 無框＝null）。
+  final Rect? box;
+}
+
 class CameraUnavailableException implements Exception {
   const CameraUnavailableException(this.message);
   final String message;
@@ -53,12 +65,19 @@ abstract interface class CameraStreamController {
   /// Chrome/Edge/Safari 17+；品質遠勝 zxing2。僅 web 實作回 true。）
   bool get hasNativeBarcodeDetector;
 
-  /// 以原生偵測器掃描目前畫面 → rawValue 清單（不支援/無結果/錯誤 → 空）。
-  Future<List<String>> detectNativeBarcodes();
+  /// 以原生偵測器掃描目前畫面 → 條碼清單（不支援/無結果/錯誤 → 空）。
+  Future<List<DetectedCode>> detectNativeBarcodes();
 
   /// 相機**補光（手電筒）**是否可用？（web：track capabilities 有 torch；
   /// native：mobile_scanner torch）。無能力 → 開關隱藏。
   bool get torchSupported;
+
+  /// zoom 能力（T82——web 端 getUserMedia capabilities 探測；
+  /// native 掃描頁自管 zoom 按鈕不走此介面）。
+  bool get zoomSupported;
+
+  /// 變焦（正規化 0~1——0=1×、1=最大；不支援＝靜默）。
+  Future<void> setZoom(double normalized);
 
   /// 切換補光開啟/關閉。（無能力或相機未啟動 → 靜默失敗。）
   Future<void> toggleTorch();

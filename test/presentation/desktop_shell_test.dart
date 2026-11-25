@@ -37,7 +37,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 三欄要件：側欄導航＋工具列搜尋/掃描/快記＋右側面板。
-      expect(find.text('📒 LedgerSync'), findsOneWidget, reason: '側欄 logo（08）');
+      expect(find.text('LedgerSync'), findsOneWidget,
+          reason: '側欄 logo（08——T69 換定稿圖示＋文字）');
       expect(find.byKey(const Key('desktop-search')), findsOneWidget);
       expect(find.byKey(const Key('desktop-scan')), findsOneWidget);
       expect(find.byKey(const Key('fab-quick-entry')), findsOneWidget,

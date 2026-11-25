@@ -23,6 +23,7 @@ extension type _BarcodeDetector._(JSObject _) implements JSObject {
 
 extension type _BarcodeResultJS._(JSObject _) implements JSObject {
   external JSString? get rawValue;
+  external JSObject? get boundingBox; // DOMRectReadOnly（video 像素座標）。
 }
 
 /// web（PWA）相機控制器：`getUserMedia`（後鏡頭）＋`<video>` 預覽＋canvas 取幀。
@@ -45,6 +46,11 @@ class WebCameraStreamController implements CameraStreamController {
   String _facing = 'environment'; // 目前鏡頭朝向（切換按鈕用）
   String? _switchNote; // 診斷：最近一次切換的結果（面板顯示）
   bool _torchOn = false; // 補光狀態
+  // **zoom 能力**（T82——getUserMedia capabilities 探測；iOS Safari 對
+  // zoom constraint 支援有限——不支援＝只顯示距離引導文案）。
+  bool _zoomSupported = false;
+  double _zoomMin = 1.0;
+  double _zoomMax = 3.0;
 
   @override
   String get diagInfo =>
@@ -75,17 +81,38 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
-  Future<List<String>> detectNativeBarcodes() async {
+  Future<List<DetectedCode>> detectNativeBarcodes() async {
     final v = _video;
     final detector = _getNativeDetector();
     if (v == null || v.videoWidth == 0 || detector == null) return const [];
     try {
       final results = await detector.detect(v).toDart;
       return [
-        for (final r in results.toDart) r.rawValue?.toDart ?? '',
-      ].where((t) => t.isNotEmpty).toList();
+        for (final r in results.toDart)
+          if ((r.rawValue?.toDart ?? '').isNotEmpty)
+            DetectedCode(
+              text: r.rawValue!.toDart,
+              box: _rectFromDomRect(r.boundingBox),
+            ),
+      ];
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
+    }
+  }
+
+  /// DOMRectReadOnly（video 像素座標）→ dart:ui Rect（T88 偵測框）。
+  static Rect? _rectFromDomRect(JSObject? box) {
+    if (box == null) return null;
+    try {
+      final d = box.dartify() as Map<Object?, Object?>;
+      final x = (d['x'] as num?)?.toDouble();
+      final y = (d['y'] as num?)?.toDouble();
+      final w = (d['width'] as num?)?.toDouble();
+      final h = (d['height'] as num?)?.toDouble();
+      if (x == null || y == null || w == null || h == null) return null;
+      return Rect.fromLTWH(x, y, w, h);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -112,6 +139,47 @@ class WebCameraStreamController implements CameraStreamController {
       _torchOn = !_torchOn;
     } catch (_) {
       // 無補光能力或相機未啟動——靜默。
+    }
+  }
+
+  @override
+  bool get zoomSupported => _zoomSupported;
+
+  /// zoom 能力探測（相機啟動後呼叫——capabilities.zoom 有 min/max 才支援）。
+  ///
+  /// 動態探測（dart2js 的 dynamic 調用直讀 JS 屬性——capabilities.zoom 是
+  /// 可選成員，硬體不支援時＝undefined → dynamic 讀為 null）。
+  void probeZoomCapabilities(web.MediaStreamTrack track) {
+    try {
+      final dynamic zoom = (track.getCapabilities() as dynamic).zoom;
+      if (zoom == null) {
+        _zoomSupported = false;
+        return;
+      }
+      _zoomMin = (zoom.min as num).toDouble();
+      _zoomMax = (zoom.max as num).toDouble();
+      _zoomSupported = _zoomMax > _zoomMin;
+    } catch (_) {
+      _zoomSupported = false; // 不支援（iOS Safari 常見）——只顯示距離引導。
+    }
+  }
+
+  @override
+  Future<void> setZoom(double normalized) async {
+    if (!_zoomSupported) return;
+    final track = _videoTracks().firstOrNull;
+    if (track == null) return;
+    final target =
+        _zoomMin + (_zoomMax - _zoomMin) * normalized.clamp(0.0, 1.0);
+    try {
+      final advanced = <web.MediaTrackConstraintSet>[
+        web.MediaTrackConstraintSet(zoom: target.toJS),
+      ].toJS;
+      await track
+          .applyConstraints(web.MediaTrackConstraints(advanced: advanced))
+          .toDart;
+    } catch (_) {
+      // 硬體拒絕（正值域外等）——靜默。
     }
   }
 
@@ -147,11 +215,20 @@ class WebCameraStreamController implements CameraStreamController {
       }
     } catch (_) {/* sessionStorage 不可用——照原流程 */}
     // video 元素：整個 session 只建立一次。
+    // **T87 尺寸修復**（PM 2026-11-25「鏡頭畫面變小；第二次掃描又更小」）：
+    // video 無 CSS 時以**原生解析度**渲染（1920×1080 在預覽槽內＝放大
+    // 裁切，且每次重取相機談判解析度不同→每次進頁觀感都變）。固定
+    // 100%×100%＋object-fit:cover＝相機 App 標準填滿行為——解析度變動
+    // 不再影響畫面觀感（解碼用全幀，與顯示裁切無關——辨識不受影響）。
     _sharedVideo ??=
         (web.document.createElement('video') as web.HTMLVideoElement)
           ..autoplay = true
           ..muted = true
-          ..playsInline = true;
+          ..playsInline = true
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.setProperty('object-fit', 'cover')
+          ..style.setProperty('object-position', 'center');
     if (!_factoryRegistered) {
       ui_web.platformViewRegistry.registerViewFactory(
           _sharedViewType, (int viewId) => _sharedVideo!);
@@ -203,6 +280,9 @@ class WebCameraStreamController implements CameraStreamController {
     final gen = ++_openGen;
     _stopStreamTracks(); // 確保無殘留軌道（硬體鎖釋放後再取）
     _stream = await _acquireRearCamera();
+    // zoom 能力探測（T82）——capabilities.zoom 存在才支援變焦。
+    final firstTrack = _videoTracks().firstOrNull;
+    if (firstTrack != null) probeZoomCapabilities(firstTrack);
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
@@ -294,9 +374,16 @@ class WebCameraStreamController implements CameraStreamController {
           }
           // iOS：session 釋放需時間——立即重取會拿到同一顆/黑畫面。
           await Future.delayed(const Duration(milliseconds: 600));
+          // **T86 根因修復（紅米 Note 11 Pro 5G 辨識不到）**：deviceId 精選
+          // 重取**必須帶 hiRes 約束**——原寫法只給 deviceId＝裝置**預設檔
+          // （Android Chrome 常 640×480）**，QR 模組過小無法辨識。PM 實測
+          // 「切換鏡頭再切回來就變好」＝switchCamera 路徑走
+          // _tryGetUserMedia（有 hiRes）→ 解析度升級——與此根因吻合。
           stream = await md.getUserMedia(web.MediaStreamConstraints(
               video: {
             'deviceId': {'exact': rearId},
+            'width': {'ideal': 1920, 'max': 1920},
+            'height': {'ideal': 1080, 'max': 1080},
           }.jsify()!)).toDart;
         }
       }
@@ -311,9 +398,12 @@ class WebCameraStreamController implements CameraStreamController {
       web.MediaDevices md, Map<String, Object>? facing) {
     // width/height ideal：拉高取像解析度（預設常 640×480——
     // 解碼距離不足的主因，PM 2026-11-21「無法正確掃描」）。
+    // **T87**：加 **max 上限**——ideal 允許更高（4K 裝置會給 3840×2160：
+    // 截幀 JPEG→base64 每 tick 拖慢解碼＋顯示觀感跳動）；上限不會
+    // OverconstrainedError（裝置 max 較低時照給）。
     final hiRes = {
-      'width': {'ideal': 1920},
-      'height': {'ideal': 1080},
+      'width': {'ideal': 1920, 'max': 1920},
+      'height': {'ideal': 1080, 'max': 1080},
     };
     final video = facing == null
         ? hiRes.jsify()!
@@ -470,7 +560,9 @@ class WebCameraStreamController implements CameraStreamController {
   @override
   Future<Uint8List?> captureFrame() async {
     final v = _video;
-    if (v == null || v.videoWidth == 0) return null;
+    // **T86**：readyState<2（幀未就緒）時 drawImage/toDataURL 可能擲例外
+    // ——呼叫端 tick 死鎖防護（配合頁面 try/finally 雙保險）。
+    if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;
     // 全解析度取幀：發票 QR 模組細密——1280 縮取樣會把模組壓小 33%
     // ＋JPEG 糊化 → zxing 全解不出（PM 2026-11-21「全部掃描失敗」
     // 回歸根因）。上限 1920 僅防極端 4K 串流。

@@ -5,11 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/scan/scan_state.dart';
+import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
 import '../../../platform/scan/camera_stream.dart';
 import '../../../platform/scan/image_qr_scan.dart';
+import '../../../platform/scan/tw_ein_parse.dart';
 import 'import_page.dart';
 import 'review_page.dart';
+import 'scan_box_mapper.dart';
+
+/// TwEin 解析器 provider（測試可覆寫 fake；VM 測試＝stub 恆 null）。
+final twEinParserProvider = Provider<TwEinParser>((ref) => twEinParser);
 
 /// 解碼函式 provider（測試可覆寫；預設＝**相機幀分層解碼**——輕量 3 區 →
 /// 中央變焦 → 四象限，回傳草稿＋**解出的原始文字**（去重 key 用））。
@@ -77,6 +83,21 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   int _decodeHits = 0; // 解碼命中次數
   bool _decoding = false; // 解碼中跳過新幀（同步解碼塞主執行緒——疊加即卡死）
 
+  // **T88 偵測框**（PM 2026-11-25「掃到條碼要有框」）：最新 tick 的偵測框
+  // （video 像素座標）＋video 原生尺寸（object-fit:cover 映射用）；
+  // 無偵測＝清空（框消失＝引導繼續對準）。
+  List<Rect> _codeBoxes = const [];
+  Size _codeVideoSize = Size.zero;
+
+  /// video 原生尺寸（resolutionInfo 'WxH' → Size；無畫面＝Size.zero）。
+  Size _parseVideoSize() {
+    final parts = _controller.resolutionInfo.split('x');
+    if (parts.length != 2) return Size.zero;
+    final w = double.tryParse(parts[0]);
+    final h = double.tryParse(parts[1]);
+    return (w == null || h == null) ? Size.zero : Size(w, h);
+  }
+
   /// 每次命中後的掃描暫停（PM 2026-11-22：每掃到一張暫停 0.3 秒）＋
   /// 確認清單開啟中全停（[scanPausedProvider]）——與 APP 同款節流。
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
@@ -132,6 +153,37 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     }
   }
 
+  /// **解析主路徑＝TwEin**（@hsuan741220/tw-einvoice-qr 官方規格 v1.9：
+  /// 77 碼欄位/品目/Base64/境外電商；右碼可缺——省略參數契約）；
+  /// **後備＝既有解析器** [ImageQrScanner.draftFromQrTexts]（TwEin 組不出
+  /// 時接手——缺左碼／舊式格式等）。回 null＝兩層都組不出（呼叫端引導）。
+  TransactionDraft? _draftFromTexts(List<String> texts) {
+    final inv = ref.read(twEinParserProvider).parseInvoice(texts);
+    if (inv != null) return _twEinToDraft(inv);
+    return ImageQrScanner.draftFromQrTexts(texts);
+  }
+
+  /// TwEin 解析結果 → 確認清單草稿（**金額單位＝台幣元**——TWD
+  /// zero-decimal，TwEin 的 totalAmount/item unitPrice 即元，勿 ×100）。
+  TransactionDraft _twEinToDraft(TwEinInvoice inv) => TransactionDraft(
+        merchant: const DraftField.none(), // QR 規格無賣方名稱欄。
+        totalMinor: DraftField(inv.totalAmountMinor, 1.0),
+        date: inv.date != null
+            ? DraftField(inv.date!, 1.0)
+            : const DraftField.none(),
+        sellerTaxId: inv.sellerTaxId,
+        invoiceNo: inv.invoiceNumber,
+        lineItems: [
+          for (final it in inv.items)
+            InvoiceLineItem(
+              name: it.name,
+              quantity: it.quantity.round(),
+              unitPrice: it.unitPrice.round(),
+              amount: (it.quantity * it.unitPrice).round(),
+            ),
+        ],
+      );
+
   Future<void> _tryDecode() async {
     if (_state != _CamState.live || _decoding) return;
     if (ref.read(scanPausedProvider) ||
@@ -139,43 +191,74 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       return;
     }
     _decoding = true;
+    // **T86 卡死修復**（PM 2026-11-25「感覺有功能卡住了」）：擷幀/解碼若
+    // 擲例外，原寫法 `_decoding` 永遠 true → 掃描迴圈死鎖（之後什麼都
+    // 掃不到，直到離開重進掃描頁）。finally 保證解鎖——例外只損失該 tick。
+    try {
+      await _tryDecodeTick();
+    } finally {
+      _decoding = false;
+    }
+  }
+
+  /// zxing2 分層解碼（例外→null——異常幀只損失本 tick，不鎖死迴圈；T86）。
+  ({TransactionDraft? draft, List<String> texts})? _decodeFrame(
+      Uint8List bytes) {
+    try {
+      return ref.read(webCameraDecodeProvider)(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 單次 tick 偵測（雙引擎併聯→累積窗→解析→入單）。
+  Future<void> _tryDecodeTick() async {
     final sw = Stopwatch()..start();
     Uint8List? photoBytes;
     TransactionDraft? draft;
-    var texts = const <String>[];
-    // **瀏覽器原生偵測器優先**（T10，PM 2026-11-22「Mac PWA 還是無法讀取」
-    // 主修法）：BarcodeDetector API 直接吃 video 全解析度幀——無 canvas/
-    // JPEG 轉檔損耗、品質遠勝 zxing2；不支援的瀏覽器 → 既有 zxing2 後備。
+    // **雙引擎併聯**（T86——紅米 Note 11 Pro 5G 實測辨識不到，PM 2026-11-25；
+    // 且「切換鏡頭再切回來就變好」暴露 deviceId 精選重取丟失 hiRes 約束＝
+    // 開 640×480 預設檔，QR 模組過小。修復後仍併聯以最大化命中）：
+    // ①原生 BarcodeDetector（T10——直接吃 video 全解析度幀，無轉檔損耗；
+    //   Android Chrome **存在但底層不作用**時會永遠回空陣列）
+    // ②zxing2 擷幀解碼——**每 tick 都跑**（後備＋截圖＝照片附件來源），
+    //   兩引擎文字併入累積窗，任一命中即可；不支援原生→自動全靠 zxing2。
+    final native = <String>[];
+    var boxes = const <Rect>[];
     if (_controller.hasNativeBarcodeDetector) {
-      texts = await _controller.detectNativeBarcodes();
-      if (mounted) {
-        setState(() {
-          _frames++;
-          _frameInfo = _controller.resolutionInfo;
-        });
+      final codes = await _controller.detectNativeBarcodes();
+      native.addAll(codes.map((c) => c.text).where((t) => t.isNotEmpty));
+      // **T88 偵測框**（video 像素座標——繪製時做 cover 映射）。
+      boxes = [
+        for (final c in codes)
+          if (c.box != null) c.box!,
+      ];
+    }
+    var engine = '無';
+    if (native.isNotEmpty) engine = '原生';
+    final bytes = await _controller.captureFrame();
+    var texts = native;
+    if (bytes != null) {
+      photoBytes = bytes;
+      final result = _decodeFrame(bytes);
+      final zx = result?.texts ?? const <String>[];
+      if (zx.isNotEmpty) {
+        if (engine == '無') engine = '後備';
+        texts = {...native, ...zx}.toList();
       }
-      if (texts.isNotEmpty) {
-        draft = ImageQrScanner.draftFromQrTexts(texts);
-      }
-    } else {
-      final bytes = await _controller.captureFrame();
-      if (mounted) {
-        setState(() {
-          _frames++;
-          _frameInfo = bytes == null
-              ? '無畫面'
-              : '${_controller.resolutionInfo} · ${bytes.length} B';
-        });
-      }
-      if (bytes != null) {
-        photoBytes = bytes;
-        final result = ref.read(webCameraDecodeProvider)(bytes);
-        draft = result?.draft;
-        texts = result?.texts ?? const [];
-      }
+      draft = result?.draft;
+    }
+    if (mounted) {
+      setState(() {
+        _frames++;
+        _codeBoxes = boxes;
+        _codeVideoSize = _parseVideoSize();
+        _frameInfo = bytes == null
+            ? '無畫面'
+            : '${_controller.resolutionInfo} · 引擎 $engine';
+      });
     }
     sw.stop();
-    _decoding = false;
     if (mounted) setState(() => _decodeMs = sw.elapsedMilliseconds);
     // **跨 tick 累積窗**（3 秒）——無法一次掃兩碼 → 各別辨識＋合併
     // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
@@ -193,7 +276,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 去重＝**條碼原始內容**（不同發票永不誤擋——PM 2026-11-22 修復）。
     if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
     // 累積優先：右碼補齊後合併成完整明細。
-    final merged = ImageQrScanner.draftFromQrTexts(accumulated) ?? draft;
+    final merged = _draftFromTexts(accumulated) ?? draft;
     if (merged == null) {
       // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
       if (accumulated.any((t) => t.startsWith('**'))) {
@@ -351,6 +434,21 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             children: [
               KeyedSubtree(
                   key: const Key('webcam-preview'), child: _preview!),
+              // **T88 偵測框**（PM：掃到條碼顯示框）——video 像素座標經
+              // object-fit:cover 映射後繪製（與 camera_stream_web 的 video
+              // CSS 同步：100%×100%＋cover）；左右雙 QR 各一框。
+              if (_codeBoxes.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      key: const Key('code-boxes-paint'),
+                      painter: _CodeBoxesPainter(
+                        boxes: _codeBoxes,
+                        videoSize: _codeVideoSize,
+                      ),
+                    ),
+                  ),
+                ),
               if (drafts.isNotEmpty)
                 Positioned(
                   left: 12,
@@ -540,3 +638,43 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 }
 
 enum _CamState { starting, live, failed }
+
+/// **T88 偵測框繪製**（PM 2026-11-25「掃到條碼要有框」）：video 像素座標 →
+/// 預覽顯示座標（object-fit: cover：等比放大至填滿→置中→超出裁切）——
+/// 與 camera_stream_web 的 video CSS（100%×100%＋cover）同步。
+/// 註：前鏡頭鏡像時框未做鏡像映射（掃描主流＝後鏡頭）。
+class _CodeBoxesPainter extends CustomPainter {
+  _CodeBoxesPainter({required this.boxes, required this.videoSize});
+
+  final List<Rect> boxes;
+  final Size videoSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (videoSize.isEmpty || boxes.isEmpty) return;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeJoin = StrokeJoin.round
+      ..color = const Color(0xFF00BFA5);
+    final fill = Paint()..color = const Color(0x2600BFA5);
+    for (final b in boxes) {
+      final r = mapVideoRectToDisplay(b, videoSize, size).inflate(6);
+      final rrect = RRect.fromRectAndRadius(r, const Radius.circular(8));
+      canvas.drawRRect(rrect, fill);
+      canvas.drawRRect(rrect, stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CodeBoxesPainter oldDelegate) {
+    if (oldDelegate.videoSize != videoSize ||
+        oldDelegate.boxes.length != boxes.length) {
+      return true;
+    }
+    for (var i = 0; i < boxes.length; i++) {
+      if (oldDelegate.boxes[i] != boxes[i]) return true;
+    }
+    return false;
+  }
+}
