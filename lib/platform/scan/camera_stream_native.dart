@@ -15,6 +15,9 @@ class _NativeCameraController implements CameraStreamController {
   Future<Uint8List?> captureFrame() async => null;
 
   @override
+  Future<AnalysisFrame?> captureAnalysisFrame() async => null;
+
+  @override
   Future<void> switchCamera() async =>
       throw const CameraUnavailableException('原生相機整合屬 SP-2b（未接線）');
 

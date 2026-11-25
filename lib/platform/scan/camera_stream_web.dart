@@ -287,6 +287,7 @@ class WebCameraStreamController implements CameraStreamController {
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。
     video.style.setProperty('transform', 'none');
+    _assertPreviewCss(video);
     try {
       await video.play().toDart;
     } catch (_) {
@@ -450,6 +451,7 @@ class WebCameraStreamController implements CameraStreamController {
       // 前鏡頭鏡像（自拍慣例；擷取幀不鏡像——解碼不受影響）。
       video.style.setProperty(
           'transform', target == 'user' ? 'scaleX(-1)' : 'none');
+      _assertPreviewCss(video);
       try {
         await video.play().toDart;
       } catch (_) {}
@@ -575,9 +577,49 @@ class WebCameraStreamController implements CameraStreamController {
           ..height = h;
     final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
     ctx.drawImage(v, 0, 0, w, h);
+    // **T89**：本函式現在**只在入單時擷一次**（照片附件）——每 tick 的
+    // 解碼已改走 captureAnalysisFrame（RGBA 直入，零編解碼）。同步
+    // toDataURL 的 100–300ms 從「每 tick」變「每張發票一次」＝可接受，
+    // 並保留 T86 readyState 防護（toDataURL toBlob callback API 差異多，
+    // 收益已不需要——維持簡單）。
     final dataUrl = canvas.toDataURL('image/jpeg', 0.8.toJS);
     final b64 = dataUrl.split(',').last;
     return Uint8List.fromList(base64Decode(b64));
+  }
+
+  web.HTMLCanvasElement? _analysisCanvas; // 重用（免每 tick 建 canvas）
+
+  @override
+  Future<AnalysisFrame?> captureAnalysisFrame() async {
+    final v = _video;
+    if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;
+    // 上限同 captureFrame（1920 防 4K）；drawImage＋getImageData 皆遠比
+    // JPEG 編解碼便宜（getImageData 1280×720 約 5–20ms）。
+    final scale = v.videoWidth > 1920 ? 1920 / v.videoWidth : 1.0;
+    final w = (v.videoWidth * scale).round();
+    final h = (v.videoHeight * scale).round();
+    final canvas = _analysisCanvas ??=
+        web.document.createElement('canvas') as web.HTMLCanvasElement;
+    if (canvas.width != w || canvas.height != h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+    ctx.drawImage(v, 0, 0, w, h);
+    final data = ctx.getImageData(0, 0, w, h);
+    final clamped = data.data.toDart; // Uint8ClampedList
+    return AnalysisFrame(
+        rgba: Uint8List.sublistView(clamped), width: w, height: h);
+  }
+
+  /// **T89**：重斷言預覽 CSS（冪等）——重掛／切換／自癒後一律維持
+  /// 100%×100%＋cover（行動版瀏覽器 slot 重建時樣式可能失效；
+  /// PM 2026-11-25「返回掃描頁畫面變小」防禦）。
+  static void _assertPreviewCss(web.HTMLVideoElement video) {
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.setProperty('object-fit', 'cover');
+    video.style.setProperty('object-position', 'center');
   }
 
   /// **黑畫面看門狗**（PM 2026-11-23：每次進掃描頁重新渲染鏡頭——
@@ -594,6 +636,7 @@ class WebCameraStreamController implements CameraStreamController {
     _watchdog = Timer.periodic(const Duration(seconds: 1), (_) async {
       final v = _video;
       if (v == null || v.videoWidth == 0) return;
+      _assertPreviewCss(v); // 每秒重斷言（任何路徑掉樣式 1 秒內自癒）
       if (v.readyState < 2) {
         _blackStreak++;
       } else {

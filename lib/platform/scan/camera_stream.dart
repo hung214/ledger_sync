@@ -31,6 +31,22 @@ class DetectedCode {
   final Rect? box;
 }
 
+/// 分析用幀（**RGBA 直入**——T89 紅米卡頓修復：跳過 JPEG 編碼＋解碼鏈，
+/// 像素直接交 zxing2；native/stub 不提供＝null，呼叫端退回 JPEG 路徑）。
+class AnalysisFrame {
+  const AnalysisFrame(
+      {required this.rgba, required this.width, required this.height});
+
+  /// 像素（RGBA，每像素 4 bytes，row-major）。
+  final Uint8List rgba;
+
+  /// 幀寬（px）。
+  final int width;
+
+  /// 幀高（px）。
+  final int height;
+}
+
 class CameraUnavailableException implements Exception {
   const CameraUnavailableException(this.message);
   final String message;
@@ -46,6 +62,11 @@ abstract interface class CameraStreamController {
 
   /// 擷取目前畫面（JPEG bytes）；無畫面回 null。
   Future<Uint8List?> captureFrame();
+
+  /// 擷取**分析用**幀（RGBA 直入——僅 web 實作；native/stub 回 null）。
+  /// 與 [captureFrame] 分離：解碼 tick 用 RGBA（零轉檔），照片只在
+  /// 命中時擷一次 JPEG（T89）。
+  Future<AnalysisFrame?> captureAnalysisFrame();
 
   /// 停止串流並釋放。
   void dispose();

@@ -162,18 +162,75 @@ class ImageQrScanner {
   /// ①輕量 3 區（整張＋左右半，含降採樣後備）→ ②中央 70%/50%（變焦——
   /// 遠距小 QR）→ ③四象限（角落——PM 2026-11-22「條碼不限中央」）。
   /// 每區含降採樣＋透印去除變體（≤800px，耗時有界）。
+  ///
+  /// **T89**（PM 2026-11-25 紅米「很卡」）：舊實作 `decodeQrTexts`＋
+  /// `img.decodeImage` 各解一次 JPEG（主執行緒 2 次）；改為**只解碼一次**，
+  /// 並支援 [budget]（時間預算——超過即停，下一 tick 續掃；行動裝置
+  /// 主執行緒同步解碼，預算＝卡頓上限）。
   ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrame(
       Uint8List bytes,
-      {DateTime? now}) {
-    var texts = decodeQrTexts(bytes, fullScan: false);
-    var draft = draftFromQrTexts(texts);
-    if (draft != null) return (draft: draft, texts: texts);
+      {DateTime? now,
+      Duration? budget}) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
+    return _frameFromDecoded(decoded, budget: budget);
+  }
+
+  /// **RGBA 直入幀解碼**（T89——web `getImageData` 像素直接建 `img.Image`，
+  /// **完全跳過 JPEG 編碼＋解碼鏈**：toDataURL 主執行緒 100–300ms＋
+  /// decodeImage 150–300ms＝紅米每 tick 卡頓主因；附帶消除 JPEG 糊化，
+  /// 小 QR 更易解）。
+  ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrameRgba(
+      Uint8List rgba, int width, int height,
+      {DateTime? now, Duration? budget}) {
+    if (rgba.isEmpty || width <= 0 || height <= 0) return null;
+    // fromBytes 吃 ByteBuffer——sublistView（getImageData）恰為整段 buffer
+    // 時零複製；否則精確複製一次（避免 buffer offset 錯位）。
+    final exact =
+        rgba.offsetInBytes == 0 && rgba.buffer.lengthInBytes == rgba.length;
+    final decoded = img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: exact ? rgba.buffer : Uint8List.fromList(rgba).buffer,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba);
+    return _frameFromDecoded(decoded, budget: budget);
+  }
+
+  /// 幀解碼本體（已解碼影像 → 輕量 3 區 → 分層升級；[budget] 超時即
+  /// **帶著已解出的結果收工**——預算只提早停、絕不丟成果（T89 教訓：
+  /// dart2js 上 zxing 單區可達數百 ms，丟成果＝每 tick 全部白掃））。
+  static ({TransactionDraft? draft, List<String> texts})? _frameFromDecoded(
+      img.Image decoded,
+      {Duration? budget}) {
+    final sw = budget == null ? null : (Stopwatch()..start());
+    bool over() => sw != null && sw.elapsed > budget!;
+    var texts = <String>[];
+
+    ({TransactionDraft? draft, List<String> texts})? collected() =>
+        texts.isEmpty
+            ? null
+            : (draft: draftFromQrTexts(texts), texts: texts);
+    // ① 輕量 3 區：整張＋左右半（含降採樣後備——同 decodeQrTexts
+    // fullScan:false 層；去重＋上限同源）。**三區全收完才解析**——
+    // 左右雙碼要齊（提前解析＝左碼就回傳，右碼商家/明細永遠讀不到）。
+    for (final region in _regions(decoded, fullScan: false)) {
+      final t = _decodeRegion(region) ?? _decodeDownscaled(region);
+      if (t != null && !texts.contains(t)) texts.add(t);
+      if (texts.length >= _maxCodes) break;
+      if (over()) return collected();
+    }
+    var draft = draftFromQrTexts(texts);
+    if (draft != null) return (draft: draft, texts: texts);
+    // ② 分層升級：四象限 → 中央 70%/50%（各含降採樣＋透印變體）。
     for (final region in _escalationRegions(decoded)) {
-      texts = _decodeSingleRegion(region);
+      final t = _decodeSingleRegion(region);
+      for (final x in t) {
+        if (!texts.contains(x)) texts.add(x);
+      }
       draft = draftFromQrTexts(texts);
       if (draft != null) return (draft: draft, texts: texts);
+      if (over()) return collected();
     }
     return null;
   }

@@ -23,6 +23,15 @@ final webCameraDecodeProvider = Provider<
         ({TransactionDraft? draft, List<String> texts})? Function(Uint8List)>(
     (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
 
+/// RGBA 直入解碼函式 provider（測試可覆寫；T89——**跳過 JPEG 編解碼鏈**
+/// ＋700ms 時間預算＝行動裝置主執行緒卡頓上限（dart2js 單區可達數百 ms；
+/// 預算只「提早帶成果收工」，不丟已解出的文字），超時下一 tick 續掃）。
+final webCameraDecodeRgbaProvider = Provider<
+        ({TransactionDraft? draft, List<String> texts})? Function(
+            AnalysisFrame)>((ref) => (af) =>
+    ImageQrScanner().draftFromCameraFrameRgba(af.rgba, af.width, af.height,
+        budget: const Duration(milliseconds: 700)));
+
 /// 相機控制器 provider（測試可覆寫 fake）。
 final webCameraControllerProvider =
     Provider<CameraStreamController>((ref) => createCameraController());
@@ -89,6 +98,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   List<Rect> _codeBoxes = const [];
   Size _codeVideoSize = Size.zero;
 
+  // **T89**：預覽 platform view 重建世代（確認清單返回時 +1——
+  // 行動版瀏覽器 slot 未重新佈局的修復，見 _openReview）。
+  int _previewEpoch = 0;
+
   /// video 原生尺寸（resolutionInfo 'WxH' → Size；無畫面＝Size.zero）。
   Size _parseVideoSize() {
     final parts = _controller.resolutionInfo.split('x');
@@ -128,7 +141,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _torchSupported = _controller.torchSupported;
       });
       _loop = Timer.periodic(
-          const Duration(milliseconds: 1200), (_) => _tryDecode());
+          const Duration(milliseconds: 1000), (_) => _tryDecode());
     } on CameraUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -211,18 +224,28 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     }
   }
 
-  /// 單次 tick 偵測（雙引擎併聯→累積窗→解析→入單）。
+  /// RGBA 直入解碼（例外→null——同 JPEG 路徑防護；T89）。
+  ({TransactionDraft? draft, List<String> texts})? _decodeRgbaFrame(
+      AnalysisFrame af) {
+    try {
+      return ref.read(webCameraDecodeRgbaProvider)(af);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 單次 tick 偵測（雙引擎→累積窗→解析→入單）。
   Future<void> _tryDecodeTick() async {
     final sw = Stopwatch()..start();
-    Uint8List? photoBytes;
     TransactionDraft? draft;
-    // **雙引擎併聯**（T86——紅米 Note 11 Pro 5G 實測辨識不到，PM 2026-11-25；
-    // 且「切換鏡頭再切回來就變好」暴露 deviceId 精選重取丟失 hiRes 約束＝
-    // 開 640×480 預設檔，QR 模組過小。修復後仍併聯以最大化命中）：
-    // ①原生 BarcodeDetector（T10——直接吃 video 全解析度幀，無轉檔損耗；
-    //   Android Chrome **存在但底層不作用**時會永遠回空陣列）
-    // ②zxing2 擷幀解碼——**每 tick 都跑**（後備＋截圖＝照片附件來源），
-    //   兩引擎文字併入累積窗，任一命中即可；不支援原生→自動全靠 zxing2。
+    // **雙引擎——原生優先、命中即免後備**（T86 併聯 → T89 改條件式，
+    // PM 2026-11-25 紅米「很卡」）：
+    // ①原生 BarcodeDetector（T10；Android Chrome 存在但底層不作用＝
+    //   永遠回空陣列）——**命中時直接用文字**，zxing2 截幀＋解碼整段免跑
+    //   （主執行緒重活；iPhone／新 Android 每 tick 只剩原生偵測＝零卡頓）。
+    // ②原生沒中／不支援 → **RGBA 直入解碼**（T89——getImageData 像素直接
+    //   建圖，完全跳過 JPEG 編碼＋解碼鏈；400ms 時間預算＝卡頓上限，超時
+    //   下一 tick 續掃）。紅米（偵測器死）每 tick 主執行緒省約 250–600ms。
     final native = <String>[];
     var boxes = const <Rect>[];
     if (_controller.hasNativeBarcodeDetector) {
@@ -236,15 +259,23 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     }
     var engine = '無';
     if (native.isNotEmpty) engine = '原生';
-    final bytes = await _controller.captureFrame();
     var texts = native;
-    if (bytes != null) {
-      photoBytes = bytes;
-      final result = _decodeFrame(bytes);
+    var frameOk = native.isNotEmpty; // 原生命中＝有畫面（幀不必截）
+    if (native.isEmpty) {
+      final af = await _controller.captureAnalysisFrame();
+      var result = af == null ? null : _decodeRgbaFrame(af);
+      if (af != null) {
+        frameOk = true;
+      } else {
+        // native/stub 平台（或 fake controller）——舊 JPEG 路徑。
+        final bytes = await _controller.captureFrame();
+        if (bytes != null) frameOk = true;
+        result = bytes == null ? null : _decodeFrame(bytes);
+      }
       final zx = result?.texts ?? const <String>[];
       if (zx.isNotEmpty) {
-        if (engine == '無') engine = '後備';
-        texts = {...native, ...zx}.toList();
+        engine = '後備';
+        texts = zx;
       }
       draft = result?.draft;
     }
@@ -253,7 +284,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _frames++;
         _codeBoxes = boxes;
         _codeVideoSize = _parseVideoSize();
-        _frameInfo = bytes == null
+        _frameInfo = !frameOk
             ? '無畫面'
             : '${_controller.resolutionInfo} · 引擎 $engine';
       });
@@ -297,6 +328,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
       return;
     }
+    // **T89**：照片只在入單時擷一次 JPEG（舊版每 tick 擷幀＋同步編碼）。
+    final photoBytes = await _controller.captureFrame();
     ref.read(scanDraftsProvider.notifier).add(
         ScannedItem(draft: merged, photoBytes: photoBytes));
     for (final t in accumulated) {
@@ -319,6 +352,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (!mounted) return;
     ref.read(scanPausedProvider.notifier).set(false);
     _navigating = false;
+    // **T89 尺寸修復**（PM 2026-11-25「確認清單返回後預覽變小」）：
+    // 確認清單蓋住掃描頁時 platform view slot 被卸載；**行動版瀏覽器**
+    // 返回後未重新佈局 slot（桌面 E2E 實測正常、手機異常——預覽縮小）。
+    // 換 epoch key → HtmlElementView 重建 → 註冊工廠重新掛載 video →
+    // slot 重新量測＝恢復貼滿。CSS 另由看門狗每秒重斷言（雙保險）。
+    setState(() => _previewEpoch++);
   }
 
   Future<void> _finish() async {
@@ -332,7 +371,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       _seenCodes.clear();
     });
     _loop = Timer.periodic(
-        const Duration(milliseconds: 1200), (_) => _tryDecode()); // 繼續掃
+        const Duration(milliseconds: 1000), (_) => _tryDecode()); // 繼續掃（T89：tick 成本大降，間隔同步變快）
   }
 
   /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
@@ -433,7 +472,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             fit: StackFit.expand,
             children: [
               KeyedSubtree(
-                  key: const Key('webcam-preview'), child: _preview!),
+                  key: const Key('webcam-preview'),
+                  child: KeyedSubtree(
+                      key: ValueKey<int>(_previewEpoch), child: _preview!)),
               // **T88 偵測框**（PM：掃到條碼顯示框）——video 像素座標經
               // object-fit:cover 映射後繪製（與 camera_stream_web 的 video
               // CSS 同步：100%×100%＋cover）；左右雙 QR 各一框。

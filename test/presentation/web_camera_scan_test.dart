@@ -186,6 +186,9 @@ class _FakeController implements CameraStreamController {
   Future<Uint8List?> captureFrame() async => Uint8List.fromList([1]);
 
   @override
+  Future<AnalysisFrame?> captureAnalysisFrame() async => null;
+
+  @override
   Future<void> switchCamera() async {}
 
   @override
