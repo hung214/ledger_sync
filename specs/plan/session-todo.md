@@ -11,6 +11,44 @@
 >   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
 > - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
 
+- [x] **T87 預覽貼邊＋解析度上限**（PM 2026-11-25「鏡頭畫面變小；第二次
+  掃描又更小；要左右貼邊」）：**根因**＝video 元素無 CSS——以**原生
+  解析度**渲染（1920×1080 在預覽槽＝放大裁切；且每次重取相機談判解析度
+  不同——ideal 允許更高（4K）→每次進頁觀感跳動）。**修復**：①video CSS
+  固定 100%×100%＋object-fit:cover（相機 App 標準填滿、置中裁切——
+  解析度變動不再影響觀感；解碼吃全幀不受顯示裁切影響）②約束加
+  **max 1920×1080**（三路徑：初次/facingMode、deviceId 精選、切換——
+  防 4K 截幀拖慢 tick＋穩定談判）。E2E 量測 videoRect＝slotRect（貼邊）。
+
+- [x] **T88 掃描偵測框**（PM 2026-11-25「掃到條碼要有框」）：原生
+  BarcodeDetector 的 **boundingBox**（video 像素座標）接入——
+  DetectedCode（camera_stream 介面＋native/stub）→ 頁面 Stack 疊
+  CustomPaint（_CodeBoxesPainter：object-fit:cover 映射後畫 teal 圓角
+  框＋淡填充，左右雙 QR 各一框；無偵測＝清空）。**註**：zxing2 後備
+  路徑無框（image_qr_scan 未回座標——未來增強）；前鏡頭鏡像未映射
+  （掃描主流＝後鏡頭）。
+
+- [x] **T86 紅米辨識修復＋雙引擎＋tick 死鎖防護＋照片按鈕**（PM 2026-11-25
+  三線索：①紅米 Note 11 Pro 5G 辨識不到（iPhone 17 Pro 可）②「切換鏡頭
+  再切回來就突然變得容易辨識」③「第一張掃到之後其他張就順＋感覺有
+  功能卡住」——**根因**：`_acquireRearCamera` 的 deviceId 精選重取
+  **丟失 hiRes 約束**（只給 deviceId＝Android Chrome 開 640×480 預設檔，
+  QR 模組過小；多後鏡頭機型必觸發）——switchCamera 路徑走
+  _tryGetUserMedia（有 hiRes）→ 切換來回後解析度升級＝PM 觀察的「變好」。
+  **修復**：a. 精選重取帶回 width/height ideal 1920×1080
+  b. **雙引擎併聯**——原生 BarcodeDetector 沒中→同 tick zxing2 擷幀
+  （Android Chrome 偵測器存在但底層不作用時不再卡死；每 tick 截圖＝
+  照片附件來源；診斷行加「引擎 原生/後備」）
+  c. **tick 死鎖防護**——_tryDecode 包 try/finally（原寫法擷幀/解碼擲
+  例外＝_decoding 永遠 true＝掃描迴圈死鎖＝「功能卡住」）＋captureFrame
+  readyState 檢查＋解碼器例外防護
+  d. **確認清單照片**（PM：有變形＋不用直接顯示）——預設隱藏＋
+  「顯示照片」按鈕（逐張重設）；顯示時一般照片 BoxFit.contain
+  （原 fill 把 16:9 幀塞 4:3 框＝拉扁）；OCR 框項目保留 fill（T21 對位）
+  ✓291 全綠＋analyze 0✓本機＋線上 E2E（照片按鈕截圖）✓部署
+  **0.5.1-pwa.20261125o** → 待 PM 真機驗收（紅米重開 PWA 待 SW 換版，
+  版本戳 20261125o；診斷行解析度應為 1280×720 以上）
+
 - [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（PM 2026-11-25 指示
   「回到 pwa-0.5.2 重新處理」——T84 修復版（html5-qrcode）實機仍三問題：
   ①半透明方框遮罩＋video 溢出遮住選單按鈕 ②辨識良率沒變好 ③中央
@@ -66,7 +104,17 @@
   4 輪（≈4.8s）升檔 1.5×→2×→2.5×＋常駐引導。✓291 全綠＋
   analyze 0✓部署 0.5.1-pwa.20261124n（CDN ✓）。
 
-## 已完成（PM 2026-11-25：T85 掃描回歸 pwa-0.5.2＋TwEin——待 PM 真機驗證 0.5.1-pwa.20261125n）
+## 已完成（PM 2026-11-25：T87/T88 預覽貼邊＋掃描偵測框——待 PM 真機驗證）
+
+- [x] **T87 預覽貼邊＋解析度上限**／**T88 掃描偵測框**（詳見本檔頂部
+  區塊）：PM 實測 T86「成功機率變快很多」✓；新回饋「鏡頭畫面變小、
+  第二次更小、要左右貼邊」＋「掃到條碼要有框」→ video CSS cover＋
+  max 上限＋boundingBox 偵測框。
+
+- [ ] **PM 真機驗證**（重開 PWA 待 SW 換版——版本戳見部署）：
+  ①鏡頭預覽**左右（上下）貼滿**預覽區，且每次進掃描頁尺寸一致
+  ②掃到條碼時畫面上出現**teal 圓角框**（雙 QR 兩框）
+  ③紅米辨識率維持 T86 水準（診斷行解析度 ≤1920×1080）
 
 - [x] **T85 掃描架構回歸 pwa-0.5.2＋TwEin 疊加**（詳見本檔頂部區塊）：
   分支 `feat/pwa-scan-ui-fix`（待 MR→ios-pwa）✓291 全綠＋analyze 0✓
