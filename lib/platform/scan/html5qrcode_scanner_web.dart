@@ -10,9 +10,7 @@ library;
 
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe'; // 動態成員（TwEn 全域方法呼叫）。
-
-import 'dart:ui_web' as ui_web;
+import 'dart:js_interop_unsafe'; // callMethod 需要
 
 import 'package:web/web.dart' as web;
 
@@ -101,12 +99,21 @@ class Html5QrScannerImpl implements Html5QrScanner {
 
   @override
   void registerReaderView(String viewType) {
-    ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-      return (web.document.createElement('div') as web.HTMLDivElement)
-        ..id = 'ls-h5q-reader'
-        ..style.width = '100%'
-        ..style.height = '100%';
-    });
+    // 不再使用 platform view，改直接在 start() 中建立 div。
+    // 這裡保留空實作以滿足介面要求。
+  }
+
+  @override
+  Future<bool> checkReaderDivReady(String elementId) async {
+    try {
+      final div = web.document.getElementById(elementId);
+      if (div == null) return false;
+      // 檢查 div 是否在 DOM 樹中且有尺寸
+      final rect = div.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

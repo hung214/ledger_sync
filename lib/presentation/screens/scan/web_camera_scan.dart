@@ -46,9 +46,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   Widget? _preview;
   late final Html5QrScanner _scanner = ref.read(html5QrScannerProvider);
 
-  /// 掛載 div（platform view——html5-qrcode 在此 element 內建 video）。
+  /// 掛載 div（html5-qrcode 在此 element 內建 video）。
   static const String _readerViewType = 'html5qrcode-reader';
-  bool _readerRegistered = false;
 
   /// **session 級去重＝條碼原始內容**（PM 2026-11-22 修「換一張發票就
   /// 掃描不到」：不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
@@ -110,17 +109,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       });
       return;
     }
-    // platform view：reader div（html5-qrcode 在此 element 內建 video）。
-    // **HtmlElementView 僅 web**——VM 測試用佔位（fake onDecoded 照常驅動）。
+    // 直接建立 container div（html5-qrcode 會在其中建立 video 元素）。
+    // 不再使用 platform view，直接在 DOM 建立 container div。
     if (kIsWeb) {
-      if (!_readerRegistered) {
-        _scanner.registerReaderView(_readerViewType); // 互操作層（web 建 div）。
-        _readerRegistered = true;
-      }
-      _preview = const HtmlElementView(viewType: _readerViewType);
+      _scanner.registerReaderView(_readerViewType); // 現在只建立 container div
     } else {
-      _preview = const SizedBox(key: Key('fake-preview'));
+      // VM 測試用佔位
     }
+    // 使用簡單容器替代 HtmlElementView（不再需要 platform view）。
+    _preview = const SizedBox();
     setState(() {
       _zoomHint = '對準發票左下角 QR · 保持 15~20 公分'; // 初始引導
     });
