@@ -589,6 +589,59 @@ class WebCameraStreamController implements CameraStreamController {
 
   web.HTMLCanvasElement? _analysisCanvas; // 重用（免每 tick 建 canvas）
 
+  static bool? _isIOSCache;
+  bool get _isIOS {
+    if (_isIOSCache != null) return _isIOSCache!;
+    try {
+      final ua = web.window.navigator.userAgent.toLowerCase();
+      return _isIOSCache =
+          ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    } catch (_) {
+      return _isIOSCache = false;
+    }
+  }
+
+  int _previewGen = 0; // T89c：iOS 返回完全重建世代（viewType 後綴）
+
+  @override
+  Future<Widget?> restartPreviewFresh() async {
+    if (!_isIOS) return null; // 非 iOS——維持 epoch＋resume 輕量路徑。
+    // **T89c**（PM：iPhone 掃一張返回後預覽又變小——Android/桌面已好）：
+    // WebKit 對「重掛的 video/slot」殘留轉場/尺寸狀態，同元素重掛治不了
+    // → **完全重建**：新 video 元素（含 CSS）＋新串流＋新 viewType slot
+    // ＝「第一次啟動行為」（整頁重載同款，PM 已驗證可靠）。
+    _watchdog?.cancel();
+    try {
+      web.document.removeEventListener('visibilitychange', _visibilityHandler);
+      _visibilityHandler = null;
+    } catch (_) {}
+    try {
+      _video?.srcObject = null;
+    } catch (_) {}
+    _stopStreamTracks();
+    await Future.delayed(const Duration(milliseconds: 600)); // iOS 硬體釋放
+    final gen = ++_previewGen;
+    final vt = '$_sharedViewType-$gen';
+    final video = (web.document.createElement('video') as web.HTMLVideoElement)
+      ..autoplay = true
+      ..muted = true
+      ..playsInline = true;
+    _assertPreviewCss(video);
+    _sharedVideo = video;
+    _video = video;
+    ui_web.platformViewRegistry
+        .registerViewFactory(vt, (int viewId) => _sharedVideo!);
+    try {
+      await _openOn(video);
+    } catch (_) {
+      return null; // 重取失敗——不換 widget（舊畫面維持，看門狗自癒）。
+    }
+    _attachVisibilityRevival(video);
+    _healCount = 0;
+    _startWatchdog(video);
+    return HtmlElementView(viewType: vt);
+  }
+
   @override
   Future<void> resumePreview() async {
     final v = _video;

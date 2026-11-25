@@ -73,6 +73,12 @@ abstract interface class CameraStreamController {
   /// ＋補 play（不重新談判相機）。native/stub：no-op。
   Future<void> resumePreview();
 
+  /// 預覽**完全重建**（T89c——iOS WebKit 對重掛的 video/slot 殘留
+  /// 轉場/尺寸狀態，重掛同元素治不了）：新 video 元素＋新串流＋新
+  /// viewType slot＝「第一次啟動行為」。**僅 web/iOS 實作**——非 iOS
+  /// 回 null（呼叫端維持 [resumePreview] 輕量路徑）。native/stub：null。
+  Future<Widget?> restartPreviewFresh();
+
   /// 停止串流並釋放。
   void dispose();
 

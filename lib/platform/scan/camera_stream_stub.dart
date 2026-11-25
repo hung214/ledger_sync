@@ -20,6 +20,9 @@ class _StubCameraController implements CameraStreamController {
   Future<void> resumePreview() async {}
 
   @override
+  Future<Widget?> restartPreviewFresh() async => null;
+
+  @override
   Future<void> switchCamera() async =>
       throw const CameraUnavailableException('此平台未支援相機串流');
 

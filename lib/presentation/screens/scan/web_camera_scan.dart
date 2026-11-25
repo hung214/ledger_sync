@@ -359,9 +359,18 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // 換 epoch key → HtmlElementView 重建 → 註冊工廠重新掛載 video →
     // slot 重新量測＝恢復貼滿。CSS 另由看門狗每秒重斷言（雙保險）。
     setState(() => _previewEpoch++);
-    // **T89b**（PM：重建後「鏡頭消失，要切換鏡頭才會顯示」）——行動版
-    // 重掛 video 中斷播放管線：重綁串流＋補 play（不重新談判相機）。
-    await _controller.resumePreview();
+    // **T89c**（PM：iPhone 返回後預覽又變小——Android/桌面 epoch＋resume
+    // 已好）：iOS WebKit 對重掛的 video/slot 殘留狀態 → **完全重建**
+    // （新元素＋新串流＋新 slot）；其他平台 → 輕量 resume（重綁＋play）。
+    final fresh = await _controller.restartPreviewFresh();
+    if (!mounted) return;
+    if (fresh != null) {
+      setState(() => _preview = fresh);
+    } else {
+      // **T89b**（PM：重建後「鏡頭消失，要切換鏡頭才會顯示」）——行動版
+      // 重掛 video 中斷播放管線：重綁串流＋補 play（不重新談判相機）。
+      await _controller.resumePreview();
+    }
   }
 
   Future<void> _finish() async {

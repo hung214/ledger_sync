@@ -192,6 +192,9 @@ class _FakeController implements CameraStreamController {
   Future<void> resumePreview() async {}
 
   @override
+  Future<Widget?> restartPreviewFresh() async => null;
+
+  @override
   Future<void> switchCamera() async {}
 
   @override
