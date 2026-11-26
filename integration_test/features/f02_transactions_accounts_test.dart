@@ -11,6 +11,7 @@ import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 import 'package:ledger_sync/presentation/app_shell.dart';
 import 'package:ledger_sync/presentation/screens/ledger/ledger_page.dart';
 import 'package:ledger_sync/presentation/screens/ledger/recent_deletions_page.dart';
+import 'package:ledger_sync/presentation/screens/quick_entry/amount_keypad.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_controller.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_page.dart';
 
@@ -312,32 +313,46 @@ void _bind(GherkinRunner runner, _World w) {
   });
 
   // ── Then／When：計算機鍵盤（F02-FE S2.9）─────────────────
-  runner.on(r'金額欄下方顯示常駐計算機鍵盤$', (p) async {
+  runner.on(r'金額欄聚焦後顯示計算機鍵盤$', (p) async {
+    // 聚焦滑入制（PM 2026-11-26）：計算機＝金額欄聚焦才由下滑入。
+    await w.tester.tap(find.byKey(const Key('quick-entry-amount')));
+    await w.tester.pumpAndSettle();
     expect(
       w.tester.any(find.byKey(const Key('amount-keypad'))),
       isTrue,
-      reason: '金額欄下方應有常駐計算機鍵盤（S2.9：不彈系統鍵盤）',
+      reason: '金額欄聚焦後應顯示計算機鍵盤（聚焦滑入制；不彈系統鍵盤）',
     );
   });
 
   runner.on(r'以計算機鍵盤計算 {expr}$', (p) async {
+    // 聚焦滑入制：先聚焦金額欄讓計算機滑入（重複聚焦無害），再逐鍵輸入。
+    // ＝ 鍵已移除（PM 2026-10-24 即時求值）——不再 tap keypad-＝（舊綁定已失效）。
+    await w.tester.tap(find.byKey(const Key('quick-entry-amount')));
+    await w.tester.pumpAndSettle();
     for (final ch in p['expr']!.split('')) {
       await w.tester.tap(find.byKey(Key('keypad-${_keypadLabel(ch)}')));
       await w.tester.pump();
     }
-    await w.tester.tap(find.byKey(const Key('keypad-＝')));
-    await w.tester.pump();
+    await w.tester.pumpAndSettle();
   });
 
   runner.on(r'於計算機鍵盤按 {key}$', (p) async {
+    // 聚焦滑入制：確保計算機已滑入（金額欄聚焦；重複聚焦無害）。
+    await w.tester.tap(find.byKey(const Key('quick-entry-amount')));
+    await w.tester.pumpAndSettle();
     await w.tester.tap(find.byKey(Key('keypad-${p['key']}')));
     await w.tester.pump();
   });
 
   runner.on(r'金額欄顯示 {value}$', (p) async {
     final state = _amountEditableState(w);
-    expect(state.widget.controller.text, p['value'],
-        reason: '金額欄應顯示 ${p['value']}（＝ 求值；TWD 四捨五入整數元）');
+    // ＝ 已移除（PM 2026-10-24）：金額欄顯示**原始運算式** → 斷言改比對
+    // **求值結果**（AmountKeypadEvaluator 即時求值；TWD 四捨五入整數元）。
+    final evaluated =
+        AmountKeypadEvaluator.evaluate(state.widget.controller.text);
+    expect(evaluated, int.parse(p['value']!),
+        reason: '金額欄運算式「${state.widget.controller.text}」應求值為 '
+            '${p['value']}（即時求值；TWD 四捨五入整數元）');
   });
 }
 

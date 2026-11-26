@@ -33,6 +33,11 @@ class QuickEntryPage extends ConsumerStatefulWidget {
 class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   final _amountCtrl = TextEditingController();
 
+  // 小算盤＝**聚焦滑入制**（PM 2026-11-27 比照編輯交易：聚焦金額欄 → 滑入；
+  // 失焦或壓住小算盤向下滑 → 滑出；文字欄聚焦 → 完成列）。
+  final _amountFocus = FocusNode();
+  bool _amountFocused = false;
+
   // 文字欄位聚焦 → **隱藏計算機鍵盤**（PM 2026-11-23：避免遮擋輸入框）。
   final _merchantFocus = FocusNode();
   final _noteFocus = FocusNode();
@@ -45,9 +50,15 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
     }
   }
 
+  void _onAmountFocus() {
+    if (!mounted) return;
+    setState(() => _amountFocused = _amountFocus.hasFocus);
+  }
+
   @override
   void initState() {
     super.initState();
+    _amountFocus.addListener(_onAmountFocus);
     _merchantFocus.addListener(_onTextFocusChanged);
     _noteFocus.addListener(_onTextFocusChanged);
   }
@@ -73,6 +84,8 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
 
   @override
   void dispose() {
+    _amountFocus.removeListener(_onAmountFocus);
+    _amountFocus.dispose();
     _merchantFocus.removeListener(_onTextFocusChanged);
     _noteFocus.removeListener(_onTextFocusChanged);
     _merchantFocus.dispose();
@@ -86,16 +99,20 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   /// 相位轉移驅動（SDD §5.1）：入 SavedDialog → 彈每筆確認；離開 → 金額清空。
   void _onPhaseChange(QuickEntryPhase? prev, QuickEntryPhase next) {
     if (prev == null) return;
-    if (next == QuickEntryPhase.savedDialog && prev != QuickEntryPhase.savedDialog) {
+    if (next == QuickEntryPhase.savedDialog &&
+        prev != QuickEntryPhase.savedDialog) {
       showDialog<void>(
         context: context,
-        builder: (_) => SavedDialog(onFinish: () => Navigator.of(context).pop()),
+        builder: (_) =>
+            SavedDialog(onFinish: () => Navigator.of(context).pop()),
       );
     }
-    if (prev == QuickEntryPhase.savedDialog && next != QuickEntryPhase.savedDialog) {
+    if (prev == QuickEntryPhase.savedDialog &&
+        next != QuickEntryPhase.savedDialog) {
       _amountCtrl.clear(); // 繼續：金額清空（FR-Q5 Sticky 不含金額）
       _noteCtrl.clear(); // 備註屬每筆欄位（不 Sticky）
       setState(() => _expr = ''); // 計算機運算式隨金額重設（F02 S2.9）
+      _amountFocus.requestFocus(); // 繼續記下一筆：金額欄就緒（PM 2026-11-26）
     }
   }
 
@@ -103,6 +120,8 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
   /// （儲存啟用由 int.tryParse 決定——運算式未完成自然禁用）。
   void _onKeypadExpr(String expr) {
     setState(() => _expr = expr);
+    // 金額欄顯示**原始運算式**（PM 2026-11-26：＝ 鍵求值——按 ＝ 才收合為結果；
+    // 即時求值顯示退役——與 ＝ 鍵語意衝突）。
     _amountCtrl.text = expr;
     ref.read(quickEntryControllerProvider.notifier).setAmount(expr);
   }
@@ -113,9 +132,11 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
     final controller = ref.read(quickEntryControllerProvider.notifier);
     final accounts = ref.watch(activeAccountsProvider);
     // 分類集依模式（支出／收入；PM 2026-10-24）。
-    final categories = ref.watch(state.mode == QuickEntryMode.income
-        ? incomeCategoriesProvider
-        : expenseCategoriesProvider);
+    final categories = ref.watch(
+      state.mode == QuickEntryMode.income
+          ? incomeCategoriesProvider
+          : expenseCategoriesProvider,
+    );
     // 分類索引＋顯示規則（PM 2026-10-25：共用 category_display——修正子類別
     // icon='' 導致 `??` 不回退主類別圖示之缺陷）。
     final catById = categoryIndex(categories);
@@ -126,8 +147,9 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
     // 欄位 ↔ state 同步（PM 2026-10-24）：「記住上次」帶入金額/商家、繼續清空
     // 金額/備註時，受控文字欄須反映（金額欄亦驅動計算機運算式顯示）。
     ref.listen(
-      quickEntryControllerProvider
-          .select((s) => (s.amount, s.merchant, s.note)),
+      quickEntryControllerProvider.select(
+        (s) => (s.amount, s.merchant, s.note),
+      ),
       (prev, next) {
         if (!mounted) return;
         final (amount, merchant, note) = next;
@@ -154,11 +176,18 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
           IconButton(
             key: const Key('qe-theme-toggle'),
             tooltip: themeMode == ThemeMode.dark ? '切換淺色' : '切換深色',
-            onPressed: () => ref.read(themeModeProvider.notifier).set(
-                themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark),
-            icon: Icon(themeMode == ThemeMode.dark
-                ? Icons.light_mode_outlined
-                : Icons.dark_mode_outlined),
+            onPressed: () => ref
+                .read(themeModeProvider.notifier)
+                .set(
+                  themeMode == ThemeMode.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark,
+                ),
+            icon: Icon(
+              themeMode == ThemeMode.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
           ),
         ],
       ),
@@ -175,15 +204,22 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     key: const Key('quick-entry-mode'),
                     segments: [
                       const ButtonSegment(
-                          value: QuickEntryMode.expense, label: Text('支出')),
+                        value: QuickEntryMode.expense,
+                        label: Text('支出'),
+                      ),
                       const ButtonSegment(
-                          value: QuickEntryMode.income, label: Text('收入')),
+                        value: QuickEntryMode.income,
+                        label: Text('收入'),
+                      ),
                       const ButtonSegment(
-                          value: QuickEntryMode.transfer, label: Text('轉帳')),
+                        value: QuickEntryMode.transfer,
+                        label: Text('轉帳'),
+                      ),
                       if (accounts.any((a) => a.type == 'credit'))
                         const ButtonSegment(
-                            value: QuickEntryMode.repay,
-                            label: Text('繳卡費')),
+                          value: QuickEntryMode.repay,
+                          label: Text('繳卡費'),
+                        ),
                     ],
                     selected: {state.mode},
                     onSelectionChanged: (modes) =>
@@ -194,26 +230,29 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                   TextField(
                     key: const Key('quick-entry-amount'),
                     controller: _amountCtrl,
-                    autofocus: true, // S1.1-5
-                    keyboardType: TextInputType.none, // 常駐鍵盤（F02 S2.9）
+                    focusNode: _amountFocus,
+                    autofocus: true, // S1.1-5（聚焦 → 計算機滑入）
+                    keyboardType: TextInputType.none, // 系統鍵盤不彈（F02 S2.9）
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .displaySmall
+                    style: Theme.of(context).textTheme.displaySmall
                         ?.copyWith(fontWeight: FontWeight.w800),
                     decoration: const InputDecoration(
-                        hintText: '0', border: InputBorder.none),
+                      hintText: '0',
+                      border: InputBorder.none,
+                    ),
                     onChanged: controller.setAmount,
                   ),
                   // 金額下方小字＝**帳戶（Sticky）**（03 雛型；PM 2026-10-25）。
                   Center(
                     child: Text(
-                        state.account == null
-                            ? '帳戶：未選擇'
-                            : '帳戶：${state.account!.name}（Sticky）',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.outline)),
+                      state.account == null
+                          ? '帳戶：未選擇'
+                          : '帳戶：${state.account!.name}（Sticky）',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   // PM 2026-10-25：分類**不再平鋪**（03／10 雛型）——改由下方「分類」欄
@@ -225,51 +264,54 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                      IconButton(
-                        key: const Key('date-prev'),
-                        iconSize: 30,
-                        tooltip: '前一天',
-                        onPressed: () => controller.setOccurredAt(
-                            state.occurredAt.subtract(const Duration(days: 1))),
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                      TextButton(
-                        key: const Key('quick-entry-time'),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                        IconButton(
+                          key: const Key('date-prev'),
+                          iconSize: 30,
+                          tooltip: '前一天',
+                          onPressed: () => controller.setOccurredAt(
+                            state.occurredAt.subtract(const Duration(days: 1)),
+                          ),
+                          icon: const Icon(Icons.chevron_left),
                         ),
-                        onPressed: () {
-                          showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (_) => QuickDateTimePicker(
-                              initial: state.occurredAt,
-                              onSelected: controller.setOccurredAt,
+                        TextButton(
+                          key: const Key('quick-entry-time'),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          );
-                        },
-                        child: Text(
-                          _dateLabel(state.occurredAt),
-                          // PM 2026-10-23：日期放大（1.5×）。
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                  fontSize: 20, fontWeight: FontWeight.w700),
+                          ),
+                          onPressed: () {
+                            showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => QuickDateTimePicker(
+                                initial: state.occurredAt,
+                                onSelected: controller.setOccurredAt,
+                              ),
+                            );
+                          },
+                          child: Text(
+                            _dateLabel(state.occurredAt),
+                            // PM 2026-10-23：日期放大（1.5×）。
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        key: const Key('date-next'),
-                        iconSize: 30,
-                        tooltip: '後一天',
-                        onPressed: () => controller.setOccurredAt(
-                            state.occurredAt.add(const Duration(days: 1))),
-                        icon: const Icon(Icons.chevron_right),
-                      ),
+                        IconButton(
+                          key: const Key('date-next'),
+                          iconSize: 30,
+                          tooltip: '後一天',
+                          onPressed: () => controller.setOccurredAt(
+                            state.occurredAt.add(const Duration(days: 1)),
+                          ),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
                       ],
                     ),
                   ),
@@ -285,8 +327,8 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                             label: state.mode == QuickEntryMode.transfer
                                 ? '來源帳戶'
                                 : state.mode == QuickEntryMode.repay
-                                    ? '扣款帳戶'
-                                    : '帳戶',
+                                ? '扣款帳戶'
+                                : '帳戶',
                             text: state.account?.name ?? '選擇帳戶',
                             entries: accounts
                                 .map((a) => (a.id, a.name, false))
@@ -311,19 +353,18 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                                   onSelected: controller.selectToAccountById,
                                 )
                               : state.mode == QuickEntryMode.repay
-                                  // 繳卡費（T77）：右欄＝**繳費卡片**（僅信用卡）。
-                                  ? _pickerField(
-                                      key: const Key('quick-entry-target'),
-                                      label: '繳費卡片',
-                                      text: state.toAccount?.name ?? '選擇卡片',
-                                      entries: accounts
-                                          .where((a) => a.type == 'credit')
-                                          .map((a) => (a.id, a.name, false))
-                                          .toList(),
-                                      recent: const [],
-                                      onSelected:
-                                          controller.selectToAccountById,
-                                    )
+                              // 繳卡費（T77）：右欄＝**繳費卡片**（僅信用卡）。
+                              ? _pickerField(
+                                  key: const Key('quick-entry-target'),
+                                  label: '繳費卡片',
+                                  text: state.toAccount?.name ?? '選擇卡片',
+                                  entries: accounts
+                                      .where((a) => a.type == 'credit')
+                                      .map((a) => (a.id, a.name, false))
+                                      .toList(),
+                                  recent: const [],
+                                  onSelected: controller.selectToAccountById,
+                                )
                               // 分類欄（PM 2026-10-24）：點選 → 彈窗（上常用／左主／右子）；
                               // 顯示「主類別 emoji ＋ 類別名」（子類別＝主類別 emoji＋子名）。
                               : InkWell(
@@ -331,18 +372,24 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                                   onTap: _openCategoryPicker,
                                   child: InputDecorator(
                                     decoration: const InputDecoration(
-                                        labelText: '分類',
-                                        border: OutlineInputBorder(),
-                                        isDense: true,
-                                        // 03 雛型「›」：可點提示（與輸入欄位區隔）。
-                                        suffixIcon: Icon(Icons.chevron_right,
-                                            size: 18)),
+                                      labelText: '分類',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      // 03 雛型「›」：可點提示（與輸入欄位區隔）。
+                                      suffixIcon: Icon(
+                                        Icons.chevron_right,
+                                        size: 18,
+                                      ),
+                                    ),
                                     child: Text(
-                                        state.category == null
-                                            ? '選擇分類'
-                                            : categoryLabelOf(state.category!,
-                                                byId: catById),
-                                        overflow: TextOverflow.ellipsis),
+                                      state.category == null
+                                          ? '選擇分類'
+                                          : categoryLabelOf(
+                                              state.category!,
+                                              byId: catById,
+                                            ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -356,12 +403,13 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     TextField(
                       enabled: false,
                       decoration: InputDecoration(
-                          labelText: '分類／商家',
-                          hintText: state.mode == QuickEntryMode.repay
-                              ? '不適用（繳卡費語意）'
-                              : '不適用（轉帳語意）',
-                          border: const OutlineInputBorder(),
-                          isDense: true),
+                        labelText: '分類／商家',
+                        hintText: state.mode == QuickEntryMode.repay
+                            ? '不適用（繳卡費語意）'
+                            : '不適用（轉帳語意）',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     )
                   else
                     TextField(
@@ -369,10 +417,11 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                       controller: _merchantCtrl,
                       focusNode: _merchantFocus,
                       decoration: const InputDecoration(
-                          labelText: '商家（點 › 選常用商家）',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          suffixIcon: MerchantSuffixIcon()),
+                        labelText: '商家（點 › 選常用商家）',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: MerchantSuffixIcon(),
+                      ),
                       onChanged: controller.setMerchant,
                     ),
                   const SizedBox(height: 12),
@@ -382,67 +431,88 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     controller: _noteCtrl,
                     focusNode: _noteFocus,
                     decoration: const InputDecoration(
-                        labelText: '備註（選填）',
-                        border: OutlineInputBorder(),
-                        isDense: true),
+                      labelText: '備註（選填）',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                     onChanged: controller.setNote,
                   ),
                   // 本次已記 N 筆（03 雛型；PM 2026-10-25。附件 📷 先不做）。
                   if (state.sessionCount > 0) ...[
                     const SizedBox(height: 10),
                     Center(
-                      child: Text('本次已記 ${state.sessionCount} 筆',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context).colorScheme.outline)),
+                      child: Text(
+                        '本次已記 ${state.sessionCount} 筆',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
                     ),
                   ],
                 ],
               ),
             ),
-            // 浮動底部面板（PM 2026-10-22）：OK 儲存鈕在計算機**上方**，
-            // 計算機貼底常駐（不隨內容捲動）。
-            Container(
-              margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .shadow
-                        .withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: _textEditing
-                  ? Row(children: [
-                      const Text('輸入文字中…',
-                          style: TextStyle(fontSize: 13)),
-                      const Spacer(),
-                      TextButton(
-                        key: const Key('text-edit-done'),
-                        onPressed: () => FocusScope.of(context).unfocus(),
-                        child: const Text('完成'),
-                      ),
-                    ])
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // OK 已移入鍵盤第一排（PM 2026-10-24：C／⌫／OK；移除「＝」）。
-                        AmountKeypad(
-                          expr: _expr,
-                          onExprChanged: _onKeypadExpr,
-                          onOk: controller.save,
-                          okEnabled: quickEntrySaveEnabled(state),
-                        ),
-                      ],
+            // 浮動底部面板（PM 2026-10-22）：OK 儲存鈕在計算機**上方**。
+            // 計算機**常駐**（PM 2026-11-26 最終：僅編輯交易採聚焦滑入制）；
+            // 文字欄聚焦 → 收起計算機、顯示「輸入文字中…／完成」列。
+            if (_textEditing)
+              Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.shadow
+                          .withValues(alpha: 0.18),
+                      blurRadius: 14,
+                      offset: const Offset(0, -3),
                     ),
-            ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Text('輸入文字中…', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    TextButton(
+                      key: const Key('text-edit-done'),
+                      onPressed: () => FocusScope.of(context).unfocus(),
+                      child: const Text('完成'),
+                    ),
+                  ],
+                ),
+              )
+            else
+              FocusSlideKeypad(
+                visible: _amountFocused,
+                // 壓住小算盤向下滑 → 只收小算盤（失焦），不離開頁面。
+                onDragDismiss: () => FocusScope.of(context).unfocus(),
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.shadow
+                            .withValues(alpha: 0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, -3),
+                      ),
+                    ],
+                  ),
+                  // OK 已移入鍵盤第一排（PM 2026-10-24：C／⌫／OK；移除「＝」）。
+                  child: AmountKeypad(
+                    expr: _expr,
+                    onExprChanged: _onKeypadExpr,
+                    onOk: controller.save,
+                    okEnabled: quickEntrySaveEnabled(state),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -462,7 +532,8 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
     if (!mounted || pick == null) return;
     switch (pick) {
       case CategoryPicked(:final categoryId):
-        ref.read(quickEntryControllerProvider.notifier)
+        ref
+            .read(quickEntryControllerProvider.notifier)
             .selectCategoryById(categoryId);
       case CategoryAddRequested(:final asSub, :final parentId):
         await _quickAddCategory(asSub: asSub, parentId: parentId);
@@ -471,8 +542,10 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
 
   /// 分類即時新增（PM 2026-10-24：彈窗各欄「＋」）：名稱即建，
   /// 重名走 CategoryService 拒絕提示；建立後立即選取。
-  Future<void> _quickAddCategory(
-      {required bool asSub, String? parentId}) async {
+  Future<void> _quickAddCategory({
+    required bool asSub,
+    String? parentId,
+  }) async {
     parentId ??= asSub ? _selectedMainId : null;
     if (asSub && parentId == null) return; // 無選中主類別不可加子分類
     final ctrl = TextEditingController();
@@ -488,27 +561,31 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('取消')),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
           FilledButton(
-              key: const Key('quick-add-category-save'),
-              onPressed: () =>
-                  Navigator.of(dialogCtx).pop(ctrl.text.trim()),
-              child: const Text('建立')),
+            key: const Key('quick-add-category-save'),
+            onPressed: () => Navigator.of(dialogCtx).pop(ctrl.text.trim()),
+            child: const Text('建立'),
+          ),
         ],
       ),
     );
     if (name == null || name.isEmpty) return;
     try {
       final row = CategoryService(ref.read(dbProvider)).create(
-          kind: ref.read(quickEntryControllerProvider).mode ==
-                  QuickEntryMode.income
-              ? 'income'
-              : 'expense',
-          name: name,
-          parentId: parentId);
+        kind:
+            ref.read(quickEntryControllerProvider).mode == QuickEntryMode.income
+            ? 'income'
+            : 'expense',
+        name: name,
+        parentId: parentId,
+      );
       _refreshCategories();
-      ref.read(quickEntryControllerProvider.notifier).selectCategoryById(row.id);
+      ref
+          .read(quickEntryControllerProvider.notifier)
+          .selectCategoryById(row.id);
       if (!asSub) setState(() => _selectedMainId = row.id);
     } catch (e) {
       if (mounted) {
@@ -526,7 +603,6 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
       '${DateFormat('MM/dd').format(t)}'
       '（${_weekdays[t.weekday - 1]}）'
       '${DateFormat('HH:mm').format(t)}';
-
 
   /// 分類選單項（主類別→子分類縮排；FR-B1 階層）。
   /// 第三元素＝是否子分類（結構化縮排渲染——文字保持原樣供精確比對）。
@@ -550,32 +626,43 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
           PopupMenuItem<String>(
             key: const Key('picker-add-category'),
             onTap: addCategoryAction,
-            child: Row(children: [
-              Icon(Icons.add,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 6),
-              const Text('新增分類'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.add,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                const Text('新增分類'),
+              ],
+            ),
           ),
         // 常用類別（FR-B1 常用區）：最近使用 10 個，常駐最上方。
         if (recent.isNotEmpty) ...[
           const PopupMenuItem(
             enabled: false,
             height: 34,
-            child: Text('常用',
-                style:
-                    TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            child: Text(
+              '常用',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
           for (final (id, name, _) in recent)
             PopupMenuItem(
               key: Key('recent-cat-$name'),
               value: id,
-              child: Row(children: [
-                Icon(Icons.history,
-                    size: 16, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 6),
-                Text(name),
-              ]),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.history,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(name),
+                ],
+              ),
             ),
           const PopupMenuDivider(),
         ],
@@ -585,11 +672,13 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
             child: isSub
                 ? Padding(
                     padding: const EdgeInsets.only(left: 28),
-                    child: Row(children: [
-                      const Icon(Icons.subdirectory_arrow_right, size: 14),
-                      const SizedBox(width: 4),
-                      Text(name),
-                    ]),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.subdirectory_arrow_right, size: 14),
+                        const SizedBox(width: 4),
+                        Text(name),
+                      ],
+                    ),
                   )
                 : Text(name),
           ),
@@ -620,9 +709,7 @@ class MerchantSuffixIcon extends ConsumerWidget {
       onPressed: () async {
         final name = await showMerchantPicker(context, ref);
         if (name == null || name.isEmpty) return;
-        ref
-            .read(quickEntryControllerProvider.notifier)
-            .setMerchant(name);
+        ref.read(quickEntryControllerProvider.notifier).setMerchant(name);
       },
     );
   }
@@ -666,10 +753,7 @@ class SavedDialog extends ConsumerWidget {
           },
           child: const Text('繼續'),
         ),
-        TextButton(
-          onPressed: controller.undoLast,
-          child: const Text('復原上一筆'),
-        ),
+        TextButton(onPressed: controller.undoLast, child: const Text('復原上一筆')),
         FilledButton(
           onPressed: () {
             Navigator.of(context).pop();

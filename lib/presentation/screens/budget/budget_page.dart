@@ -13,6 +13,7 @@ import '../../../application/stats/monthly_stats_service.dart';
 import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
 import '../../theme/app_theme.dart';
+import '../quick_entry/amount_keypad.dart';
 import '../quick_entry/category_picker_dialog.dart';
 
 /// 預算頁（FR-B2~B7 呈現面；UI-P3 對照 04-budget 雛型）。
@@ -148,9 +149,31 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
   late final TextEditingController _startDay;
   String? _categoryId;
 
+  /// 計算機作用欄位（PM 2026-11-26：金額**與**週期起始日皆由小算盤輸入，
+  /// 不跳系統鍵盤——聚焦哪個欄位，計算機就編輯哪個）。
+  /// 可見性（同編輯交易）：兩欄皆失焦 → 小算盤向下滑出。
+  final _amountFocus = FocusNode();
+  final _startDayFocus = FocusNode();
+  String _keypadTarget = 'amount';
+  bool _keypadVisible = false;
+
+  void _onTargetFocus() {
+    final startDay = _startDayFocus.hasFocus;
+    final t = startDay ? 'startDay' : 'amount';
+    final visible = _amountFocus.hasFocus || startDay;
+    if ((t != _keypadTarget || visible != _keypadVisible) && mounted) {
+      setState(() {
+        _keypadTarget = t;
+        _keypadVisible = visible;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _amountFocus.addListener(_onTargetFocus);
+    _startDayFocus.addListener(_onTargetFocus);
     final init = widget.initial;
     _mode = init?.mode ?? 'total';
     _amount = TextEditingController(
@@ -164,6 +187,8 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
 
   @override
   void dispose() {
+    _amountFocus.dispose();
+    _startDayFocus.dispose();
     _amount.dispose();
     _startDay.dispose();
     super.dispose();
@@ -171,7 +196,9 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
 
   void _save() {
     final service = BudgetService(ref.read(dbProvider));
-    final amount = int.tryParse(_amount.text.replaceAll(',', '')) ?? 0;
+    // 計算機輸入（聚焦滑入制 PM 2026-11-26）：金額欄＝運算式 → 即時求值
+    // （AmountKeypadEvaluator；TWD 四捨五入整數元）。
+    final amount = AmountKeypadEvaluator.evaluate(_amount.text) ?? 0;
     var day = int.tryParse(_startDay.text) ?? 1;
     day = day.clamp(1, 28);
     switch (_mode) {
@@ -207,8 +234,9 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
         .toList();
     // 預設分類＝首個主類別（平面清單首位會是子分類——sort_order NULL 排序語意）。
     final mainCats = expenseCats.where((c) => c.parentId == null).toList();
-    final defaultCatId =
-        mainCats.isNotEmpty ? mainCats.first.id : expenseCats.first.id;
+    final defaultCatId = mainCats.isNotEmpty
+        ? mainCats.first.id
+        : expenseCats.first.id;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -220,149 +248,243 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SegmentedButton<String>(
-            key: const Key('budget-type'),
-            segments: const [
-              ButtonSegment(
-                value: 'total',
-                label: Text('總預算'),
-                icon: Icon(Icons.savings),
-              ),
-              ButtonSegment(
-                value: 'category',
-                label: Text('分類預算'),
-                icon: Icon(Icons.label_outline),
-              ),
-              ButtonSegment(
-                value: 'goal',
-                label: Text('收入目標'),
-                icon: Icon(Icons.flag),
-              ),
-            ],
-            selected: {_mode},
-            onSelectionChanged: (s) => setState(() {
-              _mode = s.first;
-              // 切入分類模式即綁定預設分類（否則 _categoryId=null 靜默不存）。
-              if (_mode == 'category') {
-                _categoryId ??= defaultCatId;
-              }
-            }),
-          ),
-          if (_mode == 'category') ...[
-            const SizedBox(height: 12),
-            // 分類選擇（PM 2026-11-23：與快記同款——**MRU 前 5** 優先＋
-            // 主類別點選才展開子類別；＋即建即選）。
-            InkWell(
-              key: const Key('budget-category'),
-              onTap: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                final pick = await showCategoryPicker(context, ref,
-                    kind: 'expense',
-                    selectedId: _categoryId ?? defaultCatId,
-                    recentLimit: 5,
-                    // T71 PM 2026-11-24：預算可綁主分類——用量＝主分類
-                    // ＋其全部子分類加總（早餐100＋午餐200 → 餐飲食品 300）。
-                    pickMainLabel: '整個主分類（含子類別）');
-                if (!mounted) return;
-                switch (pick) {
-                  case CategoryPicked(:final categoryId):
-                    // picker 的 context 已過 async gap——用 State.context。
-                    if (!context.mounted) return;
-                    setState(() => _categoryId = categoryId);
-                  case CategoryAddRequested(:final asSub, :final parentId):
-                    // ＋即建即選（快記同款）。
-                    if (!mounted || !context.mounted) return;
-                    final nameCtrl = TextEditingController();
-                    final name = await showDialog<String>(
-                      context: context,
-                      builder: (dialogCtx) => AlertDialog(
-                        title: Text(asSub ? '新增子分類' : '新增主類別'),
-                        content: TextField(
-                          autofocus: true,
-                          controller: nameCtrl,
-                          decoration:
-                              const InputDecoration(labelText: '分類名稱'),
-                        ),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.of(dialogCtx).pop(),
-                              child: const Text('取消')),
-                          FilledButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogCtx).pop(nameCtrl.text.trim()),
-                              child: const Text('建立')),
-                        ],
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SegmentedButton<String>(
+                    key: const Key('budget-type'),
+                    segments: const [
+                      ButtonSegment(
+                        value: 'total',
+                        label: Text('總預算'),
+                        icon: Icon(Icons.savings),
                       ),
-                    );
-                    if (name == null || name.isEmpty || !mounted) return;
-                    try {
-                      final row = CategoryService(ref.read(dbProvider))
-                          .create(kind: 'expense', name: name, parentId: parentId);
-                      if (!mounted) return;
-                      setState(() => _categoryId = row.id);
-                    } catch (e) {
-                      if (mounted) {
-                        messenger.showSnackBar(SnackBar(content: Text('$e')));
+                      ButtonSegment(
+                        value: 'category',
+                        label: Text('分類預算'),
+                        icon: Icon(Icons.label_outline),
+                      ),
+                      ButtonSegment(
+                        value: 'goal',
+                        label: Text('收入目標'),
+                        icon: Icon(Icons.flag),
+                      ),
+                    ],
+                    selected: {_mode},
+                    onSelectionChanged: (s) => setState(() {
+                      _mode = s.first;
+                      // 切入分類模式即綁定預設分類（否則 _categoryId=null 靜默不存）。
+                      if (_mode == 'category') {
+                        _categoryId ??= defaultCatId;
                       }
-                    }
-                  default:
-                    break;
-                }
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: '分類（點選；MRU 5＋兩層）',
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(expenseCats
-                        .where((c) => c.id == (_categoryId ?? defaultCatId))
-                        .map((c) => c.name)
-                        .firstOrNull ??
-                    '未選擇'),
+                    }),
+                  ),
+                  if (_mode == 'category') ...[
+                    const SizedBox(height: 12),
+                    // 分類選擇（PM 2026-11-23：與快記同款——**MRU 前 5** 優先＋
+                    // 主類別點選才展開子類別；＋即建即選）。
+                    InkWell(
+                      key: const Key('budget-category'),
+                      onTap: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final pick = await showCategoryPicker(
+                          context,
+                          ref,
+                          kind: 'expense',
+                          selectedId: _categoryId ?? defaultCatId,
+                          recentLimit: 5,
+                          // T71 PM 2026-11-24：預算可綁主分類——用量＝主分類
+                          // ＋其全部子分類加總（早餐100＋午餐200 → 餐飲食品 300）。
+                          pickMainLabel: '整個主分類（含子類別）',
+                        );
+                        if (!mounted) return;
+                        switch (pick) {
+                          case CategoryPicked(:final categoryId):
+                            // picker 的 context 已過 async gap——用 State.context。
+                            if (!context.mounted) return;
+                            setState(() => _categoryId = categoryId);
+                          case CategoryAddRequested(
+                            :final asSub,
+                            :final parentId,
+                          ):
+                            // ＋即建即選（快記同款）。
+                            if (!mounted || !context.mounted) return;
+                            final nameCtrl = TextEditingController();
+                            final name = await showDialog<String>(
+                              context: context,
+                              builder: (dialogCtx) => AlertDialog(
+                                title: Text(asSub ? '新增子分類' : '新增主類別'),
+                                content: TextField(
+                                  autofocus: true,
+                                  controller: nameCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: '分類名稱',
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogCtx).pop(),
+                                    child: const Text('取消'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogCtx)
+                                            .pop(nameCtrl.text.trim()),
+                                    child: const Text('建立'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (name == null || name.isEmpty || !mounted) {
+                              return;
+                            }
+                            try {
+                              final row = CategoryService(ref.read(dbProvider))
+                                  .create(
+                                    kind: 'expense',
+                                    name: name,
+                                    parentId: parentId,
+                                  );
+                              if (!mounted) return;
+                              setState(() => _categoryId = row.id);
+                            } catch (e) {
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('$e')),
+                                );
+                              }
+                            }
+                          default:
+                            break;
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '分類（點選；MRU 5＋兩層）',
+                          border: OutlineInputBorder(),
+                        ),
+                        child: Text(
+                          expenseCats
+                                  .where(
+                                    (c) =>
+                                        c.id == (_categoryId ?? defaultCatId),
+                                  )
+                                  .map((c) => c.name)
+                                  .firstOrNull ??
+                              '未選擇',
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // 金額＝唯讀顯示運算式（計算機聚焦滑入——PM 2026-11-26）。
+                  TextField(
+                    key: const Key('budget-amount'),
+                    controller: _amount,
+                    focusNode: _amountFocus,
+                    readOnly: true,
+                    showCursor: true,
+                    keyboardType: TextInputType.none,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: '金額（元）',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // 週期起始日＝唯讀顯示（計算機輸入——聚焦切換計算機作用
+                  // 欄位；PM 2026-11-26：不跳系統鍵盤）。
+                  TextField(
+                    key: const Key('budget-start-day'),
+                    controller: _startDay,
+                    focusNode: _startDayFocus,
+                    readOnly: true,
+                    showCursor: true,
+                    keyboardType: TextInputType.none,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: '週期起始日（1~28；FR-B2）',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (widget.initial?.row != null)
+                        TextButton(
+                          key: const Key('budget-delete'),
+                          onPressed: _delete,
+                          child: const Text(
+                            '刪除',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        key: const Key('budget-save'),
+                        onPressed: _save,
+                        child: const Text('儲存'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('budget-amount'),
-            controller: _amount,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: '金額（元）',
-              border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('budget-start-day'),
-            controller: _startDay,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: '週期起始日（1~28；FR-B2）',
-              border: OutlineInputBorder(),
+          // ── 底部固定列（PM 2026-11-26：同編輯交易——聚焦金額／起始日 →
+          // 計算機由下滑入；皆失焦 → 向下滑出）。
+          const SizedBox(height: 8),
+          FocusSlideKeypad(
+            visible: _keypadVisible,
+            // 壓住小算盤向下滑 → 只收小算盤（失焦），不關表單。
+            onDragDismiss: () => FocusScope.of(context).unfocus(),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.shadow
+                        .withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, -3),
+                  ),
+                ],
+              ),
+              child: AmountKeypad(
+                // 計算機編輯「聚焦中的欄位」（金額或週期起始日）。
+                expr: _keypadTarget == 'startDay'
+                    ? _startDay.text
+                    : _amount.text,
+                onExprChanged: (expr) => setState(() {
+                  if (_keypadTarget == 'startDay') {
+                    _startDay.text = expr;
+                  } else {
+                    _amount.text = expr;
+                  }
+                }),
+                onOk: _save,
+                okEnabled:
+                    (AmountKeypadEvaluator.evaluate(_amount.text) ?? 0) > 0,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (widget.initial?.row != null)
-                TextButton(
-                  key: const Key('budget-delete'),
-                  onPressed: _delete,
-                  child: const Text('刪除', style: TextStyle(color: Colors.red)),
-                ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('取消'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                key: const Key('budget-save'),
-                onPressed: _save,
-                child: const Text('儲存'),
-              ),
-            ],
           ),
         ],
       ),
@@ -564,7 +686,8 @@ class _CategoryBudgetsCard extends ConsumerWidget {
             const SizedBox(height: 4),
             for (final b in budgets)
               _CategoryItem(
-                name: (db.categoryName(b.categoryId!) ?? '分類預算') +
+                name:
+                    (db.categoryName(b.categoryId!) ?? '分類預算') +
                     (parentIds.contains(b.categoryId) ? '（含子類）' : ''),
                 usage: evaluator.categoryUsage(b.categoryId!),
                 amountMinor: b.amountMinor,

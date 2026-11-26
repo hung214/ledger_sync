@@ -136,6 +136,10 @@ void main() {
       expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget);
 
       // ②面板計算機：點 1／2／3 → 金額欄顯示 123（原僅改本地運算式＝無效果）。
+      // 改版後鍵盤＝金額欄聚焦才由下滑入（收合時 tap 不到）；desktop-quick-amount
+      // 無 autofocus，須先明確聚焦＋pumpAndSettle 等滑入動畫（220ms）完成。
+      await tester.tap(find.byKey(const Key('desktop-quick-amount')));
+      await tester.pumpAndSettle();
       for (final k in ['keypad-1', 'keypad-2', 'keypad-3']) {
         await tester.tap(find.byKey(Key(k)));
         await tester.pump();
@@ -149,7 +153,9 @@ void main() {
           '123',
           reason: '鍵盤輸入須寫回金額欄與 controller（DBG-014）');
 
-      // OK 儲存 → 入庫。
+      // OK 儲存 → 入庫（先確保金額欄聚焦、鍵盤滑入完成，OK 鍵才 tap 得到）。
+      await tester.tap(find.byKey(const Key('desktop-quick-amount')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('quick-entry-save')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
