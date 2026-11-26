@@ -331,6 +331,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       _recentTexts.removeWhere((_, t) =>
           now2.difference(t) > const Duration(seconds: 3));
       for (final t in texts) {
+        // **T90f**（PM「辨識時慢時快」）：新的**左碼**＝新發票的開始——
+        // 清掉先前孤兒右碼（`**`），防止跨發票混碼（舊右碼拼進新左碼）。
+        if (ImageQrScanner.extractOfficialLeft(t) != null) {
+          _recentTexts.removeWhere((k, _) => k.startsWith('**'));
+        }
         _recentTexts[t] = now2;
       }
     }
@@ -367,6 +372,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         ScannedItem(draft: merged, photoBytes: photoBytes));
     for (final t in accumulated) {
       _seenCodes.add(t);
+      // **T90e**（PM「辨識時慢時快」）：入單即清累積窗——已入單的碼留在
+      // 窗內會**擋住下一張**（舊左碼先命中 _committedLeftCodes → 整個
+      // tick 跳過，要等 3 秒過期才掃得到新發票）。
+      _recentTexts.remove(t);
     }
     if (leftCode != null) _committedLeftCodes.add(leftCode);
     if (mounted) setState(() => _addedFromThisSession++);
@@ -454,9 +463,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _committedLeftCodes.clear();
         _recentTexts.clear();
       }
+      // **T90d**（PM 2026-11-26「確認清單沒按 OK 直接退出→變成連續掃描
+      // 模式」）：原條件「prev 空」——按返回時草稿仍非空 → 之後每掃一張
+      // 都不再自動進確認清單（行為＝連續掃描）。改為「**有新增就觸發**」
+      // （單張模式＝每掃到一張都自動進確認清單；按返回未存的項目保留，
+      // 下一張再掃時連同先前項目一起進確認清單）。
       if (!ref.read(continuousScanProvider) &&
-          (prev == null || prev.isEmpty) &&
-          next.isNotEmpty) {
+          next.length > (prev?.length ?? 0)) {
         _openReview(next);
       }
     });
