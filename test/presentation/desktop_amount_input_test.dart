@@ -158,21 +158,24 @@ void main() {
       find.byKey(const Key('budget-amount')),
     );
     expect(amountField.readOnly, isFalse, reason: '桌面 ≥900 → 可鍵盤輸入');
+    final dayField = tester.widget<TextField>(
+      find.byKey(const Key('budget-start-day')),
+    );
+    expect(dayField.readOnly, isFalse, reason: '起始日桌面亦可鍵盤輸入');
 
     await tester.enterText(find.byKey(const Key('budget-amount')), '30*2');
     await tester.pumpAndSettle();
-    // 起始日仍走計算機（PM 本批僅金額開放鍵盤）：點起始日 → 鍵盤切換作用
-    // 欄位 → C 清空 → 1。
-    await tester.tap(find.byKey(const Key('budget-start-day')));
+    // 起始日亦可鍵盤輸入（PM 2026-11-27：桌面兩欄都開放；僅數字）。
+    await tester.enterText(find.byKey(const Key('budget-start-day')), '15');
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('keypad-C')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('keypad-1')));
-    await tester.pump();
-    await tester.pumpAndSettle();
-    // 計算機 OK＝儲存（金額 30*2＋起始日 1）。
+    // 計算機 OK＝儲存（金額 30*2＝60＋起始日 15）。
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
+
+    expect(find.text('/ 60'), findsOneWidget, reason: '總預算卡額度＝求值 60');
+    final budget = db.allBudgets().first;
+    expect(budget.amountMinor, 60);
+    expect(budget.periodStartDay, 15, reason: '起始日＝鍵盤輸入 15');
 
     expect(find.text('/ 60'), findsOneWidget, reason: '總預算卡額度＝求值 60');
     expect(tester.takeException(), isNull);

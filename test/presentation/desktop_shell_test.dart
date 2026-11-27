@@ -306,8 +306,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 繳卡費 segment（有信用卡 → 顯示；與手機一致）。
+    // 繳卡費 segment（有信用卡 → 顯示；與手機一致）＋**文字禁折行**。
     expect(find.text('繳卡費'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('繳卡費')).maxLines,
+      1,
+      reason: '繳卡費禁折行（PM 2026-11-27：按鈕放寬而非文字換行）',
+    );
     expect(find.byKey(const Key('desktop-quick-category')), findsOneWidget);
     await tester.tap(find.text('繳卡費'));
     await tester.pumpAndSettle();

@@ -427,21 +427,39 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
                   const SizedBox(height: 12),
                   // 週期起始日＝唯讀顯示（計算機輸入——聚焦切換計算機作用
                   // 欄位；PM 2026-11-26：不跳系統鍵盤）。
-                  TextField(
-                    key: const Key('budget-start-day'),
-                    controller: _startDay,
-                    focusNode: _startDayFocus,
-                    readOnly: true,
-                    showCursor: true,
-                    keyboardType: TextInputType.none,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: '週期起始日（1~28；FR-B2）',
-                      border: OutlineInputBorder(),
-                    ),
+                  // PM 2026-11-27 桌面（≥900）：起始日亦可**實體鍵盤**輸入
+                  //（僅數字；_save clamp 1~28）；手機維持唯讀＋計算機。
+                  Builder(
+                    builder: (context) {
+                      final isPhone = MediaQuery.sizeOf(context).width < 900;
+                      return TextField(
+                        key: const Key('budget-start-day'),
+                        controller: _startDay,
+                        focusNode: _startDayFocus,
+                        readOnly: isPhone,
+                        showCursor: true,
+                        keyboardType: isPhone
+                            ? TextInputType.none
+                            : TextInputType.text,
+                        inputFormatters: isPhone
+                            ? null
+                            : [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9]'),
+                                ),
+                              ],
+                        // controller 已持有文字——僅觸發重建（同步鍵盤顯示）。
+                        onChanged: (_) => setState(() {}),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: '週期起始日（1~28；FR-B2）',
+                          border: OutlineInputBorder(),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   Row(

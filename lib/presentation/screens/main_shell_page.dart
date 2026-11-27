@@ -641,32 +641,39 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
           const SizedBox(height: 8),
           // 模式列（PM 2026-10-24：僅 支出／收入／轉帳；三種模式類別各自獨立）。
           // PM 2026-11-27：與手機一致——**繳卡費**（有信用卡才顯示，T77）＋
-          // **關勾選圖示**（選中示意 ICON 移除）。
+          // **關勾選圖示**（選中示意 ICON 移除）；**文字禁折行**（繳卡費
+          // 先前被擠成直行）＋收緊內距——按鈕以內容寬度排列不換行。
           SegmentedButton<QuickEntryMode>(
             key: const Key('desktop-quick-mode'),
             showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity(horizontal: -4, vertical: -2),
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 6),
+              ),
+              textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 13)),
+            ),
             segments: [
               const ButtonSegment(
                 value: QuickEntryMode.expense,
-                label: Text('支出'),
+                label: Text('支出', maxLines: 1, softWrap: false),
               ),
               const ButtonSegment(
                 value: QuickEntryMode.income,
-                label: Text('收入'),
+                label: Text('收入', maxLines: 1, softWrap: false),
               ),
               const ButtonSegment(
                 value: QuickEntryMode.transfer,
-                label: Text('轉帳'),
+                label: Text('轉帳', maxLines: 1, softWrap: false),
               ),
               if (accounts.any((a) => a.type == 'credit'))
                 const ButtonSegment(
                   value: QuickEntryMode.repay,
-                  label: Text('繳卡費'),
+                  label: Text('繳卡費', maxLines: 1, softWrap: false),
                 ),
             ],
             selected: {state.mode},
             onSelectionChanged: (m) => controller.setMode(m.first),
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
           ),
           const SizedBox(height: 10),
           TextField(
