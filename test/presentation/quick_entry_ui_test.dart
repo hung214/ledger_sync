@@ -7,6 +7,7 @@ import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_controller.dart';
 
 import '../helpers/in_memory_cloud_adapter.dart';
+
 import 'package:ledger_sync/application/providers.dart';
 import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_page.dart';
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
@@ -23,33 +24,40 @@ void main() {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
     // 常用（MRU）來源：兩筆歷史交易（餐飲食品／交通運輸；後者最新）。
-    await DbFixture.seedTx(db,
-        id: 't1',
-        kind: 'expense',
-        amountMinor: 100,
-        accountId: 'a-cash',
-        category: 'c-food',
-        occurredAt: DateTime.now().millisecondsSinceEpoch - 3600000);
-    await DbFixture.seedTx(db,
-        id: 't2',
-        kind: 'expense',
-        amountMinor: 100,
-        accountId: 'a-cash',
-        category: 'c-transport',
-        occurredAt: DateTime.now().millisecondsSinceEpoch);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-    ]);
+    await DbFixture.seedTx(
+      db,
+      id: 't1',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'a-cash',
+      category: 'c-food',
+      occurredAt: DateTime.now().millisecondsSinceEpoch - 3600000,
+    );
+    await DbFixture.seedTx(
+      db,
+      id: 't2',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'a-cash',
+      category: 'c-transport',
+      occurredAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const QuickEntryPage()),
-      ));
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 分類欄＝彈窗入口（不再平鋪分類格）。
@@ -63,8 +71,11 @@ void main() {
       // ⭐ 常用類別（PM 2026-10-25）：左欄**最上方**；點它 → 右欄列出常用類別
       // **文字**（MRU：交通運輸最新）。原「上方分散 chips」已退役。
       expect(find.byKey(const Key('picker-freq')), findsOneWidget);
-      expect(find.byKey(const Key('picker-recent-交通運輸')), findsNothing,
-          reason: '舊「上方常用 chips」已退役（改 ⭐ 常用類別）');
+      expect(
+        find.byKey(const Key('picker-recent-交通運輸')),
+        findsNothing,
+        reason: '舊「上方常用 chips」已退役（改 ⭐ 常用類別）',
+      );
       await tester.tap(find.byKey(const Key('picker-freq')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('picker-freq-交通運輸')), findsOneWidget);
@@ -73,10 +84,16 @@ void main() {
       expect(find.byKey(const Key('picker-main-餐飲食品')), findsOneWidget);
       await tester.tap(find.byKey(const Key('picker-main-餐飲食品')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('picker-sub-none')), findsOneWidget,
-          reason: '「不分類」＝只記主類別');
-      expect(find.byKey(const Key('picker-sub-早餐')), findsOneWidget,
-          reason: '左欄選主類別 → 右欄列子分類');
+      expect(
+        find.byKey(const Key('picker-sub-none')),
+        findsOneWidget,
+        reason: '「不分類」＝只記主類別',
+      );
+      expect(
+        find.byKey(const Key('picker-sub-早餐')),
+        findsOneWidget,
+        reason: '左欄選主類別 → 右欄列子分類',
+      );
       expect(find.byKey(const Key('picker-add-main')), findsOneWidget);
       expect(find.byKey(const Key('picker-add-sub')), findsOneWidget);
 
@@ -85,13 +102,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('選擇分類'), findsNothing, reason: '選取後自動關閉');
       expect(
-          find.descendant(
-              of: find.byKey(const Key('quick-entry-category')),
-              matching: find.text('🍜 早餐')),
-          findsOneWidget,
-          reason: '分類欄顯示主類別 emoji ＋ 子類別名（圖示跟隨主類別；PM 2026-10-24）');
-      expect(container.read(quickEntryControllerProvider).category?.id,
-          'c-food-s0');
+        find.descendant(
+          of: find.byKey(const Key('quick-entry-category')),
+          matching: find.text('🍜 早餐'),
+        ),
+        findsOneWidget,
+        reason: '分類欄顯示主類別 emoji ＋ 子類別名（圖示跟隨主類別；PM 2026-10-24）',
+      );
+      expect(
+        container.read(quickEntryControllerProvider).category?.id,
+        'c-food-s0',
+      );
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
@@ -102,32 +123,42 @@ void main() {
   testWidgets('快記：金額欄 autofocus 且為空（FR-Q1）', (tester) async {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-    ]);
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const QuickEntryPage()),
-      ));
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       // 金額欄自動聚焦（S1.1-5）——widget test 決定性（FE 因 macOS 視窗焦點不穩）。
       expect(find.byKey(const Key('quick-entry-amount')), findsOneWidget);
       final field = tester.widget<TextField>(
-          find.byKey(const Key('quick-entry-amount')));
+        find.byKey(const Key('quick-entry-amount')),
+      );
       expect(field.controller?.text ?? '', isEmpty, reason: '金額欄應為空');
       expect(field.autofocus, isTrue, reason: '金額欄標記 autofocus（FR-Q1）');
       // 真值焦點（widget test 決定性——FE 因 macOS 視窗焦點不穩，故落此處）。
-      final editable = tester.widget<EditableText>(find.descendant(
+      final editable = tester.widget<EditableText>(
+        find.descendant(
           of: find.byKey(const Key('quick-entry-amount')),
-          matching: find.byType(EditableText)));
-      expect(editable.focusNode.hasFocus, isTrue,
-          reason: '金額欄應已聚焦（FR-Q1；S1.1-5 數字鍵盤自動聚焦）');
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(
+        editable.focusNode.hasFocus,
+        isTrue,
+        reason: '金額欄應已聚焦（FR-Q1；S1.1-5 數字鍵盤自動聚焦）',
+      );
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
@@ -138,26 +169,35 @@ void main() {
   testWidgets('快記 v3：備註欄位寫入交易（note）', (tester) async {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      // save → FR-Y11 afterSave 讀 syncCoordinatorProvider（須注入）。
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        // save → FR-Y11 afterSave 讀 syncCoordinatorProvider（須注入）。
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t'),
+        ),
+      ],
+    );
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const QuickEntryPage()),
-      ));
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('quick-entry-note')), findsOneWidget,
-          reason: '備註欄（PM 2026-10-24）');
+      expect(
+        find.byKey(const Key('quick-entry-note')),
+        findsOneWidget,
+        reason: '備註欄（PM 2026-10-24）',
+      );
       // 改版後鍵盤＝金額欄聚焦才由下滑入（220ms）；明確聚焦＋pumpAndSettle，
       // 不依賴 autofocus 在測試環境首幀即生效。
       await tester.tap(find.byKey(const Key('quick-entry-amount')));
@@ -166,8 +206,7 @@ void main() {
         await tester.tap(find.byKey(Key('keypad-$k')));
         await tester.pump();
       }
-      await tester.enterText(
-          find.byKey(const Key('quick-entry-note')), '早餐');
+      await tester.enterText(find.byKey(const Key('quick-entry-note')), '早餐');
       await tester.pumpAndSettle();
       // 文字欄位聚焦時計算機收起（PM 2026-11-23）→ 點「完成」收鍵盤。
       await tester.tap(find.byKey(const Key('text-edit-done')));
@@ -193,23 +232,27 @@ void main() {
     await FirstRunBootstrap.seedIfNeeded(db);
     // 預先寫入記憶（等同上次記過 c-food-s0＝早餐 150 元 / 現金 / 早餐店）。
     QuickEntryMemory(db).remember(
-        categoryId: 'c-food-s0',
-        amount: '150',
-        accountId: 'a-cash',
-        merchant: '早餐店');
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-    ]);
+      categoryId: 'c-food-s0',
+      amount: '150',
+      accountId: 'a-cash',
+      merchant: '早餐店',
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const QuickEntryPage()),
-      ));
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('quick-entry-category')));
@@ -232,4 +275,182 @@ void main() {
     }
   });
 
+  testWidgets('快記備註右下角取消／儲存（PM 2026-11-27 比照編輯交易，僅手機）：金額未定禁用→輸入後可存', (
+    tester,
+  ) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t'),
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(390, 844); // 手機寬幅（<900 斷點）
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 按鈕列常駐（不需聚焦即可見）；key 與鍵盤 OK 契約分開。
+      expect(find.byKey(const Key('quick-entry-cancel')), findsOneWidget);
+      expect(find.byKey(const Key('quick-entry-save-btn')), findsOneWidget);
+      expect(
+        find.byKey(const Key('quick-entry-save')),
+        findsOneWidget,
+        reason: '鍵盤 OK 契約不受影響',
+      );
+
+      // 金額未定 → 儲存禁用（與鍵盤 OK 同判定）。
+      FilledButton saveBtn() => tester.widget<FilledButton>(
+        find.byKey(const Key('quick-entry-save-btn')),
+      );
+      expect(saveBtn().onPressed, isNull, reason: '金額未定 → 禁用');
+
+      // 輸入金額 150（聚焦金額欄 → 鍵盤滑入）→ 儲存啟用。
+      await tester.tap(find.byKey(const Key('quick-entry-amount')));
+      await tester.pumpAndSettle();
+      for (final k in ['1', '5', '0']) {
+        await tester.tap(find.byKey(Key('keypad-$k')));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(saveBtn().onPressed, isNotNull, reason: '金額 150 → 可存');
+
+      // 點備註區「儲存」＝同鍵盤 OK 的存檔。
+      await tester.tap(find.byKey(const Key('quick-entry-save-btn')));
+      await tester.pumpAndSettle();
+      final txs = db.allTransactions();
+      expect(txs.length, 1, reason: '已入庫一筆');
+      expect(txs.first.amountMinor, 150);
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  testWidgets('快記備註右下角「取消」＝放棄草稿（清金額＋備註；Sticky 商家保留）', (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t'),
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(390, 844); // 手機寬幅（<900 斷點）
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 草稿：金額 200＋備註「臨時」＋商家「測試店」（Sticky 語意）。
+      await tester.tap(find.byKey(const Key('quick-entry-amount')));
+      await tester.pumpAndSettle();
+      for (final k in ['2', '0', '0']) {
+        await tester.tap(find.byKey(Key('keypad-$k')));
+        await tester.pump();
+      }
+      await tester.enterText(find.byKey(const Key('quick-entry-note')), '臨時');
+      await tester.enterText(
+        find.byKey(const Key('quick-entry-merchant')),
+        '測試店',
+      );
+      await tester.pumpAndSettle();
+
+      // 取消 → 金額＋備註清空；商家 Sticky 保留；未入庫。
+      await tester.tap(find.byKey(const Key('quick-entry-cancel')));
+      await tester.pumpAndSettle();
+
+      final st = container.read(quickEntryControllerProvider);
+      expect(st.amount, '', reason: '取消＝清空金額');
+      expect(st.note, '', reason: '取消＝清空備註');
+      expect(st.merchant, '測試店', reason: '商家 Sticky 保留（記住上次）');
+      expect(find.byKey(const Key('quick-entry-note')), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('quick-entry-note')))
+            .controller!
+            .text,
+        '',
+        reason: '備註欄已清空',
+      );
+      expect(db.allTransactions(), isEmpty, reason: '取消不入庫');
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  testWidgets('快記取消／儲存按鈕＝僅手機版（≥900 桌面寬幅不渲染；PM 2026-11-27）', (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t'),
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(1080, 2400); // 桌面寬幅（≥900 斷點）
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('quick-entry-cancel')),
+        findsNothing,
+        reason: '桌面版不加取消鈕',
+      );
+      expect(
+        find.byKey(const Key('quick-entry-save-btn')),
+        findsNothing,
+        reason: '桌面版不加備註區儲存鈕',
+      );
+      expect(
+        find.byKey(const Key('quick-entry-save')),
+        findsOneWidget,
+        reason: '鍵盤 OK 契約不變',
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
 }

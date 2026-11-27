@@ -9,12 +9,7 @@ import '../../../application/quick_entry/quick_entry_memory.dart';
 import 'amount_keypad.dart';
 
 /// 快記狀態機階段（SDD §5.1）。
-enum QuickEntryPhase {
-  ready,
-  inputting,
-  committing,
-  savedDialog,
-}
+enum QuickEntryPhase { ready, inputting, committing, savedDialog }
 
 /// 快記模式（PM 2026-10-24 定稿：**僅 支出／收入／轉帳**）。
 ///
@@ -77,20 +72,19 @@ class QuickEntryState {
     DateTime? occurredAt,
     int? sessionCount,
     int? lastSaveMs,
-  }) =>
-      QuickEntryState(
-        phase: phase ?? this.phase,
-        mode: mode ?? this.mode,
-        account: account ?? this.account,
-        toAccount: clearToAccount ? null : (toAccount ?? this.toAccount),
-        category: clearCategory ? null : (category ?? this.category),
-        merchant: merchant ?? this.merchant,
-        note: note ?? this.note,
-        amount: amount ?? this.amount,
-        occurredAt: occurredAt ?? this.occurredAt,
-        sessionCount: sessionCount ?? this.sessionCount,
-        lastSaveMs: lastSaveMs ?? this.lastSaveMs,
-      );
+  }) => QuickEntryState(
+    phase: phase ?? this.phase,
+    mode: mode ?? this.mode,
+    account: account ?? this.account,
+    toAccount: clearToAccount ? null : (toAccount ?? this.toAccount),
+    category: clearCategory ? null : (category ?? this.category),
+    merchant: merchant ?? this.merchant,
+    note: note ?? this.note,
+    amount: amount ?? this.amount,
+    occurredAt: occurredAt ?? this.occurredAt,
+    sessionCount: sessionCount ?? this.sessionCount,
+    lastSaveMs: lastSaveMs ?? this.lastSaveMs,
+  );
 }
 
 /// 快記 controller（FR-Q2~Q5；SDD §5.1 狀態機）。
@@ -121,13 +115,13 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
   /// AccountRow → Account entity（creditUnpaidTotal 參數型別；
   /// 同 credit_card_page._accountEntity——共享轉換屬 domain 重構，暫此）。
   Account _accountEntity(AccountRow r) => Account(
-        id: r.id,
-        type: AccountType.values.byName(r.type),
-        name: r.name,
-        currency: r.currency,
-        openingAmountMinor: r.openingAmountMinor,
-        archived: r.archived,
-      );
+    id: r.id,
+    type: AccountType.values.byName(r.type),
+    name: r.name,
+    currency: r.currency,
+    openingAmountMinor: r.openingAmountMinor,
+    archived: r.archived,
+  );
 
   // ── 欄位輸入（Inputting） ─────────────────────────────────
 
@@ -158,13 +152,14 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     if (id == null) return;
     for (final c in _categories) {
       if (c.id == id) {
-        var next =
-            state.copyWith(category: c, phase: QuickEntryPhase.inputting);
+        var next = state.copyWith(
+          category: c,
+          phase: QuickEntryPhase.inputting,
+        );
         // **帶入守衛**（T72，PM 2026-11-24）：金額已輸入（非 0/空）→
         // 變更分類**不帶入上次資料**（金額/帳戶/商家皆不動——避免蓋掉
         // 使用者已輸入的金額）；金額為 0/空 → 照舊帶入。
-        final entered =
-            int.tryParse(state.amount.replaceAll(',', '')) ?? 0;
+        final entered = int.tryParse(state.amount.replaceAll(',', '')) ?? 0;
         if (entered <= 0) {
           // 「記住上次」（PM 2026-10-24；**範圍修訂 T78** PM 2026-11-24）：
           // 帶入**僅金額/商家**——**帳戶不動**（使用者自選的帳戶不被覆蓋）。
@@ -223,19 +218,20 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
   /// Sticky 商家（不把支出商家帶進收入欄，反之亦然）。
   /// 商家池 kind（PM 2026-11-27）：支出／收入各自獨立；轉帳/繳卡費無池。
   static String? _merchantKindOf(QuickEntryMode m) => switch (m) {
-        QuickEntryMode.expense => 'expense',
-        QuickEntryMode.income => 'income',
-        _ => null,
-      };
+    QuickEntryMode.expense => 'expense',
+    QuickEntryMode.income => 'income',
+    _ => null,
+  };
 
   void setMode(QuickEntryMode mode) {
     if (mode == state.mode) return;
     final poolChanged = _merchantKindOf(state.mode) != _merchantKindOf(mode);
     state = state.copyWith(
-        mode: mode,
-        clearToAccount: true,
-        clearCategory: true,
-        merchant: poolChanged ? '' : null);
+      mode: mode,
+      clearToAccount: true,
+      clearCategory: true,
+      merchant: poolChanged ? '' : null,
+    );
     if (mode == QuickEntryMode.repay) {
       // **繳卡費初始化**（T77，PM 2026-11-24）：目標卡片＝首張信用卡
       // （單卡自動選）；扣款帳戶＝linked_account_id ?: 首個非信用卡；
@@ -266,7 +262,8 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
           ? 0
           : calc.creditUnpaidTotal(
               card: _accountEntity(card),
-              txs: db.allTransactions().map(txEntity));
+              txs: db.allTransactions().map(txEntity),
+            );
       state = state.copyWith(
         toAccount: card,
         account: fromRow,
@@ -313,12 +310,16 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     // 即時求值（PM 2026-10-24：移除 ＝ 鍵 → 運算式直接求值；未完成／÷0 → 停留輸入態）。
     final amountMinor = AmountKeypadEvaluator.evaluate(state.amount);
     if (amountMinor == null || amountMinor <= 0) return;
-    if (state.mode == QuickEntryMode.transfer && state.toAccount == null) return;
+    if (state.mode == QuickEntryMode.transfer && state.toAccount == null) {
+      return;
+    }
     state = state.copyWith(phase: QuickEntryPhase.committing);
     final sw = Stopwatch()..start();
     if (state.mode == QuickEntryMode.transfer) {
       // F02 S2.3：轉帳守恆（AC-10）——不計入收支統計；BE 驗證相異帳戶。
-      ref.read(saveTransactionProvider).execute(
+      ref
+          .read(saveTransactionProvider)
+          .execute(
             accountId: state.account!.id,
             amountMinor: amountMinor,
             occurredAt: state.occurredAt,
@@ -331,13 +332,17 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
       // 帳單 paid 累加（繳清取消 N-5）；無帳單＝純 repayment 交易。
       // kind='repayment' 不計收支統計；「未繳合計」自動扣減。
       if (state.toAccount == null) return;
-      ref.read(repayStatementProvider).executeForCard(
+      ref
+          .read(repayStatementProvider)
+          .executeForCard(
             cardAccountId: state.toAccount!.id,
             amountMinor: amountMinor,
             fromAccountId: state.account!.id,
           );
     } else {
-      ref.read(saveTransactionProvider).execute(
+      ref
+          .read(saveTransactionProvider)
+          .execute(
             accountId: state.account!.id,
             categoryId: state.category?.id,
             amountMinor: amountMinor,
@@ -353,7 +358,9 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     // 「記住上次」（PM 2026-10-24）：以分類為單位記住金額/帳戶/商家。
     final catId = state.category?.id;
     if (catId != null) {
-      ref.read(quickEntryMemoryProvider).remember(
+      ref
+          .read(quickEntryMemoryProvider)
+          .remember(
             categoryId: catId,
             amount: '$amountMinor', // 存求值後金額（非運算式）
             accountId: state.account?.id,
@@ -383,6 +390,17 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     );
   }
 
+  /// 取消本次輸入（PM 2026-11-27，備註右下角「取消」比照編輯交易）：
+  /// 放棄草稿＝清空金額＋備註；Sticky 帳戶/分類/商家/時間保留
+  /// （「記住上次」為刻意功能——清理範圍與 continueEntry 相同）。
+  void cancelEntry() {
+    state = state.copyWith(
+      phase: QuickEntryPhase.inputting,
+      amount: '',
+      note: '',
+    );
+  }
+
   /// 復原上一筆（FR-Q3）：軟刪除墓標＋oplog；計數減一。
   /// 信用卡預扣交易同步回沖「本期應付」——衍生值即時重算（SDD 原則 2）。
   void undoLast() {
@@ -398,4 +416,5 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
 
 final quickEntryControllerProvider =
     NotifierProvider.autoDispose<QuickEntryController, QuickEntryState>(
-        QuickEntryController.new);
+      QuickEntryController.new,
+    );
