@@ -18,3 +18,23 @@ Rect mapVideoRectToDisplay(Rect box, Size video, Size display) {
     box.height * scale,
   );
 }
+
+/// **T91 顯示座標 → video 像素座標**（cover 映射的**反向**）：
+/// 取景框/ROI 在畫面上的位置 → 對應的 video 子區（裁切偵測與 ROI 解碼用）。
+///
+/// 與 [mapVideoRectToDisplay] 完全互逆（同一 cover 幾何：等比放大至貼滿
+/// → 置中 → 超出裁切）；結果可能超出 video 邊界（顯示區含黑邊時）——
+/// 呼叫端用前先夾限至 video 範圍。
+Rect mapDisplayRectToVideo(Rect r, Size video, Size display) {
+  if (video.isEmpty || display.isEmpty) return Rect.zero;
+  final scale =
+      math.max(display.width / video.width, display.height / video.height);
+  final dx = (display.width - video.width * scale) / 2;
+  final dy = (display.height - video.height * scale) / 2;
+  return Rect.fromLTWH(
+    (r.left - dx) / scale,
+    (r.top - dy) / scale,
+    r.width / scale,
+    r.height / scale,
+  );
+}

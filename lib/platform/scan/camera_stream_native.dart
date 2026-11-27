@@ -15,7 +15,7 @@ class _NativeCameraController implements CameraStreamController {
   Future<Uint8List?> captureFrame() async => null;
 
   @override
-  Future<AnalysisFrame?> captureAnalysisFrame() async => null;
+  Future<AnalysisFrame?> captureAnalysisFrame({Rect? region}) async => null;
 
   @override
   Future<void> resumePreview() async {}
@@ -36,7 +36,8 @@ class _NativeCameraController implements CameraStreamController {
   bool get hasNativeBarcodeDetector => false;
 
   @override
-  Future<List<DetectedCode>> detectNativeBarcodes() async => const [];
+  Future<List<DetectedCode>> detectNativeBarcodes({Rect? region}) async =>
+      const [];
 
   @override
   bool get torchSupported => false;

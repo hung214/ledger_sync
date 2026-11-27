@@ -66,7 +66,11 @@ abstract interface class CameraStreamController {
   /// 擷取**分析用**幀（RGBA 直入——僅 web 實作；native/stub 回 null）。
   /// 與 [captureFrame] 分離：解碼 tick 用 RGBA（零轉檔），照片只在
   /// 命中時擷一次 JPEG（T89）。
-  Future<AnalysisFrame?> captureAnalysisFrame();
+  ///
+  /// [region]（T91，**video 像素座標**）：只取該子區的 RGBA（`getImageData`
+  /// 子矩形——比全幅便宜，ROI 解碼面積 ≈ 全幅 1/8）；回傳 [AnalysisFrame]
+  /// 的 width/height 即子區尺寸。省略（null）＝全幅（現行行為）。
+  Future<AnalysisFrame?> captureAnalysisFrame({Rect? region});
 
   /// 預覽**播放恢復**（T89b——行動版瀏覽器 video 元素被重掛（確認清單
   /// 返回的 platform view 重建）後播放管線可能中斷＝黑畫面；重綁串流
@@ -98,7 +102,12 @@ abstract interface class CameraStreamController {
   bool get hasNativeBarcodeDetector;
 
   /// 以原生偵測器掃描目前畫面 → 條碼清單（不支援/無結果/錯誤 → 空）。
-  Future<List<DetectedCode>> detectNativeBarcodes();
+  ///
+  /// [region]（T91，**video 像素座標**）：只偵測該子區——web 實作將 video
+  /// 裁切至 ROI（**放大至長邊 640px，上限 2×**——小碼模組放大＝原生偵測
+  /// 更易命中）再偵測；回傳框已反算回 video 座標（繪製契約不變）。
+  /// 省略（null）＝全幅（現行行為）。
+  Future<List<DetectedCode>> detectNativeBarcodes({Rect? region});
 
   /// 相機**補光（手電筒）**是否可用？（web：track capabilities 有 torch；
   /// native：mobile_scanner torch）。無能力 → 開關隱藏。
