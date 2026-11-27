@@ -108,4 +108,78 @@ void main() {
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     expect(okTaps, 1, reason: 'OK 觸發儲存回呼');
   });
+
+  testWidgets('雙態按鈕：含運算子→＝，tap 求值收合（50×2→100；PM 2026-11-26）', (tester) async {
+    var expr = '50×2';
+    String? writtenBack;
+    var okTaps = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) => AmountKeypad(
+            expr: expr,
+            okEnabled: true,
+            onOk: () => okTaps++,
+            onExprChanged: (e) => setState(() {
+              expr = e;
+              writtenBack = e;
+            }),
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('＝'), findsOneWidget, reason: '運算式含運算子 → ＝ 態');
+    expect(find.byKey(const Key('keypad-equals')), findsOneWidget);
+    expect(find.text('OK'), findsNothing, reason: '計算式態無 OK');
+    await tester.tap(find.byKey(const Key('keypad-equals')));
+    await tester.pump();
+    expect(writtenBack, '100', reason: '＝ 求值收合：50×2 → 100 經 onExprChanged 寫回');
+    expect(okTaps, 0, reason: '＝ 態不觸發儲存');
+    expect(find.text('OK'), findsOneWidget, reason: '收合後 100 為純數字 → 回 OK 態');
+  });
+
+  testWidgets('雙態按鈕：未完成運算式→＝禁用（尾運算子 50×；PM 2026-11-26）', (tester) async {
+    String? writtenBack;
+    var okTaps = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AmountKeypad(
+          expr: '50×',
+          okEnabled: true,
+          onOk: () => okTaps++,
+          onExprChanged: (e) => writtenBack = e,
+        ),
+      ),
+    ));
+
+    expect(find.text('＝'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('keypad-equals')));
+    await tester.pump();
+    expect(writtenBack, isNull, reason: '尾運算子不可求值 → ＝ 禁用');
+    expect(okTaps, 0, reason: '禁用態不觸發儲存');
+  });
+
+  testWidgets('雙態按鈕：純數字→OK（key 沿用 quick-entry-save；PM 2026-11-26）', (tester) async {
+    String? writtenBack;
+    var okTaps = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AmountKeypad(
+          expr: '100',
+          okEnabled: true,
+          onOk: () => okTaps++,
+          onExprChanged: (e) => writtenBack = e,
+        ),
+      ),
+    ));
+
+    expect(find.text('OK'), findsOneWidget, reason: '純數字（無運算子）→ OK 態');
+    expect(find.byKey(const Key('quick-entry-save')), findsOneWidget);
+    expect(find.text('＝'), findsNothing, reason: '純數字態無 ＝');
+    await tester.tap(find.byKey(const Key('quick-entry-save')));
+    await tester.pump();
+    expect(okTaps, 1, reason: 'OK 觸發儲存回呼');
+    expect(writtenBack, isNull, reason: 'OK 態不寫回運算式');
+  });
 }

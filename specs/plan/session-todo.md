@@ -459,6 +459,75 @@
 - [x] **教訓記錄**：0.5.0 發版時誤把 main 全碼部署 PWA——
   PWA 部署線必須永遠走 pwa-accumulate（凍結線），除非黑畫面根治
 
+## 🔧 進行中（2026-11-26：計算機鍵盤「聚焦滑入／失焦滑出」全面改造）
+
+> PM 指示：金額欄**聚焦 → 小算盤由下滑入；失焦 → 向下滑出**，所有用到小算盤的畫面統一。
+> 做法：`amount_keypad.dart` 新增共用容器 `FocusSlideKeypad`
+> （ClipRect＋AnimatedAlign heightFactor 0↔1——滑出時高度同步收合）。
+
+- [x] **共用元件** `FocusSlideKeypad`（amount_keypad.dart）
+- [x] **編輯交易** `tx_edit_sheet.dart`：金額欄改唯讀＋FocusNode（原系統數字鍵盤→
+      聚焦滑入 AmountKeypad、OK＝儲存）；商家／備註聚焦→「完成」列；
+      拆分模式維持系統鍵盤（切換時 unfocus）
+- [x] **快記面板** `quick_entry_page.dart`：金額欄聚焦才滑入（原常駐）；
+      「繼續記下一筆」自動重新聚焦金額欄
+- [x] **掃描確認清單** `review_page.dart`：同款改造（OK 後焦點留金額欄→
+      下一張鍵盤保持滑入）
+- [x] **桌面快記面板** `main_shell_page.dart` `_DesktopQuickPanel`：同款改造；
+      實體鍵盤輸入同步 `_expr` 顯示
+- [x] **Demo 頁不改**（`quick_entry_calc_demo_page.dart`：元件展示用途，鍵盤即主角——
+      PM 可 override）
+- [x] `dart format` 全批＋`flutter analyze lib` **No issues found**
+- [x] 測試盤點（subagent）→ 5 個測試檔修復（review_page_defaults／desktop_shell／
+      quick_entry_ui／budget_form／f02·f03 綁定＋feature 語意）→
+      `flutter test test/` **298 全綠**（含 3 個新雙態測試）
+- [x] **OK／＝ 雙態按鈕**（PM 2026-11-26 最終版）：版面不變——運算式含運算子→
+      顯示「＝」（按＝求值收合 50×2→100，key `keypad-equals`）；純數字→顯示
+      「OK」（存檔，key `quick-entry-save` 契約不變）
+- [x] **PM 實測回饋修正（20261126b）**：①「點每個數字就收合」＝web 環境點聚焦
+      欄位外觸發 `onTapOutside` 失焦——`FocusSlideKeypad` 包 **TextFieldTapRegion**
+      （鍵盤點擊不算外部）②「還沒按＝就算結果」＝**即時求值顯示退役**（與 ＝ 鍵
+      語意衝突）——金額欄回歸顯示原始運算式、按 ＝ 才收合為結果
+      ③**小算盤常駐**：快記／確認清單／桌面面板／預算四頁不再隨失焦收合
+      （PM 指示「編輯交易以外不要離開聚焦移除小算盤」）——聚焦滑入制**僅存於
+      編輯交易**；四頁的 _amountFocused/_onAmountFocus 機制移除
+- [x] **預算表單「週期起始日」改計算機輸入**（PM 2026-11-26）：金額＋起始日兩欄
+      皆唯讀、**聚焦哪個欄位計算機就編輯哪個**（`_keypadTarget` 切換）；
+      不跳系統鍵盤；budget_form 測試起始日改 keypad 輸入（enterStartDayByKeypad）
+- [x] **預算表單小算盤改回聚焦滑入制**（PM 2026-11-27）：聚焦金額／起始日 →
+      滑入；兩者皆失焦 → 滑出（同編輯交易；`_keypadVisible` 狀態）
+- [x] **壓住小算盤向下滑動＝只收小算盤**（PM 2026-11-27）：`FocusSlideKeypad`
+      加 `onDragDismiss`（StatefulWidget；位移 ≥32px 或向下甩 >250px/s 觸發）——
+      編輯交易／預算表單接「失焦對應欄位」＝只收小算盤**不關視窗**（手勢競技場
+      內層勝出，sheet 的下滑關閉讓位給「無小算盤」狀態）
+- [x] **確認清單＋快速記帳同款下滑收起**（PM 2026-11-27 補）：兩頁小算盤改
+      **常駐＋可下滑暫收**（`_amountFocused || _keypadPinned`）；PM 實測後改判：
+      **比照編輯交易＝純聚焦滑入制**（聚焦金額欄 → 滑入；失焦／壓住下滑 → 滑出；
+      `_keypadPinned` 退役）；桌面面板維持常駐無手勢
+- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127c`**：298 全綠→建置 4.2MB→gh-pages
+      `ab2298e`（CDN max-age=600 刷新中）＋本機 8123 同步 ✓
+- [x] **MR CI analyze 修復**：CI `channel: stable` 抓到新版 Flutter——把
+      `flutter/material.dart` 標棄用（→material_ui）全專案 60+ 檔 info 素，analyze
+      exit 1（非本批改動所致）→ ci.yml **鎖 flutter-version 3.47.7**＋
+      `analyze --no-fatal-infos`（errors/warnings 仍為 gate）
+- [ ] **material_ui 遷移**（低優先；60+ 檔 import flutter/material.dart——CI 新版
+      SDK 棄用提示；本機 3.47.7 user-branch 無此棄用，遷移需升級 SDK 後統一處理）
+- [x] **介紹頁（landing）上線**（PM 2026-11-27 問「線上看得到嗎」）：gh-pages
+      `3940314` 納入 `landing/`——`https://hung214.github.io/ledger_sync/landing/`；
+      宣傳用一頁式＋PM 實機截圖；App 本體不受影響（同一 build 20261127c）。
+      **未來部署 rsync 不再排除 landing**（scan/zxing 維持排除）
+- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127b`**：298 全綠→建置 4.2MB→gh-pages
+      `e2e7e48`（CDN 已驗證 ✓）＋本機 8123 同步 ✓
+- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127a`**：298 全綠→建置 4.2MB→gh-pages
+      `ade0cdc`（CDN max-age=600 刷新中）＋本機 8123 同步 ✓
+- [x] **PWA 重建＋發佈**：`0.5.1-pwa.20261126a` 已推 **gh-pages**（bc4aba1；CDN 驗證線上回新版 ✓）＋本機 8123／build/ledger_sync 同步 ✓
+- [x] **教訓（重要）**：PWA 建置**必須** `-t lib/main_web_app.dart`
+      （pm-actions §223）——用預設 `lib/main.dart`（native 入口，dart:io）會編出
+      **1.17MB 殘缺殼**（無 App 代碼、必白畫面）；正確入口＝4.2MB 完整版。
+      今天「小算盤沒出現」一半原因是舊 build、另一半是建錯入口
+- [ ] 整合測試（FE）暫停中（PM 2026-10-24 指示）——f02/f03 綁定已修好待恢復；
+      f03 FR-S5 情境與 review-cat/account chip key 過時（FE 恢復時另案改寫）
+
 ## ✅ 已完成並驗證（本輪 audit 確認）
 
 | 項目 | 驗證方式 | 狀態 |

@@ -84,8 +84,11 @@ void main() {
         reason: '預設帳戶＝第一個現金帳戶');
     expect(find.text('發票號 SR30393603'), findsOneWidget,
         reason: '發票號碼自動寫入備註欄');
+    // PM 2026-11-26 聚焦滑入制：計算機改為金額欄聚焦才滑入，先聚焦金額欄再斷言。
+    await tester.tap(find.byKey(const Key('review-total')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('amount-keypad')), findsOneWidget,
-        reason: '快記同款：常駐計算機');
+        reason: '聚焦金額欄 → 計算機滑入（PM 2026-11-26 聚焦滑入制）');
     expect(find.text('第 1 張 / 共 1 張'), findsOneWidget,
         reason: '進度列');
     expect(find.text('測試超商'), findsOneWidget,
@@ -130,6 +133,9 @@ void main() {
         reason: '類別＝最後一次掃描入帳的類別（非一律「其他」）');
 
     // 第 1 張：金額 195（預填）→ OK 入帳 → 自動跳第 2 張（Sticky 沿用）。
+    // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
+    await tester.tap(find.byKey(const Key('review-total')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
     expect(db.getSetting(kScanLastAccountKey), 'bank',
@@ -148,6 +154,9 @@ void main() {
     await tester.tap(find.byKey(const Key('review-account')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('現金').last);
+    await tester.pumpAndSettle();
+    // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
+    await tester.tap(find.byKey(const Key('review-total')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
@@ -194,6 +203,9 @@ void main() {
     // 日期 ◀▶ 快調（±1 天）——時間應保持當下時刻。
     await tester.tap(find.byKey(const Key('review-date-prev')));
     await tester.pump();
+    // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
+    await tester.tap(find.byKey(const Key('review-total')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
 
@@ -239,6 +251,9 @@ void main() {
         reason: '發票號寫入備註欄');
 
     // 直接 OK 入帳（無閘）→ 交易 note＝發票號、日期＝掃描值。
+    // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
+    await tester.tap(find.byKey(const Key('review-total')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
     final txs = db.allTransactions();

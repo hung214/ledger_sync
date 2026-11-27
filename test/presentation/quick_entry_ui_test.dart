@@ -158,6 +158,10 @@ void main() {
 
       expect(find.byKey(const Key('quick-entry-note')), findsOneWidget,
           reason: '備註欄（PM 2026-10-24）');
+      // 改版後鍵盤＝金額欄聚焦才由下滑入（220ms）；明確聚焦＋pumpAndSettle，
+      // 不依賴 autofocus 在測試環境首幀即生效。
+      await tester.tap(find.byKey(const Key('quick-entry-amount')));
+      await tester.pumpAndSettle();
       for (final k in ['1', '5', '0']) {
         await tester.tap(find.byKey(Key('keypad-$k')));
         await tester.pump();
@@ -167,6 +171,9 @@ void main() {
       await tester.pumpAndSettle();
       // 文字欄位聚焦時計算機收起（PM 2026-11-23）→ 點「完成」收鍵盤。
       await tester.tap(find.byKey(const Key('text-edit-done')));
+      await tester.pumpAndSettle();
+      // 改版後：unfocus → 鍵盤收合（OK 鍵 tap 不到）→ 重新聚焦金額欄讓鍵盤滑入。
+      await tester.tap(find.byKey(const Key('quick-entry-amount')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('quick-entry-save')));
       await tester.pumpAndSettle();

@@ -206,13 +206,21 @@ void _bind(GherkinRunner runner, _World w) {
     await w.tester.pumpAndSettle();
     await w.tester.tap(find.byKey(Key('review-account-${p['a']!}')));
     await w.tester.pumpAndSettle();
-    await w.tester.tap(find.byKey(const Key('review-save')));
+    // 聚焦滑入制（PM 2026-11-26）：先聚焦金額欄讓計算機滑入，再 tap OK
+    // （key 已更名 quick-entry-save——review-save 不存在，既有錯誤一併修正）。
+    await w.tester.tap(find.byKey(const Key('review-total')));
+    await w.tester.pumpAndSettle();
+    await w.tester.tap(find.byKey(const Key('quick-entry-save')));
     await w.tester.pumpAndSettle();
   });
 
   runner.on(r'按下「{label}」而未處理$', (p) async {
     // 直接按儲存（跳過高亮欄位之「已確認」）——FR-S5 擋下路徑。
-    await w.tester.tap(find.byKey(const Key('review-save')));
+    // 聚焦滑入制（PM 2026-11-26）：先聚焦金額欄讓計算機滑入，再 tap OK
+    // （key 已更名 quick-entry-save——review-save 不存在，既有錯誤一併修正）。
+    await w.tester.tap(find.byKey(const Key('review-total')));
+    await w.tester.pumpAndSettle();
+    await w.tester.tap(find.byKey(const Key('quick-entry-save')));
     await w.tester.pumpAndSettle();
   });
 

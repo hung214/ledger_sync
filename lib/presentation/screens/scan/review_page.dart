@@ -39,6 +39,11 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   final _merchantCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
+  /// 小算盤＝**聚焦滑入制**（PM 2026-11-27 比照編輯交易：聚焦金額欄 → 滑入；
+  /// 失焦或壓住小算盤向下滑 → 滑出）。
+  final _amountFocus = FocusNode();
+  bool _amountFocused = false;
+
   /// 計算機運算式（快記同款；受控顯示於金額欄）。
   String _expr = '';
   DateTime _date = DateTime.now();
@@ -64,9 +69,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     }
   }
 
+  void _onAmountFocus() {
+    if (!mounted) return;
+    setState(() => _amountFocused = _amountFocus.hasFocus);
+  }
+
   @override
   void initState() {
     super.initState();
+    _amountFocus.addListener(_onAmountFocus);
     _merchantFocus.addListener(_onTextFocusChanged);
     _noteFocus.addListener(_onTextFocusChanged);
     _loadCard(0);
@@ -74,6 +85,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
   @override
   void dispose() {
+    _amountFocus.removeListener(_onAmountFocus);
     _merchantFocus.removeListener(_onTextFocusChanged);
     _noteFocus.removeListener(_onTextFocusChanged);
     _merchantFocus.dispose();
@@ -100,7 +112,12 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     if (_date.hour == 0 && _date.minute == 0) {
       final now = Clock.now();
       _date = DateTime(
-          _date.year, _date.month, _date.day, now.hour, now.minute);
+        _date.year,
+        _date.month,
+        _date.day,
+        now.hour,
+        now.minute,
+      );
     }
     _merchantCtrl.text = draft.merchant.value ?? '';
     // 發票號碼寫入備註欄（PM 2026-11-22：掃描帶金額/時間，發票號入備註）。
@@ -112,14 +129,12 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     _categoryId = (lastCat != null && cats.any((c) => c.id == lastCat))
         ? lastCat
         : (cats.where((c) => c.name == '其他').map((c) => c.id).firstOrNull ??
-            (cats.isEmpty ? null : cats.first.id));
+              (cats.isEmpty ? null : cats.first.id));
     if (_accountId == null) {
       final last = ref.read(dbProvider).getSetting(kScanLastAccountKey);
-      _accountId = resolveScanDefaultAccount(
-          [
-            for (final r in ref.read(activeAccountsProvider)) accountEntity(r)
-          ],
-          last);
+      _accountId = resolveScanDefaultAccount([
+        for (final r in ref.read(activeAccountsProvider)) accountEntity(r),
+      ], last);
     }
     _blockedMessage = null;
   }
@@ -128,6 +143,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   void _onKeypadExpr(String expr) {
     setState(() {
       _expr = expr;
+      // 金額欄顯示原始運算式（＝ 鍵求值——PM 2026-11-26 最終版）。
       _amountCtrl.text = expr;
       _blockedMessage = null;
     });
@@ -149,7 +165,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     }
     final merchant = _merchantCtrl.text.trim();
     final note = _noteCtrl.text.trim();
-    final result = ref.read(saveTransactionProvider).execute(
+    final result = ref
+        .read(saveTransactionProvider)
+        .execute(
           accountId: _accountId!,
           categoryId: _categoryId,
           amountMinor: total,
@@ -169,10 +187,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     if (photo != null) {
       // 附件落地（FR-S4；BE S5 契約：壓縮→sha256→blobs→attachments＋oplog）。
       // P4 起為 async——await 確保附件列＋blob 皆落地後再刷新（web 為 IndexedDB）。
-      await ref.read(attachmentStoreProvider).save(
-            imageBytes: photo,
-            transactionId: result.transactionId,
-          );
+      await ref
+          .read(attachmentStoreProvider)
+          .save(imageBytes: photo, transactionId: result.transactionId);
       ref.read(attachmentTxIdsProvider.notifier).refresh();
     }
     ref.read(ledgerProvider.notifier).refresh();
@@ -193,11 +210,12 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   @override
   Widget build(BuildContext context) {
     final accounts = [
-      for (final r in ref.watch(activeAccountsProvider)) accountEntity(r)
+      for (final r in ref.watch(activeAccountsProvider)) accountEntity(r),
     ];
     final categories = ref.watch(expenseCategoriesProvider);
     final catById = categoryIndex(categories);
-    final accountName = accounts
+    final accountName =
+        accounts
             .where((a) => a.id == _accountId)
             .map((a) => a.name)
             .firstOrNull ??
@@ -205,8 +223,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final category = _categoryId == null ? null : catById[_categoryId];
     return Scaffold(
       appBar: AppBar(
-        title: Text('確認清單（${widget.items.length} 張）',
-            key: const Key('review-title')),
+        title: Text(
+          '確認清單（${widget.items.length} 張）',
+          key: const Key('review-title'),
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -215,31 +235,36 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
                           '第 ${_index + 1} 張 / 共 ${widget.items.length} 張',
                           key: const Key('review-progress'),
-                          style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                    // **照片顯示切換**（PM 2026-11-25：預設不顯示，按鈕選擇）。
-                    if (widget.items[_index].photoBytes != null)
-                      TextButton.icon(
-                        key: const Key('review-photo-toggle'),
-                        onPressed: () =>
-                            setState(() => _showPhoto = !_showPhoto),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 8),
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        icon: Icon(
-                            _showPhoto ? Icons.visibility_off : Icons.photo,
-                            size: 18),
-                        label: Text(_showPhoto ? '隱藏照片' : '顯示照片',
-                            style: const TextStyle(fontSize: 13)),
                       ),
-                  ]),
+                      // **照片顯示切換**（PM 2026-11-25：預設不顯示，按鈕選擇）。
+                      if (widget.items[_index].photoBytes != null)
+                        TextButton.icon(
+                          key: const Key('review-photo-toggle'),
+                          onPressed: () =>
+                              setState(() => _showPhoto = !_showPhoto),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          icon: Icon(
+                            _showPhoto ? Icons.visibility_off : Icons.photo,
+                            size: 18,
+                          ),
+                          label: Text(
+                            _showPhoto ? '隱藏照片' : '顯示照片',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                    ],
+                  ),
                   // **照片預覽（預設隱藏——按鈕切換）＋OCR 辨識區域框**（T21）。
                   // 顯示時：一般照片 BoxFit.contain（**不變形**——原 fill 把
                   // 16:9 相機幀塞 4:3 框＝拉扁，PM 2026-11-25「照片感覺有
@@ -248,64 +273,76 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   if (widget.items[_index].photoBytes != null && _showPhoto)
                     Padding(
                       padding: const EdgeInsets.only(top: 6, bottom: 4),
-                      child: LayoutBuilder(builder: (context, box) {
-                        final w = box.maxWidth;
-                        final h = w * 0.75;
-                        final ocrBox = widget.items[_index].ocrBox;
-                        return SizedBox(
-                          width: w,
-                          height: h,
-                          child: Stack(children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.memory(
-                                  widget.items[_index].photoBytes!,
-                                  width: w,
-                                  height: h,
-                                  fit: ocrBox != null
-                                      ? BoxFit.fill
-                                      : BoxFit.contain,
-                                  errorBuilder: (context, error,
-                                          stackTrace) =>
-                                      const SizedBox.shrink()),
-                            ),
-                            if (ocrBox != null)
-                              Positioned(
-                                left: ocrBox.left * w,
-                                top: ocrBox.top * h,
-                                width: ocrBox.width * w,
-                                height: ocrBox.height * h,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: Colors.greenAccent,
-                                        width: 2.5),
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final w = box.maxWidth;
+                          final h = w * 0.75;
+                          final ocrBox = widget.items[_index].ocrBox;
+                          return SizedBox(
+                            width: w,
+                            height: h,
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(
+                                    widget.items[_index].photoBytes!,
+                                    width: w,
+                                    height: h,
+                                    fit: ocrBox != null
+                                        ? BoxFit.fill
+                                        : BoxFit.contain,
+                                    errorBuilder: (
+                                      context,
+                                      error,
+                                      stackTrace,
+                                    ) => const SizedBox.shrink(),
                                   ),
                                 ),
-                              ),
-                          ]),
-                        );
-                      }),
+                                if (ocrBox != null)
+                                  Positioned(
+                                    left: ocrBox.left * w,
+                                    top: ocrBox.top * h,
+                                    width: ocrBox.width * w,
+                                    height: ocrBox.height * h,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Colors.greenAccent,
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   // 金額（快記同款：**置中大字**）＋下方小字＝帳戶（Sticky）。
                   TextField(
                     key: const Key('review-total'),
                     controller: _amountCtrl,
-                    keyboardType: TextInputType.none, // 常駐鍵盤（快記同款）
+                    focusNode: _amountFocus,
+                    keyboardType: TextInputType.none, // 系統鍵盤不彈（快記同款）
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .displaySmall
+                    style: Theme.of(context).textTheme.displaySmall
                         ?.copyWith(fontWeight: FontWeight.w800),
                     decoration: const InputDecoration(
-                        hintText: '0', border: InputBorder.none),
+                      hintText: '0',
+                      border: InputBorder.none,
+                    ),
                     onChanged: (v) => setState(() => _expr = v),
                   ),
                   Center(
-                    child: Text('帳戶：$accountName（Sticky）',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.outline)),
+                    child: Text(
+                      '帳戶：$accountName（Sticky）',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   // 日期（快記同款：◀▶ 快調 ±1 天；點擊開 DateTime picker）。
@@ -319,7 +356,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                           iconSize: 30,
                           tooltip: '前一天',
                           onPressed: () => setState(
-                              () => _date = _date.subtract(const Duration(days: 1))),
+                            () =>
+                                _date = _date.subtract(const Duration(days: 1)),
+                          ),
                           icon: const Icon(Icons.chevron_left),
                         ),
                         TextButton(
@@ -329,7 +368,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                 .colorScheme
                                 .surfaceContainerHighest,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           onPressed: () {
                             showModalBottomSheet<void>(
@@ -337,25 +377,26 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                               isScrollControlled: true,
                               builder: (_) => QuickDateTimePicker(
                                 initial: _date,
-                                onSelected: (dt) =>
-                                    setState(() => _date = dt),
+                                onSelected: (dt) => setState(() => _date = dt),
                               ),
                             );
                           },
-                          child: Text(_dateLabel(_date),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700)),
+                          child: Text(
+                            _dateLabel(_date),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
                         ),
                         IconButton(
                           key: const Key('review-date-next'),
                           iconSize: 30,
                           tooltip: '後一天',
                           onPressed: () => setState(
-                              () => _date = _date.add(const Duration(days: 1))),
+                            () => _date = _date.add(const Duration(days: 1)),
+                          ),
                           icon: const Icon(Icons.chevron_right),
                         ),
                       ],
@@ -373,10 +414,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                             label: '帳戶',
                             text: accountName,
                             entries: [
-                              for (final a in accounts) (a.id, a.name, false)
+                              for (final a in accounts) (a.id, a.name, false),
                             ],
-                            onSelected: (id) =>
-                                setState(() => _accountId = id),
+                            onSelected: (id) => setState(() => _accountId = id),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -386,17 +426,17 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                             onTap: _openCategoryPicker,
                             child: InputDecorator(
                               decoration: const InputDecoration(
-                                  labelText: '分類',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  suffixIcon: Icon(Icons.chevron_right,
-                                      size: 18)),
+                                labelText: '分類',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon: Icon(Icons.chevron_right, size: 18),
+                              ),
                               child: Text(
-                                  category == null
-                                      ? '選擇分類'
-                                      : categoryLabelOf(category,
-                                          byId: catById),
-                                  overflow: TextOverflow.ellipsis),
+                                category == null
+                                    ? '選擇分類'
+                                    : categoryLabelOf(category, byId: catById),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                         ),
@@ -409,14 +449,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     controller: _merchantCtrl,
                     focusNode: _merchantFocus,
                     decoration: InputDecoration(
-                        labelText: '商家（點 › 選常用商家）',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: IconButton(
-                          tooltip: '選擇常用商家',
-                          icon: const Icon(Icons.arrow_drop_down),
-                          onPressed: _pickMerchant,
-                        )),
+                      labelText: '商家（點 › 選常用商家）',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        tooltip: '選擇常用商家',
+                        icon: const Icon(Icons.arrow_drop_down),
+                        onPressed: _pickMerchant,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -424,8 +465,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     controller: _noteCtrl,
                     focusNode: _noteFocus,
                     decoration: const InputDecoration(
-                        labelText: '備註（選填）', border: OutlineInputBorder(),
-                        isDense: true),
+                      labelText: '備註（選填）',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                   if (_blockedMessage != null)
                     Padding(
@@ -433,16 +476,17 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       child: Text(
                         _blockedMessage!,
                         key: const Key('review-blocked'),
-                        style:
-                            TextStyle(color: Theme.of(context).colorScheme.error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                 ],
               ),
             ),
-            // 浮動底部計算機（快記同款）：OK＝確認儲存，鍵盤貼底常駐；
-            // **文字欄位聚焦時隱藏**（PM 2026-11-23：避免遮擋輸入框——
-            // 換「完成」列，點擊收起系統鍵盤並讓計算機回來）。
+            // 底部計算機（快記同款）：OK＝確認儲存；
+            // **常駐**（PM 2026-11-26 最終：僅編輯交易採聚焦滑入制）；
+            // 文字欄位聚焦時換「完成」列（PM 2026-11-23：點擊收起系統鍵盤）。
             if (_textEditing)
               Container(
                 margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -452,51 +496,53 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .shadow
+                      color: Theme.of(context).colorScheme.shadow
                           .withValues(alpha: 0.18),
                       blurRadius: 14,
                       offset: const Offset(0, -3),
                     ),
                   ],
                 ),
-                child: Row(children: [
-                  const Text('輸入文字中…',
-                      style: TextStyle(fontSize: 13)),
-                  const Spacer(),
-                  TextButton(
-                    key: const Key('text-edit-done'),
-                    onPressed: () => FocusScope.of(context).unfocus(),
-                    child: const Text('完成'),
-                  ),
-                ]),
+                child: Row(
+                  children: [
+                    const Text('輸入文字中…', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    TextButton(
+                      key: const Key('text-edit-done'),
+                      onPressed: () => FocusScope.of(context).unfocus(),
+                      child: const Text('完成'),
+                    ),
+                  ],
+                ),
               )
             else
-            Container(
-              margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .shadow
-                        .withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, -3),
+              FocusSlideKeypad(
+                visible: _amountFocused,
+                // 壓住小算盤向下滑 → 只收小算盤（失焦），不離開頁面。
+                onDragDismiss: () => FocusScope.of(context).unfocus(),
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.shadow
+                            .withValues(alpha: 0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, -3),
+                      ),
+                    ],
                   ),
-                ],
+                  child: AmountKeypad(
+                    expr: _expr,
+                    onExprChanged: _onKeypadExpr,
+                    onOk: _save,
+                    okEnabled: _saveEnabled,
+                  ),
+                ),
               ),
-              child: AmountKeypad(
-                expr: _expr,
-                onExprChanged: _onKeypadExpr,
-                onOk: _save,
-                okEnabled: _saveEnabled,
-              ),
-            ),
           ],
         ),
       ),
@@ -505,8 +551,11 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
   /// 商家選擇器（T8：最近商家＋直接輸入新商家——可選可增）。
   Future<void> _pickMerchant() async {
-    final name = await showMerchantPicker(context, ref,
-        initial: _merchantCtrl.text);
+    final name = await showMerchantPicker(
+      context,
+      ref,
+      initial: _merchantCtrl.text,
+    );
     if (name == null || name.isEmpty || !mounted) return;
     setState(() => _merchantCtrl.text = name);
   }
@@ -532,8 +581,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   }
 
   /// 分類即建即選（快記同款）。
-  Future<void> _quickAddCategory(
-      {required bool asSub, String? parentId}) async {
+  Future<void> _quickAddCategory({
+    required bool asSub,
+    String? parentId,
+  }) async {
     if (asSub && parentId == null) return;
     final ctrl = TextEditingController();
     final name = await showDialog<String>(
@@ -547,18 +598,20 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('取消')),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(ctrl.text.trim()),
-              child: const Text('建立')),
+            onPressed: () => Navigator.of(dialogCtx).pop(ctrl.text.trim()),
+            child: const Text('建立'),
+          ),
         ],
       ),
     );
     if (name == null || name.isEmpty) return;
     try {
-      final row =
-          CategoryService(ref.read(dbProvider)).create(kind: 'expense', name: name, parentId: parentId);
+      final row = CategoryService(ref.read(dbProvider))
+          .create(kind: 'expense', name: name, parentId: parentId);
       ref.invalidate(expenseCategoriesProvider);
       ref.refreshAllData();
       setState(() => _categoryId = row.id);

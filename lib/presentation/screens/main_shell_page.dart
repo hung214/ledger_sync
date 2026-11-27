@@ -11,6 +11,7 @@ import '../../core/version.dart';
 import 'budget/budget_page.dart';
 import 'ledger/ledger_page.dart';
 import 'overview/overview_page.dart';
+
 import 'package:intl/intl.dart';
 
 import 'quick_entry/quick_entry_controller.dart';
@@ -66,13 +67,20 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       // FR-T5 啟動檢查（N-7）——FE 情境由 harness 統一驅動（雙鉤子會漏計）；
       // 生產接線待 F06-FE 收尾（AutoSync 風格）。
       if ((ref.read(dbProvider).getSetting('sync.account') ?? '').isNotEmpty) {
-        ref.read(syncCoordinatorProvider).sync().then((_) {
-          final db = ref.read(dbProvider);
-          db.setSetting('sync.last_at', '${DateTime.now().millisecondsSinceEpoch}');
-          ref.read(pendingOpsProvider.notifier).refresh();
-          ref.read(lastSyncAtProvider.notifier).refresh();
-          ref.read(syncEventsProvider.notifier).refresh();
-        }).catchError((_) {});
+        ref
+            .read(syncCoordinatorProvider)
+            .sync()
+            .then((_) {
+              final db = ref.read(dbProvider);
+              db.setSetting(
+                'sync.last_at',
+                '${DateTime.now().millisecondsSinceEpoch}',
+              );
+              ref.read(pendingOpsProvider.notifier).refresh();
+              ref.read(lastSyncAtProvider.notifier).refresh();
+              ref.read(syncEventsProvider.notifier).refresh();
+            })
+            .catchError((_) {});
       }
     });
   }
@@ -90,13 +98,13 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       setState(() => _desktopQuickOpen = !_desktopQuickOpen);
       if (_desktopQuickOpen) {
         WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _quickPanelKey.currentState?.focusAmount());
+          (_) => _quickPanelKey.currentState?.focusAmount(),
+        );
       }
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const QuickEntryPage()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const QuickEntryPage()));
   }
 
   /// 右側快記面板（供 ⌘N 開啟後聚焦金額欄）。
@@ -114,13 +122,18 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         // FR-Q7 桌面快捷鍵（F01-S1.11）：⌘N（macOS）／Ctrl+N（其餘）。
-        const SingleActivator(LogicalKeyboardKey.keyN, meta: true): const _OpenQuickEntryIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true): const _OpenQuickEntryIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+            const _OpenQuickEntryIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+            const _OpenQuickEntryIntent(),
         // FR-S6 掃描快捷鍵（F03-FE S6）：⌘⇧S／Ctrl+Shift+S。
         const SingleActivator(LogicalKeyboardKey.keyS, meta: true, shift: true):
             const _OpenScanIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true, shift: true):
-            const _OpenScanIntent(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          control: true,
+          shift: true,
+        ): const _OpenScanIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -178,7 +191,9 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                 body: Row(
                   children: [
                     _DesktopSideNav(
-                      tabs: [for (final (_, label, icon, _) in tabs) (label, icon)],
+                      tabs: [
+                        for (final (_, label, icon, _) in tabs) (label, icon),
+                      ],
                       current: _tab,
                       onSelect: (i) => setState(() => _tab = i),
                     ),
@@ -189,7 +204,8 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                             onScan: _openScan,
                             // PM 2026-10-26：切換右側快記面板顯示/隱藏。
                             onQuick: () => setState(
-                                () => _desktopQuickOpen = !_desktopQuickOpen),
+                              () => _desktopQuickOpen = !_desktopQuickOpen,
+                            ),
                             quickOpen: _desktopQuickOpen,
                             onSearch: (_) => setState(() => _tab = 1),
                           ),
@@ -234,8 +250,8 @@ class _DesktopSideNav extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final synced = (ref.watch(dbProvider).getSetting('sync.account') ?? '')
-        .isNotEmpty;
+    final synced =
+        (ref.watch(dbProvider).getSetting('sync.account') ?? '').isNotEmpty;
     return Container(
       width: 190,
       color: const Color(0xFF0B2B29), // 08 雛型側欄深色（亮/暗主題皆同——桌面辨識）
@@ -252,16 +268,23 @@ class _DesktopSideNav extends ConsumerWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(7),
-                  child: Image.asset('assets/icon/app_icon.png',
-                      width: 26, height: 26, fit: BoxFit.cover),
+                  child: Image.asset(
+                    'assets/icon/app_icon.png',
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.cover,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text('LedgerSync',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800)),
+                  child: Text(
+                    'LedgerSync',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -274,8 +297,10 @@ class _DesktopSideNav extends ConsumerWidget {
               borderRadius: BorderRadius.circular(10),
               onTap: () => onSelect(i),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
                 margin: const EdgeInsets.only(bottom: 2),
                 decoration: BoxDecoration(
                   color: current == i
@@ -285,21 +310,24 @@ class _DesktopSideNav extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(icon,
-                        size: 18,
+                    Icon(
+                      icon,
+                      size: 18,
+                      color: current == i
+                          ? Colors.white
+                          : const Color(0xFFCFE3E1),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
                         color: current == i
                             ? Colors.white
-                            : const Color(0xFFCFE3E1)),
-                    const SizedBox(width: 10),
-                    Text(label,
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: current == i
-                                ? Colors.white
-                                : const Color(0xFFCFE3E1),
-                            fontWeight: current == i
-                                ? FontWeight.w700
-                                : null)),
+                            : const Color(0xFFCFE3E1),
+                        fontWeight: current == i ? FontWeight.w700 : null,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -308,29 +336,38 @@ class _DesktopSideNav extends ConsumerWidget {
           InkWell(
             key: const Key('desktop-nav-設定'),
             borderRadius: BorderRadius.circular(10),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const SettingsHubPage())),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const SettingsHubPage()),
+            ),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              child: const Row(children: [
-                Icon(Icons.settings_outlined,
-                    size: 18, color: Color(0xFFCFE3E1)),
-                SizedBox(width: 10),
-                Text('設定',
-                    style: TextStyle(
-                        fontSize: 13, color: Color(0xFFCFE3E1))),
-              ]),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.settings_outlined,
+                    size: 18,
+                    color: Color(0xFFCFE3E1),
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    '設定',
+                    style: TextStyle(fontSize: 13, color: Color(0xFFCFE3E1)),
+                  ),
+                ],
+              ),
             ),
           ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text('v$appVersion · 本地優先\n${synced ? '已連結：Google Drive' : '雲端未設定'}',
-                style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFFCFE3E1),
-                    height: 1.6)),
+            child: Text(
+              'v$appVersion · 本地優先\n${synced ? '已連結：Google Drive' : '雲端未設定'}',
+              style: const TextStyle(
+                fontSize: 10,
+                color: Color(0xFFCFE3E1),
+                height: 1.6,
+              ),
+            ),
           ),
         ],
       ),
@@ -360,7 +397,9 @@ class _DesktopToolbar extends StatelessWidget {
       height: 52,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        border: Border(
+          bottom: BorderSide(color: Theme.of(context).dividerColor),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -374,10 +413,13 @@ class _DesktopToolbar extends StatelessWidget {
                   hintText: '🔍 搜尋交易（關鍵字／金額／分類／期間）— Ctrl+F',
                   isDense: true,
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  fillColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none),
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 onSubmitted: onSearch,
               ),
@@ -403,7 +445,7 @@ class _DesktopToolbar extends StatelessWidget {
   }
 }
 
-/// 桌面右側快記常駐面板（08：金額＋分類格＋meta＋儲存；320px）。
+/// 桌面右側快記面板（08：金額＋分類格＋meta＋儲存；320px；計算機聚焦金額欄滑入）。
 class _DesktopQuickPanel extends ConsumerStatefulWidget {
   const _DesktopQuickPanel({super.key});
 
@@ -414,10 +456,11 @@ class _DesktopQuickPanel extends ConsumerStatefulWidget {
 class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
   final _amountCtrl = TextEditingController();
 
-  /// 計算機運算式（PM 2026-10-25：桌面面板亦常駐鍵盤——與手機共用元件）。
+  /// 計算機運算式（與手機共用元件；聚焦金額欄才滑入——PM 2026-11-26）。
   String _expr = '';
 
   /// 金額欄焦點（⌘N 開啟面板後聚焦；PM 2026-10-29）。
+  /// PM 2026-11-26 最終：計算機**常駐**（僅編輯交易採聚焦滑入制）。
   final _amountFocus = FocusNode();
 
   /// 由 [MainShellPage] 於快捷鍵開啟面板後呼叫。
@@ -439,8 +482,12 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
   Future<void> _openCategoryPicker() async {
     final st = ref.read(quickEntryControllerProvider);
     final kind = st.mode == QuickEntryMode.income ? 'income' : 'expense';
-    final pick = await showCategoryPicker(context, ref,
-        kind: kind, selectedId: st.category?.id);
+    final pick = await showCategoryPicker(
+      context,
+      ref,
+      kind: kind,
+      selectedId: st.category?.id,
+    );
     if (!mounted || pick == null) return;
     switch (pick) {
       case CategoryPicked(:final categoryId):
@@ -453,8 +500,11 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
   }
 
   /// 分類即建即選（PM 2026-10-24：彈窗各欄「＋」→ 名稱對話框 → 建立後選取）。
-  Future<void> _quickAddCategory(
-      {required String kind, required bool asSub, String? parentId}) async {
+  Future<void> _quickAddCategory({
+    required String kind,
+    required bool asSub,
+    String? parentId,
+  }) async {
     if (asSub && parentId == null) return;
     final ctrl = TextEditingController();
     final name = await showDialog<String>(
@@ -469,12 +519,14 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('取消')),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('取消'),
+          ),
           FilledButton(
-              key: const Key('quick-add-category-save'),
-              onPressed: () => Navigator.of(dialogCtx).pop(ctrl.text.trim()),
-              child: const Text('建立')),
+            key: const Key('quick-add-category-save'),
+            onPressed: () => Navigator.of(dialogCtx).pop(ctrl.text.trim()),
+            child: const Text('建立'),
+          ),
         ],
       ),
     );
@@ -485,7 +537,9 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
       ref.invalidate(expenseCategoriesProvider);
       ref.invalidate(incomeCategoriesProvider);
       ref.refreshAllData();
-      ref.read(quickEntryControllerProvider.notifier).selectCategoryById(row.id);
+      ref
+          .read(quickEntryControllerProvider.notifier)
+          .selectCategoryById(row.id);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -498,6 +552,8 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
   /// 運算式 → 金額欄＋controller 同步（與手機同一契約）。
   void _onKeypadExpr(String expr) {
     setState(() => _expr = expr);
+    // 金額欄顯示原始運算式（＝ 鍵求值——PM 2026-11-26 最終版）。
+    // 實體鍵盤輸入時 onChanged 以欄位現值同步（與手機同一契約）。
     _amountCtrl.text = expr;
     ref.read(quickEntryControllerProvider.notifier).setAmount(expr);
   }
@@ -508,9 +564,11 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
     controller.save();
     final s = ref.read(quickEntryControllerProvider);
     if (s.phase == QuickEntryPhase.savedDialog) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              '已入庫（${s.lastSaveMs} ms）· 本次已記 ${s.sessionCount} 筆')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已入庫（${s.lastSaveMs} ms）· 本次已記 ${s.sessionCount} 筆'),
+        ),
+      );
       _amountCtrl.clear();
       _noteCtrl.clear();
       controller.setAmount(''); // FR-Q5：金額清空（Sticky 其餘保留）
@@ -534,9 +592,11 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
     final controller = ref.read(quickEntryControllerProvider.notifier);
     final accounts = ref.watch(activeAccountsProvider);
     // 分類集依模式（支出／收入各自獨立；轉帳無分類——PM 2026-10-24）。
-    final categories = ref.watch(state.mode == QuickEntryMode.income
-        ? incomeCategoriesProvider
-        : expenseCategoriesProvider);
+    final categories = ref.watch(
+      state.mode == QuickEntryMode.income
+          ? incomeCategoriesProvider
+          : expenseCategoriesProvider,
+    );
     // 分類欄顯示（PM 2026-10-24/25：與手機一致——共用 category_display；
     // 子類別＝**主類別 emoji ＋ 子類別名**；非圖示庫代碼→🏷️，與類別設定一致）。
     final catById = categoryIndex(categories);
@@ -546,8 +606,9 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
         : categoryLabelOf(selCat, byId: catById);
     // 欄位 ↔ state 同步（PM 2026-10-24）：記住上次帶入金額/商家時反映。
     ref.listen(
-      quickEntryControllerProvider
-          .select((s) => (s.amount, s.merchant, s.note)),
+      quickEntryControllerProvider.select(
+        (s) => (s.amount, s.merchant, s.note),
+      ),
       (prev, next) {
         if (!mounted) return;
         final (amount, merchant, note) = next;
@@ -568,23 +629,23 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('快速記帳',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          Text('Ctrl+N 顯示／隱藏 · 工具列鈕同步',
-              style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            '快速記帳',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          Text(
+            'Ctrl+N 顯示／隱藏 · 工具列鈕同步',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
           const SizedBox(height: 8),
           // 模式列（PM 2026-10-24：僅 支出／收入／轉帳；三種模式類別各自獨立）。
           SegmentedButton<QuickEntryMode>(
             key: const Key('desktop-quick-mode'),
             segments: const [
-              ButtonSegment(
-                  value: QuickEntryMode.expense, label: Text('支出')),
+              ButtonSegment(value: QuickEntryMode.expense, label: Text('支出')),
               ButtonSegment(value: QuickEntryMode.income, label: Text('收入')),
-              ButtonSegment(
-                  value: QuickEntryMode.transfer, label: Text('轉帳')),
+              ButtonSegment(value: QuickEntryMode.transfer, label: Text('轉帳')),
             ],
             selected: {state.mode},
             onSelectionChanged: (m) => controller.setMode(m.first),
@@ -600,23 +661,27 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             // Enter＝儲存（PM 2026-10-29：復原原按鈕「OK 儲存（Enter）」承諾；
             // 現由常駐鍵盤 OK／此處 Enter 觸發）。
             onSubmitted: (_) {
-              if (quickEntrySaveEnabled(ref.read(quickEntryControllerProvider))) {
+              if (quickEntrySaveEnabled(
+                ref.read(quickEntryControllerProvider),
+              )) {
                 _saveFromPanel();
               }
             },
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
+            style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(fontWeight: FontWeight.w800),
             decoration: InputDecoration(
               hintText: '0',
               filled: true,
               fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
             ),
-            onChanged: controller.setAmount,
+            onChanged: (v) {
+              setState(() => _expr = v); // 鍵盤運算式顯示同步（實體鍵盤輸入）
+              controller.setAmount(v);
+            },
           ),
           const SizedBox(height: 10),
           // PM 2026-10-25：**移除個別主類別選項**（三欄快捷格）——分類一律由
@@ -629,19 +694,20 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
                 key: const Key('desktop-quick-date-prev'),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 30, minHeight: 30),
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                 tooltip: '前一天',
                 onPressed: () => controller.setOccurredAt(
-                    state.occurredAt.subtract(const Duration(days: 1))),
+                  state.occurredAt.subtract(const Duration(days: 1)),
+                ),
                 icon: const Icon(Icons.chevron_left, size: 20),
               ),
               TextButton(
                 key: const Key('desktop-quick-date'),
                 style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: () => showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,
@@ -650,19 +716,23 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
                     onSelected: controller.setOccurredAt,
                   ),
                 ),
-                child: Text(_fmt(state.occurredAt),
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700)),
+                child: Text(
+                  _fmt(state.occurredAt),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               IconButton(
                 key: const Key('desktop-quick-date-next'),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 30, minHeight: 30),
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                 tooltip: '後一天',
                 onPressed: () => controller.setOccurredAt(
-                    state.occurredAt.add(const Duration(days: 1))),
+                  state.occurredAt.add(const Duration(days: 1)),
+                ),
                 icon: const Icon(Icons.chevron_right, size: 20),
               ),
             ],
@@ -673,12 +743,16 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             initialValue: state.account?.id,
             isDense: true,
             decoration: const InputDecoration(
-                labelText: '帳戶', isDense: true, border: OutlineInputBorder()),
+              labelText: '帳戶',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
             items: [
               for (final a in accounts)
                 DropdownMenuItem(value: a.id, child: Text(a.name)),
             ],
-            onChanged: (v) => v == null ? null : controller.selectAccountById(v),
+            onChanged: (v) =>
+                v == null ? null : controller.selectAccountById(v),
           ),
           const SizedBox(height: 8),
           if (state.mode == QuickEntryMode.transfer) ...[
@@ -688,9 +762,10 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
               initialValue: state.toAccount?.id,
               isDense: true,
               decoration: const InputDecoration(
-                  labelText: '目標帳戶',
-                  isDense: true,
-                  border: OutlineInputBorder()),
+                labelText: '目標帳戶',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
               items: [
                 for (final a in accounts)
                   if (a.id != state.account?.id)
@@ -707,9 +782,10 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
               onTap: _openCategoryPicker,
               child: InputDecorator(
                 decoration: const InputDecoration(
-                    labelText: '分類',
-                    isDense: true,
-                    border: OutlineInputBorder()),
+                  labelText: '分類',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
                 child: Text(selCatLabel),
               ),
             ),
@@ -720,9 +796,10 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
               key: const Key('desktop-quick-merchant'),
               controller: _merchantCtrl,
               decoration: const InputDecoration(
-                  labelText: '商家',
-                  isDense: true,
-                  border: OutlineInputBorder()),
+                labelText: '商家',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
               onChanged: controller.setMerchant,
             ),
           const SizedBox(height: 8),
@@ -731,23 +808,26 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             key: const Key('desktop-quick-note'),
             controller: _noteCtrl,
             decoration: const InputDecoration(
-                labelText: '備註（選填）',
-                isDense: true,
-                border: OutlineInputBorder()),
+              labelText: '備註（選填）',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
             onChanged: controller.setNote,
           ),
           const Spacer(),
-          // 常駐計算機鍵盤（PM 2026-10-25：桌面面板**與手機共用同一元件**，
-          // OK 跨兩格；原獨立大按鈕「OK 儲存（Enter）」已移除）。
+          // 計算機鍵盤（桌面面板**與手機共用同一元件**，OK 跨兩格）；
+          // **常駐**（PM 2026-11-26 最終：僅編輯交易採聚焦滑入制）。
           AmountKeypad(
             expr: _expr,
             onExprChanged: _onKeypadExpr,
             onOk: _saveFromPanel,
             okEnabled: quickEntrySaveEnabled(state),
           ),
-          Text('儲存後停留此面板繼續記（每筆確認）',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            '儲存後停留此面板繼續記（每筆確認）',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ],
       ),
     );

@@ -333,7 +333,7 @@
 | `When 開啟快速記帳頁並連續記錄 {n} 筆後按下「完成」` | 開快記→連存 n 筆（每筆按繼續，末筆按完成）→返回原分頁（S1.9） |
 | `When 輸入金額 {amount}` | 鍵盤輸入 |
 | `When 開啟支出記錄` | 開啟快記（預設支出模式；F02-FE S1 同「開啟快速記帳頁」） |
-| `When 以計算機鍵盤計算 {expr}` | 逐鈕點按（數字逐位＋運算子＋＝；`+ - * /` 映射鍵面 ＋－×÷）；＝求值寫入金額欄（左至右、TWD 四捨五入至整數元；F02-FE S2.9） |
+| `When 以計算機鍵盤計算 {expr}` | 先聚焦金額欄（聚焦滑入制）→ 逐鈕點按（數字逐位＋運算子；`+ - * /` 映射鍵面 ＋－×÷）；**＝ 鍵已移除**（PM 2026-10-24 即時求值）——金額欄**即時顯示求值結果**（PM 2026-11-26：50×2 → 100，存檔前可確認；左至右、TWD 四捨五入至整數元；F02-FE S2.9） |
 | `When 於計算機鍵盤按 {key}` | 單鈕點按（C 清空／⌫ 退位；F02-FE S2.9） |
 | `When 建立轉帳「{from}」→「{to}」金額 {amt}` | 快記轉帳模式：開快記→切轉帳→選來源/目標→輸入→儲存→完成（F02-FE S2） |
 | `When 建立「儲值」交易 {to} 金額 {amt} 來源={from}` | 同轉帳（目標=票證卡；F02-FE S3） |
@@ -458,7 +458,7 @@
 | `When 建立拆分交易 總額 {total}（{cat1} {a1} + {cat2} {a2}）` | 快記拆分模式：雙子項（分類＋金額）→ executeSplit（總額守恆；F02-FE S2.7 @M2） |
 | `And 顯示「{label}」樣式（同一群組）` | 拆分樣式：兩列同群組＋call_split 圖示（F02-FE S2.7） |
 | `When 開啟總覽頁` | 導航至總覽分頁（NavigationBar；F05-FE S5.4/S5.5） |
-| `Then 金額欄下方顯示常駐計算機鍵盤` | find.byKey(amount-keypad)；金額欄 readOnly 不彈系統鍵盤（F02-FE S2.9） |
+| `Then 金額欄聚焦後顯示計算機鍵盤` | tap quick-entry-amount 聚焦 → find.byKey(amount-keypad)——聚焦滑入制（PM 2026-11-26）；金額欄 readOnly 不彈系統鍵盤（F02-FE S2.9；原句型「金額欄下方顯示常駐計算機鍵盤」隨聚焦滑入改版退役） |
 | `Then 金額欄顯示 {value}` | 金額欄 text == value（＝ 求值結果；TWD 四捨五入整數元） |
 | `Then 顯示「{label}」樣式（非支出圖示）` | 明細列樣式：textContaining({label})＋轉帳圖示 swap_horiz（F02-FE S2） |
 | `Then 顯示「{text}」（不顯示「{other}」）` | 組合斷言：儲值文案出現且支出字樣不出現（F02-FE S3） |
@@ -573,7 +573,7 @@
 | 分類彈窗新增 | `picker-add-main`／`picker-add-sub` → `quick-add-category-name`／`quick-add-category-save`（兩平台皆建立並選取） |
 | 刪除範圍 | `wipe-start` → `wipe-scope-全部`／`wipe-scope-{label}`／`wipe-scope-factory` → `wipe-scope-next` |
 
-| 桌面面板 | `desktop-quick-*`（模式／金額／日期／帳戶／目標／分類／商家／備註）；**常駐鍵盤**＝共用 `quick-entry-save`（OK 跨兩格）；工具列鈕 `fab-quick-entry`＝**面板顯示/隱藏切換**（PM 2026-10-26）；桌面 **⌘N／Ctrl+N 亦為切換**（PM 2026-10-29；原僅開啟）——**非**整頁切換（FE harness 需同步） |
+| 桌面面板 | `desktop-quick-*`（模式／金額／日期／帳戶／目標／分類／商家／備註）；**計算機鍵盤**＝共用 `quick-entry-save`（OK 跨兩格；聚焦金額欄才由下滑入——PM 2026-11-26 聚焦滑入制）；工具列鈕 `fab-quick-entry`＝**面板顯示/隱藏切換**（PM 2026-10-26）；桌面 **⌘N／Ctrl+N 亦為切換**（PM 2026-10-29；原僅開啟）——**非**整頁切換（FE harness 需同步） |
 | 全 App 快捷鍵 | 僅 2 組：`⌘N`/`Ctrl+N`＝快記（桌面＝面板切換）；`⌘⇧S`/`Ctrl+⇧S`＝掃描 |
 | 統計頁（v3） | `stats-month-prev`／`stats-month`／`stats-month-next`（文字契約不變）；甜甜圈 `stats-donut`（`CategoryDonut`） |
 | 分類圖示 | `category_display.dart`（`categoryEmojiOf`／`categoryLabelOf`）——**唯一來源**；子類別圖示跟隨主類別、非庫內→🏷️ |
