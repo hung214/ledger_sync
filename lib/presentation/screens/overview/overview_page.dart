@@ -54,7 +54,8 @@ class OverviewPage extends ConsumerWidget {
     final income = monthly.incomeMinorThisMonth();
     final asset = totals.assetsMinor;
     final liability = totals.liabilitiesMinor;
-    final recent = [...txs]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    final recent = [...txs]
+      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
 
     final now = DateTime.now();
     final primary = <Widget>[
@@ -74,55 +75,66 @@ class OverviewPage extends ConsumerWidget {
           children: [
             // 標籤帶「本月」前綴——避免與明細語意斷言（F02「儲值不顯示『支出』」）
             // 之全域文字比對衝突（IndexedStack 會同時建入所有分頁）。
-            _MoneyRow(label: '本月支出', value: signed(expense, minus: true), color: tokens.danger),
+            _MoneyRow(
+              label: '本月支出',
+              value: signed(expense, minus: true),
+              color: tokens.danger,
+            ),
             const SizedBox(height: 6),
-            _MoneyRow(label: '本月收入', value: signed(income, minus: false), color: tokens.success),
+            _MoneyRow(
+              label: '本月收入',
+              value: signed(income, minus: false),
+              color: tokens.success,
+            ),
             const SizedBox(height: 6),
             _MoneyRow(label: '結餘', value: money(income - expense)),
           ],
         ),
       ),
       const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(child: _StatCard(label: '資產', value: money(asset))),
-          const SizedBox(width: 8),
-          Expanded(
-              child: _StatCard(
-                  // PM 2026-11-27：手機三卡等寬，「負債（信用卡）」過長折行——簡化為「負債」。
-                  label: '負債',
-                  value: money(liability),
-                  danger: true)),
-          const SizedBox(width: 8),
-          Expanded(child: _StatCard(label: '淨值', value: money(asset - liability))),
-        ],
+      // PM 2026-11-27：三卡（資產/負債/淨值）並排；任一卡**實際渲染折行** →
+      // 三卡改**獨立一行**。偵測＝渲染後量測 RenderParagraph 高度
+      // （跨裝置／系統字級／字型差異皆以實際渲染為準，不需字元數預估）。
+      _StatRow(
+        asset: money(asset),
+        liability: money(liability),
+        net: money(asset - liability),
       ),
       const SizedBox(height: 8),
       _Section(
         title: '收入目標',
         trailing: goal == null
             ? null
-            : _Badge(goal.achieved ? '已達成 ${goal.ratePercent}%' : '進行中 ${goal.ratePercent}%'),
+            : _Badge(
+                goal.achieved
+                    ? '已達成 ${goal.ratePercent}%'
+                    : '進行中 ${goal.ratePercent}%',
+              ),
         child: goal == null
-            ? Text('未設定——於預算頁設定後顯示進度',
-                style: TextStyle(color: tokens.subText))
+            ? Text('未設定——於預算頁設定後顯示進度', style: TextStyle(color: tokens.subText))
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 單一 Text 保留「{已達成} / 目標 {目標}」精確格式
                   // （F05-FE 以 find.text 嚴格比對；勿拆成兩個 Text）。
-                  Text('${money(goal.achievedMinor)} / 目標 ${money(goal.goalMinor)}',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: tokens.success)),
+                  Text(
+                    '${money(goal.achievedMinor)} / 目標 ${money(goal.goalMinor)}',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: tokens.success,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
                       value: goal.goalMinor <= 0
                           ? 0
-                          : (goal.achievedMinor / goal.goalMinor).clamp(0.0, 1.0),
+                          : (goal.achievedMinor / goal.goalMinor).clamp(
+                              0.0,
+                              1.0,
+                            ),
                       minHeight: 8,
                       color: tokens.success,
                       backgroundColor: tokens.track,
@@ -148,7 +160,8 @@ class OverviewPage extends ConsumerWidget {
                       // ⚠ 門檻警示（≥80% 琥珀／超支紅——AC-05）。
                       name: db.categoryName(b.categoryId!) ?? '分類預算',
                       usageMinor:
-                          evaluator.categoryUsage(b.categoryId!)?.totalMinor ?? 0,
+                          evaluator.categoryUsage(b.categoryId!)?.totalMinor ??
+                          0,
                       amountMinor: b.amountMinor,
                     ),
                   ),
@@ -164,9 +177,11 @@ class OverviewPage extends ConsumerWidget {
                 key: Key('account-${row.id}'),
                 contentPadding: EdgeInsets.zero,
                 onTap: row.type == 'credit'
-                    ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
                           builder: (_) => CreditCardPage(cardAccountId: row.id),
-                        ))
+                        ),
+                      )
                     : null,
                 leading: Icon(_accountIcon(row.type)),
                 title: Text(row.name),
@@ -174,9 +189,8 @@ class OverviewPage extends ConsumerWidget {
                     ? const Text('點擊檢視帳單')
                     // FR-A2：不計入合併統計之帳戶標示（總覽合計已排除）。
                     : (!row.includeInTotals
-                        ? const Text('不計入合併',
-                            key: Key('acct-excluded-badge'))
-                        : null),
+                          ? const Text('不計入合併', key: Key('acct-excluded-badge'))
+                          : null),
                 trailing: Text(
                   // F02-FE S2：餘額千分位；F08-FE S5：隱私遮蔽（●●●●）。
                   // **T79 修復**（PM 2026-11-24）：信用卡列＝**負債語意**——
@@ -195,8 +209,7 @@ class OverviewPage extends ConsumerWidget {
       _Section(
         title: '最近交易',
         child: recent.isEmpty
-            ? Text('尚無交易——點「+」快記第一筆',
-                style: TextStyle(color: tokens.subText))
+            ? Text('尚無交易——點「+」快記第一筆', style: TextStyle(color: tokens.subText))
             : Column(
                 children: [
                   for (final tx in recent.take(3)) ...[
@@ -217,9 +230,11 @@ class OverviewPage extends ConsumerWidget {
             key: const Key('privacy-toggle'),
             tooltip: '遮蔽金額',
             onPressed: () => ref.read(privacyMaskedProvider.notifier).toggle(),
-            icon: Icon(ref.watch(privacyMaskedProvider)
-                ? Icons.visibility_off
-                : Icons.visibility),
+            icon: Icon(
+              ref.watch(privacyMaskedProvider)
+                  ? Icons.visibility_off
+                  : Icons.visibility,
+            ),
           ),
           // 掃描入口（FR-S6：獨立於快記大鈕；F03 S1）。
           IconButton(
@@ -233,7 +248,8 @@ class OverviewPage extends ConsumerWidget {
             key: const Key('app-settings'),
             tooltip: '設定',
             onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsHubPage())),
+              MaterialPageRoute<void>(builder: (_) => const SettingsHubPage()),
+            ),
             icon: const Icon(Icons.settings_outlined),
           ),
           IconButton(
@@ -252,8 +268,10 @@ class OverviewPage extends ConsumerWidget {
           final footer = Padding(
             padding: const EdgeInsets.only(top: 24, bottom: 8),
             child: Center(
-              child: Text('LedgerSync v$appVersion',
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'LedgerSync v$appVersion',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           );
           if (!wide) {
@@ -308,8 +326,9 @@ class _BudgetSummaryItem extends StatelessWidget {
         ? tokens.danger
         : (warn ? tokens.warning : AppTokens.brandSeed);
     // 百分比：整數值顯示整數（50%），含小數顯示一位（87.5%）。
-    final pctText =
-        pct % 1 == 0 ? pct.toStringAsFixed(0) : pct.toStringAsFixed(1);
+    final pctText = pct % 1 == 0
+        ? pct.toStringAsFixed(0)
+        : pct.toStringAsFixed(1);
     return Column(
       key: Key('budget-progress-$name'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,9 +336,13 @@ class _BudgetSummaryItem extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(name,
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700)),
+              child: Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             Text(
               // **金額單位＝台幣元**（TWD zero-decimal——amountMinor 即元，
@@ -375,9 +398,14 @@ class _Section extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(title!,
-                      style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600, color: tokens.subText)),
+                  Text(
+                    title!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.subText,
+                    ),
+                  ),
                   ?trailing,
                 ],
               ),
@@ -405,22 +433,33 @@ class _MoneyRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: TextStyle(fontSize: 13, color: tokens.subText)),
-        Text(value,
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: color ?? Theme.of(context).colorScheme.onSurface)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: color ?? Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
       ],
     );
   }
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value, this.danger = false});
+  const _StatCard({
+    required this.label,
+    required this.value,
+    this.danger = false,
+    this.valueKey,
+  });
 
   final String label;
   final String value;
   final bool danger;
+
+  /// 渲染後實測折行用（_StatRow 量測此 Text 的實際高度）。
+  final Key? valueKey;
 
   @override
   Widget build(BuildContext context) {
@@ -434,14 +473,117 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(label, style: TextStyle(fontSize: 11, color: tokens.subText)),
             const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: danger ? tokens.danger : Theme.of(context).colorScheme.onSurface)),
+            Text(
+              value,
+              key: valueKey,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: danger
+                    ? tokens.danger
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 資產／負債／淨值三卡（PM 2026-11-27）：**渲染後實測折行** → 自動改三行。
+///
+/// 偵測方式：先以 Row（三等寬）渲染，post-frame 量測各金額 Text 的
+/// RenderParagraph 高度——超過單行（>30px）＝折行（擠壓）→ 改 Column
+/// 獨立一行。以**實際渲染**為準：跨裝置／系統字級／字型差異不會漏判
+/// （字元數／TextPainter 預估在 iOS web 曾低估）。金額變動時重新評估。
+class _StatRow extends StatefulWidget {
+  const _StatRow({
+    required this.asset,
+    required this.liability,
+    required this.net,
+  });
+
+  final String asset;
+  final String liability;
+  final String net;
+
+  @override
+  State<_StatRow> createState() => _StatRowState();
+}
+
+class _StatRowState extends State<_StatRow> {
+  final List<GlobalKey> _valueKeys = [
+    GlobalKey(debugLabel: 'stat-asset-value'),
+    GlobalKey(debugLabel: 'stat-liability-value'),
+    GlobalKey(debugLabel: 'stat-net-value'),
+  ];
+
+  bool _stacked = false;
+
+  void _recheck() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _stacked) return;
+      var wrapped = false;
+      for (final k in _valueKeys) {
+        final ro = k.currentContext?.findRenderObject();
+        if (ro is RenderBox && ro.hasSize && ro.size.height > 30) {
+          wrapped = true; // 金額折成兩行＝擠壓（單行 18px ≈ 24px 高）
+        }
+      }
+      if (wrapped && mounted) setState(() => _stacked = true);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _recheck();
+  }
+
+  @override
+  void didUpdateWidget(covariant _StatRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.asset != widget.asset ||
+        oldWidget.liability != widget.liability ||
+        oldWidget.net != widget.net) {
+      _stacked = false; // 金額變動 → 重新評估
+      _recheck();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card(int i, String label, String value, {bool danger = false}) =>
+        _StatCard(
+          label: label,
+          value: value,
+          danger: danger,
+          valueKey: _valueKeys[i],
+        );
+    final cards = [
+      card(0, '資產', widget.asset),
+      card(1, '負債', widget.liability, danger: true),
+      card(2, '淨值', widget.net),
+    ];
+    if (_stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final c in cards) ...[c, const SizedBox(height: 8)],
+        ],
+      );
+    }
+    // 未堆疊：排好後 post-frame 實測（折行 → 下一幀改堆疊）。
+    _recheck();
+    return Row(
+      children: [
+        Expanded(child: cards[0]),
+        const SizedBox(width: 8),
+        Expanded(child: cards[1]),
+        const SizedBox(width: 8),
+        Expanded(child: cards[2]),
+      ],
     );
   }
 }
@@ -457,17 +599,27 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-          color: tokens.success.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10)),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 11, color: tokens.success, fontWeight: FontWeight.w600)),
+        color: tokens.success.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          color: tokens.success,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
 
 class _RecentTxRow extends StatelessWidget {
-  const _RecentTxRow({required this.tx, required this.fmt, required this.masked});
+  const _RecentTxRow({
+    required this.tx,
+    required this.fmt,
+    required this.masked,
+  });
 
   final dynamic tx;
   final NumberFormat fmt;
@@ -486,30 +638,39 @@ class _RecentTxRow extends StatelessWidget {
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.receipt_long_outlined),
-      title: Text(tx.kind == TxKind.repayment // T81 修正：Tx entity＝enum 比較（字串恆 false——T59 同款）。
-          // T80：還款固定標籤（不建真分類）。
-          ? '信用卡繳款'
-          : tx.merchant ??
-              (tx.categoryId == null ? null : db.categoryName(tx.categoryId)) ??
-              '交易'),
+      title: Text(
+        tx.kind ==
+                TxKind
+                    .repayment // T81 修正：Tx entity＝enum 比較（字串恆 false——T59 同款）。
+            // T80：還款固定標籤（不建真分類）。
+            ? '信用卡繳款'
+            : tx.merchant ??
+                  (tx.categoryId == null
+                      ? null
+                      : db.categoryName(tx.categoryId)) ??
+                  '交易',
+      ),
       subtitle: Text(
         '${DateFormat('M/d HH:mm').format(DateTime.fromMillisecondsSinceEpoch(tx.occurredAt))}'
         '${hasAttachment ? ' · 📷' : ''}',
         style: TextStyle(fontSize: 12, color: tokens.subText),
       ),
-      trailing: Text(amountText,
-          style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: isExpense ? tokens.danger : tokens.success)),
+      trailing: Text(
+        amountText,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: isExpense ? tokens.danger : tokens.success,
+        ),
+      ),
     );
   }
 }
 
 /// 帳戶類型圖示（UI 打磨；AccountType 對映——一眼辨識帳戶性質）。
 IconData _accountIcon(String type) => switch (type) {
-      'cash' => Icons.payments_outlined,
-      'bank' => Icons.account_balance_outlined,
-      'credit' => Icons.credit_card,
-      'ewallet' => Icons.contactless_outlined,
-      _ => Icons.account_balance_wallet_outlined,
-    };
+  'cash' => Icons.payments_outlined,
+  'bank' => Icons.account_balance_outlined,
+  'credit' => Icons.credit_card,
+  'ewallet' => Icons.contactless_outlined,
+  _ => Icons.account_balance_wallet_outlined,
+};
