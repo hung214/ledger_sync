@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -35,11 +36,26 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
   (int, int)? _month;
   DateTimeRange? _range;
 
+  /// PM 2026-11-27：web 首排可能以**未載入的備用字型**量 chips 寬度
+  /// （之後資料刷新不重排——PM 實測：重啟後前三顆寬度卡死、改名才恢復）。
+  /// 開頁 600ms（字型已載入）後改 key 強制 chips 重新排版一次（自癒）。
+  Timer? _chipSettleTimer;
+  int _chipSettleTick = 0;
+
   @override
   void initState() {
     super.initState();
     final now = Clock.now();
     _month = (now.year, now.month); // 預設顯示本月
+    _chipSettleTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _chipSettleTick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _chipSettleTimer?.cancel();
+    super.dispose();
   }
 
   /// 月份位移（◀▶；跨年）。
@@ -66,6 +82,16 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // PM 2026-11-27：App 退出流程關閉 DB 後，settle timer 觸發的重排可能
+    // 再查詢已關閉 DB（StateError）——防禦性忽略（UI 即將銷毀，不再渲染）。
+    try {
+      return _buildBody(context);
+    } on StateError {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+  }
+
+  Widget _buildBody(BuildContext context) {
     // 訂閱交易變化（儲存/復原/刪除後即時刷新 AC-02——快記 controller 會 invalidate）。
     ref.watch(ledgerProvider);
     final db = ref.watch(dbProvider);
@@ -365,6 +391,16 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
   /// 帳戶 chips 橫列（雛型 02-ledger）：名稱＋餘額（信用卡顯示「應付」）；
   /// 點選＝以該帳戶篩選（再點取消）。隱私遮蔽時金額 ●●●●。
   Widget _accountChips(BuildContext context, AppDatabase db) {
+    // PM 2026-11-27：settle timer 觸發的重排可能發生在 App 退出流程
+    // （DB 已關閉）之後——防禦性忽略（UI 即將銷毀，不再渲染 chips）。
+    try {
+      return _accountChipsInner(context, db);
+    } on StateError {
+      return const SizedBox.shrink();
+    }
+  }
+
+  Widget _accountChipsInner(BuildContext context, AppDatabase db) {
     final accounts = ref.watch(activeAccountsProvider);
     if (accounts.isEmpty) return const SizedBox.shrink();
     const calc = BalanceCalculator();
@@ -374,38 +410,42 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     final tokens = AppTokens.of(context);
     return SizedBox(
       height: 56,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        children: [
-          for (final a in accounts) ...[
-            ChoiceChip(
-              key: Key('acct-chip-${a.id}'),
-              label: Text(
-                a.type == 'credit'
-                    ? '${a.name} 應付 ${masked ? '●●●●' : fmt.format(calc.creditUnpaidTotal(card: accountEntity(a), txs: txs))}'
-                    : '${a.name} ${masked ? '●●●●' : fmt.format(calc.assetBalance(account: accountEntity(a), txs: txs))}',
-                maxLines: 1,
-                softWrap: false, // PM 2026-11-27：帳戶/金額禁止直排
+      // settle tick 走 KeyedSubtree：整列重建（字型競態自癒）但 chip key 契約不變。
+      child: KeyedSubtree(
+        key: ValueKey('acct-chips-settle-$_chipSettleTick'),
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          children: [
+            for (final a in accounts) ...[
+              ChoiceChip(
+                key: Key('acct-chip-${a.id}'),
+                label: Text(
+                  a.type == 'credit'
+                      ? '${a.name} 應付 ${masked ? '●●●●' : fmt.format(calc.creditUnpaidTotal(card: accountEntity(a), txs: txs))}'
+                      : '${a.name} ${masked ? '●●●●' : fmt.format(calc.assetBalance(account: accountEntity(a), txs: txs))}',
+                  maxLines: 1,
+                  softWrap: false, // PM 2026-11-27：帳戶/金額禁止直排
+                ),
+                selected: _accountFilter == a.id,
+                selectedColor: tokens.success,
+                showCheckmark: false,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: _accountFilter == a.id ? Colors.white : tokens.subText,
+                ),
+                side: BorderSide(
+                  color: _accountFilter == a.id
+                      ? tokens.success
+                      : Theme.of(context).dividerColor,
+                ),
+                onSelected: (on) =>
+                    setState(() => _accountFilter = on ? a.id : null),
               ),
-              selected: _accountFilter == a.id,
-              selectedColor: tokens.success,
-              showCheckmark: false,
-              labelStyle: TextStyle(
-                fontSize: 12,
-                color: _accountFilter == a.id ? Colors.white : tokens.subText,
-              ),
-              side: BorderSide(
-                color: _accountFilter == a.id
-                    ? tokens.success
-                    : Theme.of(context).dividerColor,
-              ),
-              onSelected: (on) =>
-                  setState(() => _accountFilter = on ? a.id : null),
-            ),
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
