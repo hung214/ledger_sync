@@ -65,6 +65,7 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   _BarcodeDetector? _nativeDetector;
+  web.HTMLCanvasElement? _roiCanvas; // T91：ROI 裁切偵測重用 canvas
 
   @override
   bool get hasNativeBarcodeDetector => _barcodeDetectorCtor != null;
@@ -81,23 +82,61 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
-  Future<List<DetectedCode>> detectNativeBarcodes() async {
+  Future<List<DetectedCode>> detectNativeBarcodes({Rect? region}) async {
     final v = _video;
     final detector = _getNativeDetector();
     if (v == null || v.videoWidth == 0 || detector == null) return const [];
     try {
-      final results = await detector.detect(v).toDart;
+      // T91 ROI：video 裁切至子區（放大——小碼模組變大＝更易命中），
+      // 偵測框反算回 video 座標（繪製契約不變）。
+      JSObject source = v;
+      var ox = 0.0, oy = 0.0, sc = 1.0;
+      if (region != null) {
+        final vw = v.videoWidth;
+        final vh = v.videoHeight;
+        final x = region.left.floor().clamp(0, vw - 1);
+        final y = region.top.floor().clamp(0, vh - 1);
+        final rw = region.width.round().clamp(1, vw - x);
+        final rh = region.height.round().clamp(1, vh - y);
+        // 放大：長邊放大至 640px（上限 2×、不縮小）——ROI 本身小，
+        // 放大成本可忽略，小碼模組密度提升＝偵測力提升。
+        final longEdge = rw > rh ? rw : rh;
+        var scale = 640 / longEdge;
+        if (scale > 2) scale = 2;
+        if (scale < 1) scale = 1;
+        final cw = (rw * scale).round();
+        final ch = (rh * scale).round();
+        final canvas = _roiCanvas ??=
+            web.document.createElement('canvas') as web.HTMLCanvasElement;
+        canvas.width = cw;
+        canvas.height = ch;
+        final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+        ctx.drawImage(v, x, y, rw, rh, 0, 0, cw, ch);
+        source = canvas;
+        ox = x.toDouble();
+        oy = y.toDouble();
+        sc = cw / rw;
+      }
+      final results = await detector.detect(source).toDart;
       return [
         for (final r in results.toDart)
           if ((r.rawValue?.toDart ?? '').isNotEmpty)
             DetectedCode(
               text: r.rawValue!.toDart,
-              box: _rectFromDomRect(r.boundingBox),
+              box: _mapBoxToVideo(_rectFromDomRect(r.boundingBox), ox, oy, sc),
             ),
       ];
     } catch (_) {
       return const []; // 偵測失敗——退回 zxing2 後備（呼叫端分流）。
     }
+  }
+
+  /// ROI 偵測框（canvas 座標）→ video 像素座標（反算：除以放大倍率＋偏移）。
+  static Rect? _mapBoxToVideo(Rect? box, double ox, double oy, double sc) {
+    if (box == null) return null;
+    if (sc == 1 && ox == 0 && oy == 0) return box;
+    return Rect.fromLTWH(box.left / sc + ox, box.top / sc + oy,
+        box.width / sc, box.height / sc);
   }
 
   /// DOMRectReadOnly（video 像素座標）→ dart:ui Rect（T88 偵測框）。
@@ -676,7 +715,7 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
-  Future<AnalysisFrame?> captureAnalysisFrame() async {
+  Future<AnalysisFrame?> captureAnalysisFrame({Rect? region}) async {
     final v = _video;
     if (v == null || v.videoWidth == 0 || v.readyState < 2) return null;
     // 上限同 captureFrame（1920 防 4K）；drawImage＋getImageData 皆遠比
@@ -692,10 +731,19 @@ class WebCameraStreamController implements CameraStreamController {
     }
     final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
     ctx.drawImage(v, 0, 0, w, h);
-    final data = ctx.getImageData(0, 0, w, h);
+    // T91 ROI：只取子區像素（夾限至畫布範圍）——解碼面積 ≈ 全幅 1/8，
+    // zxing2 單 tick 耗時隨面積等比下降（hold 階段迴圈可維持 10fps）。
+    var x = 0, y = 0, rw = w, rh = h;
+    if (region != null) {
+      x = (region.left * scale).floor().clamp(0, w - 1);
+      y = (region.top * scale).floor().clamp(0, h - 1);
+      rw = (region.width * scale).round().clamp(1, w - x);
+      rh = (region.height * scale).round().clamp(1, h - y);
+    }
+    final data = ctx.getImageData(x, y, rw, rh);
     final clamped = data.data.toDart; // Uint8ClampedList
     return AnalysisFrame(
-        rgba: Uint8List.sublistView(clamped), width: w, height: h);
+        rgba: Uint8List.sublistView(clamped), width: rw, height: rh);
   }
 
   /// **T89**：重斷言預覽 CSS（冪等）——重掛／切換／自癒後一律維持

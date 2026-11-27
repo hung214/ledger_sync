@@ -183,18 +183,44 @@ class ImageQrScanner {
   ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrameRgba(
       Uint8List rgba, int width, int height,
       {DateTime? now, Duration? budget}) {
+    final decoded = _imageFromRgba(rgba, width, height);
+    if (decoded == null) return null;
+    return _frameFromDecoded(decoded, budget: budget);
+  }
+
+  /// RGBA 像素 → 解碼用影像（fromBytes 吃 ByteBuffer——sublistView
+  /// （getImageData）恰為整段 buffer 時零複製；否則精確複製一次，
+  /// 避免 buffer offset 錯位）。
+  static img.Image? _imageFromRgba(Uint8List rgba, int width, int height) {
     if (rgba.isEmpty || width <= 0 || height <= 0) return null;
-    // fromBytes 吃 ByteBuffer——sublistView（getImageData）恰為整段 buffer
-    // 時零複製；否則精確複製一次（避免 buffer offset 錯位）。
     final exact =
         rgba.offsetInBytes == 0 && rgba.buffer.lengthInBytes == rgba.length;
-    final decoded = img.Image.fromBytes(
+    return img.Image.fromBytes(
         width: width,
         height: height,
         bytes: exact ? rgba.buffer : Uint8List.fromList(rgba).buffer,
         numChannels: 4,
         order: img.ChannelOrder.rgba);
-    return _frameFromDecoded(decoded, budget: budget);
+  }
+
+  /// **T91 ROI 子區解碼**（hold 階段——右側限區找明細碼）：
+  /// 只解「原尺寸 → 2× 放大（長邊 <800 時——小碼模組放大＝解碼力提升）
+  /// → 降採樣 → 透印去除」，**不做三區分層**（區域本身已是小範圍，
+  /// 左右半對 ROI 無意義）。回傳解出的文字（0 或 1 筆）。
+  static List<String> decodeRegionRgba(Uint8List rgba, int width, int height) {
+    final decoded = _imageFromRgba(rgba, width, height);
+    if (decoded == null) return const [];
+    String? text = _decodeRegion(decoded);
+    if (text == null) {
+      final maxDim =
+          decoded.width > decoded.height ? decoded.width : decoded.height;
+      if (maxDim < 800) {
+        text = _decodeRegion(img.copyResize(decoded,
+            width: decoded.width * 2, height: decoded.height * 2));
+      }
+    }
+    text ??= _decodeDownscaled(decoded) ?? _decodeShowThrough(decoded);
+    return text == null ? const [] : [text];
   }
 
   /// 幀解碼本體（已解碼影像 → 輕量 3 區 → 分層升級；[budget] 超時即

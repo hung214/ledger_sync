@@ -230,6 +230,38 @@ void main() {
     });
   });
 
+  group('T91 ROI 子區解碼（hold 階段右側限區）', () {
+    test('收據右半 ROI → 只解出右碼（decodeRegionRgba）', () {
+      final bytes = receiptPhoto([
+        InvoiceQrFixtures.officialLeftWithItems,
+        InvoiceQrFixtures.officialRightQr,
+      ]);
+      final full = img.decodeImage(bytes)!;
+      // 右半 ROI（模擬 hold 階段取景框右半的限區）。
+      final roi = img.copyCrop(full,
+          x: full.width ~/ 2,
+          y: 0,
+          width: full.width - full.width ~/ 2,
+          height: full.height);
+      final rgba = roi
+          .convert(numChannels: 4)
+          .getBytes(order: img.ChannelOrder.rgba);
+      final texts = ImageQrScanner.decodeRegionRgba(
+          Uint8List.fromList(rgba), roi.width, roi.height);
+      expect(texts, contains(InvoiceQrFixtures.officialRightQr),
+          reason: '右半 ROI 內的右碼可解');
+      expect(texts, everyElement(startsWith('**')),
+          reason: '左碼在左半——不在 ROI 範圍（限區生效）');
+    });
+
+    test('空白 ROI → 空清單（不拋錯——例外防護契約）', () {
+      expect(ImageQrScanner.decodeRegionRgba(
+          Uint8List(16 * 16 * 4), 16, 16), isEmpty);
+      expect(
+          ImageQrScanner.decodeRegionRgba(Uint8List(0), 0, 0), isEmpty);
+    });
+  });
+
   group('真實發票照片（drop-in fixtures）', () {
     final dir = Directory('test/fixtures/invoices');
     final photos = <File>[
