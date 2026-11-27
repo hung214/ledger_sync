@@ -504,6 +504,17 @@
       **常駐＋可下滑暫收**（`_amountFocused || _keypadPinned`）；PM 實測後改判：
       **比照編輯交易＝純聚焦滑入制**（聚焦金額欄 → 滑入；失焦／壓住下滑 → 滑出；
       `_keypadPinned` 退役）；桌面面板維持常駐無手勢
+- [x] **支出／收入商家池分開**（PM 2026-11-27）：`distinctMerchants(kind:)` SQL
+      過濾＋`recentMerchantsProvider.family`＋選擇器 `kind` 必填——快記依當前模式
+      選池、確認清單固定 expense；切換支出↔收入清除 Sticky 商家（不跨池帶入）；
+      merchant_picker_test ＋池分離驗證（支出池不見收入商家、反之亦然）
+- [x] **總覽三卡「負債（信用卡）」簡化為「負債」**（手機三卡等寬折行；Demo 同步）
+      ＋**三卡動態堆疊**（TextPainter 量測金額寬度——任一卡擠壓折行→三卡改獨立
+      一行，20261127f）
+- [x] **明細帳戶 chips 驗證**：390 寬手機視窗渲染——帳戶/金額 chip 單行、
+      多帳戶水平滑動可達最後一顆（水平 ListView 懶載：滑動後才建出）
+- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127f`**：301 全綠→建置 4.2MB→gh-pages
+      `44f3b8a`（CDN 已驗證 ✓）＋本機 8123 同步 ✓
 - [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127c`**：298 全綠→建置 4.2MB→gh-pages
       `ab2298e`＋本機 8123 同步 ✓
 - [x] **MR 已合併**（Merge PR #2：feat/keypad-focus-slide → feature/ios-pwa ✓）
