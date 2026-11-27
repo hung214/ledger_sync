@@ -640,12 +640,29 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
           ),
           const SizedBox(height: 8),
           // 模式列（PM 2026-10-24：僅 支出／收入／轉帳；三種模式類別各自獨立）。
+          // PM 2026-11-27：與手機一致——**繳卡費**（有信用卡才顯示，T77）＋
+          // **關勾選圖示**（選中示意 ICON 移除）。
           SegmentedButton<QuickEntryMode>(
             key: const Key('desktop-quick-mode'),
-            segments: const [
-              ButtonSegment(value: QuickEntryMode.expense, label: Text('支出')),
-              ButtonSegment(value: QuickEntryMode.income, label: Text('收入')),
-              ButtonSegment(value: QuickEntryMode.transfer, label: Text('轉帳')),
+            showSelectedIcon: false,
+            segments: [
+              const ButtonSegment(
+                value: QuickEntryMode.expense,
+                label: Text('支出'),
+              ),
+              const ButtonSegment(
+                value: QuickEntryMode.income,
+                label: Text('收入'),
+              ),
+              const ButtonSegment(
+                value: QuickEntryMode.transfer,
+                label: Text('轉帳'),
+              ),
+              if (accounts.any((a) => a.type == 'credit'))
+                const ButtonSegment(
+                  value: QuickEntryMode.repay,
+                  label: Text('繳卡費'),
+                ),
             ],
             selected: {state.mode},
             onSelectionChanged: (m) => controller.setMode(m.first),
@@ -755,20 +772,24 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
                 v == null ? null : controller.selectAccountById(v),
           ),
           const SizedBox(height: 8),
-          if (state.mode == QuickEntryMode.transfer) ...[
-            // 轉帳：目標帳戶（同帳戶阻擋；分類/商家不適用）。
+          if (state.mode == QuickEntryMode.transfer ||
+              state.mode == QuickEntryMode.repay) ...[
+            // 轉帳：目標帳戶（同帳戶阻擋）；繳卡費：目標＝**信用卡**（PM
+            // 2026-11-27 與手機一致——分類/商家不適用）。
             DropdownButtonFormField<String>(
               key: const Key('desktop-quick-target'),
               initialValue: state.toAccount?.id,
               isDense: true,
-              decoration: const InputDecoration(
-                labelText: '目標帳戶',
+              decoration: InputDecoration(
+                labelText: state.mode == QuickEntryMode.repay ? '繳費卡片' : '目標帳戶',
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               items: [
                 for (final a in accounts)
-                  if (a.id != state.account?.id)
+                  if (state.mode == QuickEntryMode.repay
+                      ? a.type == 'credit'
+                      : a.id != state.account?.id)
                     DropdownMenuItem(value: a.id, child: Text(a.name)),
               ],
               onChanged: (v) =>
@@ -791,7 +812,9 @@ class _DesktopQuickPanelState extends ConsumerState<_DesktopQuickPanel> {
             ),
           ],
           const SizedBox(height: 8),
-          if (state.mode != QuickEntryMode.transfer)
+          // 商家（PM 2026-11-27：繳卡費不適用——與手機一致）。
+          if (state.mode == QuickEntryMode.expense ||
+              state.mode == QuickEntryMode.income)
             TextField(
               key: const Key('desktop-quick-merchant'),
               controller: _merchantCtrl,
