@@ -715,7 +715,16 @@ class MerchantSuffixIcon extends ConsumerWidget {
       tooltip: '選擇常用商家',
       icon: const Icon(Icons.arrow_drop_down),
       onPressed: () async {
-        final name = await showMerchantPicker(context, ref);
+        // PM 2026-11-27：支出／收入商家池分開——依當前模式選池。
+        final mode = ref.read(quickEntryControllerProvider).mode;
+        final kind = mode == QuickEntryMode.income
+            ? 'income'
+            : mode == QuickEntryMode.transfer
+            ? 'transfer'
+            : mode == QuickEntryMode.repay
+            ? 'repay'
+            : 'expense';
+        final name = await showMerchantPicker(context, ref, kind: kind);
         if (name == null || name.isEmpty) return;
         ref.read(quickEntryControllerProvider.notifier).setMerchant(name);
       },

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -520,6 +521,7 @@ class _StatRowState extends State<_StatRow> {
   ];
 
   bool _stacked = false;
+  Timer? _settleTimer;
 
   void _recheck() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -539,6 +541,19 @@ class _StatRowState extends State<_StatRow> {
   void initState() {
     super.initState();
     _recheck();
+    // web 字型晚載：首排量測可能用 fallback 字距——600ms 後（字型已載入）
+    // 重置並重測一次（自癒，PM 2026-11-27 與明細 chips 同款字型競態防護）。
+    _settleTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      setState(() => _stacked = false);
+      _recheck();
+    });
+  }
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
   }
 
   @override

@@ -12,6 +12,7 @@ import '../../../application/reports/search_service.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../core/clock.dart';
 import '../../../data/sqlite/app_database.dart';
+import '../../../domain/entities/transaction.dart';
 import '../../../domain/services/balance_calculator.dart';
 import '../../category_display.dart';
 import '../../theme/app_theme.dart';
@@ -400,30 +401,46 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     }
   }
 
+  /// chip 標籤（帳戶名＋餘額/應付）——也是 chip 重建 key 的內容來源。
+  String _accountChipLabel(
+    AccountRow a,
+    bool masked,
+    List<Tx> txs,
+    NumberFormat fmt,
+  ) {
+    const calc = BalanceCalculator();
+    return a.type == 'credit'
+        ? '${a.name} 應付 ${masked ? '●●●●' : fmt.format(calc.creditUnpaidTotal(card: accountEntity(a), txs: txs))}'
+        : '${a.name} ${masked ? '●●●●' : fmt.format(calc.assetBalance(account: accountEntity(a), txs: txs))}';
+  }
+
   Widget _accountChipsInner(BuildContext context, AppDatabase db) {
     final accounts = ref.watch(activeAccountsProvider);
     if (accounts.isEmpty) return const SizedBox.shrink();
-    const calc = BalanceCalculator();
     final txs = ref.watch(ledgerProvider).map(txEntity).toList();
     final masked = ref.watch(privacyMaskedProvider);
     final fmt = NumberFormat('#,###');
     final tokens = AppTokens.of(context);
     return SizedBox(
       height: 56,
-      // settle tick 走 KeyedSubtree：整列重建（字型競態自癒）但 chip key 契約不變。
-      child: KeyedSubtree(
-        key: ValueKey('acct-chips-settle-$_chipSettleTick'),
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          children: [
-            for (final a in accounts) ...[
-              ChoiceChip(
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        children: [
+          // PM 2026-11-27：每顆 chip 包 KeyedSubtree，key 帶**標籤內容＋settle
+          // tick**——①餘額標籤變化（記帳後）→ 該 chip 以新內容量寬（修「寬度
+          // 卡死要改名才恢復」）；②開頁 600ms 字型載入後 tick 變化 → 全部
+          // chips 以已載入字型重排（web 字型競態自癒）。Scrollable 與捲動
+          // 位置不動；chip 本體 key 維持 `acct-chip-{id}` 測試契約。
+          for (final a in accounts) ...[
+            KeyedSubtree(
+              key: ValueKey(
+                'acct-chip-${a.id}-${_accountChipLabel(a, masked, txs, fmt)}-t$_chipSettleTick',
+              ),
+              child: ChoiceChip(
                 key: Key('acct-chip-${a.id}'),
                 label: Text(
-                  a.type == 'credit'
-                      ? '${a.name} 應付 ${masked ? '●●●●' : fmt.format(calc.creditUnpaidTotal(card: accountEntity(a), txs: txs))}'
-                      : '${a.name} ${masked ? '●●●●' : fmt.format(calc.assetBalance(account: accountEntity(a), txs: txs))}',
+                  _accountChipLabel(a, masked, txs, fmt),
                   maxLines: 1,
                   softWrap: false, // PM 2026-11-27：帳戶/金額禁止直排
                 ),
@@ -442,10 +459,10 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                 onSelected: (on) =>
                     setState(() => _accountFilter = on ? a.id : null),
               ),
-              const SizedBox(width: 8),
-            ],
+            ),
+            const SizedBox(width: 8),
           ],
-        ),
+        ],
       ),
     );
   }

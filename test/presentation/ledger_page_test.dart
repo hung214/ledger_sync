@@ -164,9 +164,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 水平 ListView 懶載：視窗外 chips 未建（find 不到）——向左滑動後
-      // 才會建出並進入視窗（證明可滑動、chips 依文字自適應寬）。
-      await tester.drag(find.byType(ListView).first, const Offset(-400, 0));
+      // 可滑動的本質＝內容超出視口（maxScrollExtent > 0）——chips 依文字
+      // 自適應寬、非寫死寬度。**不用手勢模擬**（Linux CI 上 drag 行為有差異）。
+      final scrollableState = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      expect(
+        scrollableState.position.maxScrollExtent,
+        greaterThan(0),
+        reason: '多帳戶超出右緣 → 應可水平滑動',
+      );
+
+      // 滑到底（jumpTo 確定性操作）→ 最後一顆帳戶進入視窗（懶載建出）。
+      scrollableState.position.jumpTo(scrollableState.position.maxScrollExtent);
       await tester.pumpAndSettle();
       final last = find.textContaining('票證卡');
       expect(last, findsOneWidget);
@@ -176,6 +186,61 @@ void main() {
         reason: '水平滑動後應可達最後一顆帳戶',
       );
       expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  /// PM 2026-11-27 回報：前三顆（既有）帳戶 chip 寬度卡死——餘額標籤變長
+  /// 後 chip 寬度沒有跟著更新（要改名才恢復）。本測試決定驗證：
+  /// 標籤由短變長 → chip 寬度應即時變大。
+  testWidgets('明細：帳戶餘額標籤變長 → chip 寬度即時更新', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = DbFixture.create();
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedTx(
+      db,
+      id: 't-1',
+      kind: 'income',
+      amountMinor: 100,
+      accountId: 'a-0',
+      occurredAt: DateTime(2026, 11, 20).millisecondsSinceEpoch,
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const LedgerPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final chip = find.byKey(const Key('acct-chip-a-0'));
+      final w1 = tester.getSize(chip).width;
+
+      // 新增大額收入 → 標籤『現金 餘額 100』→『現金 餘額 1,234,500』（變長）。
+      await DbFixture.seedTx(
+        db,
+        id: 't-2',
+        kind: 'income',
+        amountMinor: 1234400,
+        accountId: 'a-0',
+        occurredAt: DateTime(2026, 11, 21).millisecondsSinceEpoch,
+      );
+      container.read(dataVersionProvider.notifier).bump();
+      await tester.pumpAndSettle();
+
+      final w2 = tester.getSize(chip).width;
+      debugPrint('chip 寬：w1=$w1 → w2=$w2');
+      expect(w2, greaterThan(w1), reason: '標籤變長 → chip 寬度應即時更新');
     } finally {
       container.dispose();
       db.close();

@@ -219,10 +219,23 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
   /// 切換模式（支出／收入／轉帳；PM 2026-10-24）。
   /// 轉帳不適用分類/商家（BE 強制 null，UI 隱藏）；收入↔支出之分類集不同
   /// → 切換時重選該類別集首項（無則清空）。
+  /// PM 2026-11-27：**支出／收入商家池分開**——切換後商家池不同 → 清除
+  /// Sticky 商家（不把支出商家帶進收入欄，反之亦然）。
+  /// 商家池 kind（PM 2026-11-27）：支出／收入各自獨立；轉帳/繳卡費無池。
+  static String? _merchantKindOf(QuickEntryMode m) => switch (m) {
+        QuickEntryMode.expense => 'expense',
+        QuickEntryMode.income => 'income',
+        _ => null,
+      };
+
   void setMode(QuickEntryMode mode) {
     if (mode == state.mode) return;
+    final poolChanged = _merchantKindOf(state.mode) != _merchantKindOf(mode);
     state = state.copyWith(
-        mode: mode, clearToAccount: true, clearCategory: true);
+        mode: mode,
+        clearToAccount: true,
+        clearCategory: true,
+        merchant: poolChanged ? '' : null);
     if (mode == QuickEntryMode.repay) {
       // **繳卡費初始化**（T77，PM 2026-11-24）：目標卡片＝首張信用卡
       // （單卡自動選）；扣款帳戶＝linked_account_id ?: 首個非信用卡；

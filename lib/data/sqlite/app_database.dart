@@ -1245,13 +1245,16 @@ class AppDatabase {
 
   /// 常用商家（最近使用優先；商家選擇器 T8——PM 2026-11-22：
   /// 商家「類別同款」可選可增。免新表：交易 DISTINCT merchant）。
-  List<String> distinctMerchants({int limit = 12}) {
+  /// PM 2026-11-27：**支出／收入商家池分開**（kind 過濾——不同性質的商家
+  /// 不互混；transfer/repay 池天然為空＝僅直接輸入）。
+  List<String> distinctMerchants({int limit = 12, String? kind}) {
     final rows = _db.select(
       'SELECT merchant, MAX(occurred_at) AS last_used '
       'FROM transactions '
       "WHERE merchant IS NOT NULL AND merchant != '' AND deleted_at IS NULL "
+      '${kind != null ? 'AND kind = ? ' : ''}'
       'GROUP BY merchant ORDER BY last_used DESC LIMIT ?',
-      [limit],
+      kind != null ? [kind, limit] : [limit],
     );
     return [for (final r in rows) r['merchant'] as String];
   }
