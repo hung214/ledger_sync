@@ -155,9 +155,12 @@ final expenseCategoriesProvider = Provider((ref) {
 });
 
 /// 常用商家（最近使用優先——商家選擇器 T8，PM 2026-11-22；免新表）。
-final recentMerchantsProvider = Provider<List<String>>((ref) {
+/// PM 2026-11-27：**支出／收入商家池分開**（family by kind——'expense'｜'income'；
+/// transfer/repay 池為空＝僅直接輸入）。
+final recentMerchantsProvider =
+    Provider.family<List<String>, String>((ref, kind) {
   ref.watch(dataVersionProvider);
-  return ref.watch(dbProvider).distinctMerchants();
+  return ref.watch(dbProvider).distinctMerchants(kind: kind);
 });
 
 /// 收入分類（設定頁分頁；與支出同源快取策略）。

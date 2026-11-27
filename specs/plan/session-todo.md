@@ -504,12 +504,40 @@
       **常駐＋可下滑暫收**（`_amountFocused || _keypadPinned`）；PM 實測後改判：
       **比照編輯交易＝純聚焦滑入制**（聚焦金額欄 → 滑入；失焦／壓住下滑 → 滑出；
       `_keypadPinned` 退役）；桌面面板維持常駐無手勢
-- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127c`**：298 全綠→建置 4.2MB→gh-pages
-      `ab2298e`（CDN max-age=600 刷新中）＋本機 8123 同步 ✓
+- [x] **支出／收入商家池分開**（PM 2026-11-27）：`distinctMerchants(kind:)` SQL
+      過濾＋`recentMerchantsProvider.family`＋選擇器 `kind` 必填——快記依當前模式
+      選池、確認清單固定 expense；切換支出↔收入清除 Sticky 商家（不跨池帶入）；
+      merchant_picker_test ＋池分離驗證（支出池不見收入商家、反之亦然）
+- [x] **總覽三卡「負債（信用卡）」簡化為「負債」**（手機三卡等寬折行；Demo 同步）
+      ＋**三卡動態堆疊＝渲染後實測**（post-frame 量 RenderParagraph 高度
+      >30px＝折行→三卡改獨立一行；跨裝置/字級/字型以**實際渲染**為準——
+      iOS 17 Pro TextPainter 預估低估、金額被裁切只剩 5~6 位之教訓，
+      20261127d→e→f）
+- [x] **明細帳戶 chips 驗證**：390 寬手機視窗渲染——帳戶/金額 chip 單行、
+      多帳戶水平滑動可達最後一顆（水平 ListView 懶載：滑動後才建出）
+- [x] **帳戶 chips 寬度卡死（重啟後）＝web 字型晚載字型競態**（PM 2026-11-27
+      實測：重啟後前三顆（既有）帳戶寬度錯誤，新增明細/改名才恢復——首排以
+      fallback 字型量寬後凍結，標籤不變不重排）：ledger 開頁 **600ms 後改 chip
+      key 強制重排一次**（Timer＋dispose cancel）；overview `_StatRow` 同款
+      **600ms 重置重測**（自癒字型競態）
+- [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127f`**：301 全綠→建置 4.2MB→gh-pages
+      `44f3b8a`（CDN 已驗證 ✓）＋本機 8123 同步 ✓
+- [x] **PWA 重建＋發佈**：`0.5.1-pwa.20261127c`（ab2298e）→ d（15d01bb 直排
+      修正）→ e（700e523 負債標籤）→ f（44f3b8a 動態堆疊）——皆本機 8123 同步 ✓
+- [x] **MR 已合併**（Merge PR #2：feat/keypad-focus-slide → feature/ios-pwa ✓）
+- [x] **手機版文字直排修正**（PM 2026-11-27）：①快記模式列（支出/收入/轉帳/繳卡費）
+      ——M3 SegmentedButton 選中勾選圖示＋等寬把「繳卡費」擠成直排 →
+      `showSelectedIcon: false`＋緊湊內距＋`maxLines: 1`
+      ②明細頁帳戶/金額 chips＋全部/支出/收入/轉帳 FilterChips 同款——
+      `maxLines: 1`＋`showCheckmark: false`（寬度依內容自然收放）
 - [x] **MR CI analyze 修復**：CI `channel: stable` 抓到新版 Flutter——把
       `flutter/material.dart` 標棄用（→material_ui）全專案 60+ 檔 info 素，analyze
       exit 1（非本批改動所致）→ ci.yml **鎖 flutter-version 3.47.7**＋
       `analyze --no-fatal-infos`（errors/warnings 仍為 gate）
+- [x] **GitHub Pages 404 修復**（PM 2026-11-27）：repo 轉 private（免費方案）＝
+      Pages 取消發佈；轉回 public **不會自動重新發佈**——對 gh-pages 推空 commit
+      （e4a0cf9）重新觸發建置即恢復（30 秒）。**教訓**：切換 repo 公開/私有後
+      Pages 需手動觸發；若空 commit 無效→檢查 Settings→Pages 的 Source 是否被重置
 - [ ] **material_ui 遷移**（低優先；60+ 檔 import flutter/material.dart——CI 新版
       SDK 棄用提示；本機 3.47.7 user-branch 無此棄用，遷移需升級 SDK 後統一處理）
 - [x] **介紹頁（landing）上線**（PM 2026-11-27 問「線上看得到嗎」）：gh-pages

@@ -6,9 +6,11 @@ import '../application/providers.dart';
 /// 商家選擇器（T8，PM 2026-11-22：商家「類別同款」**可選可增**）——
 /// 直接輸入（即＝新增）＋**最近使用**建議 chips（交易 DISTINCT merchant，
 /// 免新表）。快記／確認卡共用。回傳商家名（null＝取消）。
+/// PM 2026-11-27：**kind 必填**——支出／收入商家池分開（ chips 只列該池）。
 Future<String?> showMerchantPicker(
   BuildContext context,
   WidgetRef ref, {
+  required String kind,
   String? initial,
 }) {
   final ctrl = TextEditingController(text: initial ?? '');
@@ -29,7 +31,7 @@ Future<String?> showMerchantPicker(
           ),
           const SizedBox(height: 8),
           Consumer(builder: (context, ref, _) {
-            final merchants = ref.watch(recentMerchantsProvider);
+            final merchants = ref.watch(recentMerchantsProvider(kind));
             if (merchants.isEmpty) return const SizedBox.shrink();
             return Align(
               alignment: Alignment.centerLeft,

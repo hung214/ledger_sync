@@ -554,6 +554,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final name = await showMerchantPicker(
       context,
       ref,
+      kind: 'expense', // 掃描發票＝支出（商家池與支出共用）
       initial: _merchantCtrl.text,
     );
     if (name == null || name.isEmpty || !mounted) return;

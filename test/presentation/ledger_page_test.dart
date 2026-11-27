@@ -15,36 +15,46 @@ void main() {
     final db = DbFixture.create();
     await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
     await DbFixture.seedAccount(db, id: 'a-1', type: 'bank', name: '銀行');
-    await DbFixture.seedTx(db,
-        id: 't-e',
-        kind: 'expense',
-        amountMinor: 100,
-        accountId: 'a-0',
-        merchant: '早餐店',
-        occurredAt: 1700000000000);
-    await DbFixture.seedTx(db,
-        id: 't-i',
-        kind: 'income',
-        amountMinor: 5000,
-        accountId: 'a-1',
-        merchant: '薪水',
-        occurredAt: 1700000060000);
-    await DbFixture.seedTx(db,
-        id: 't-t',
-        kind: 'transfer',
-        amountMinor: 300,
-        accountId: 'a-1',
-        toAccountId: 'a-0',
-        occurredAt: 1700000120000);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-    ]);
+    await DbFixture.seedTx(
+      db,
+      id: 't-e',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'a-0',
+      merchant: '早餐店',
+      occurredAt: 1700000000000,
+    );
+    await DbFixture.seedTx(
+      db,
+      id: 't-i',
+      kind: 'income',
+      amountMinor: 5000,
+      accountId: 'a-1',
+      merchant: '薪水',
+      occurredAt: 1700000060000,
+    );
+    await DbFixture.seedTx(
+      db,
+      id: 't-t',
+      kind: 'transfer',
+      amountMinor: 300,
+      accountId: 'a-1',
+      toAccountId: 'a-0',
+      occurredAt: 1700000120000,
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-            theme: buildAppTheme(Brightness.light), home: const LedgerPage()),
-      ));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const LedgerPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 期間＝**月份制**（PM 2026-10-24）：預設本月——本測試資料為 2023/11，
@@ -85,6 +95,155 @@ void main() {
     } finally {
       db.close();
       container.dispose();
+    }
+  });
+
+  /// PM 2026-11-27：帳戶/金額 chips 於手機視窗（390 寬）不得直排——
+  /// 帳戶名＋應付金額為長字串，若被約束窄寬會逐字折行。以 chip 高度（單行）
+  /// 與無 overflow 例外雙重驗證。
+  testWidgets('明細：帳戶 chips 於手機視窗不直排（390 寬）', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = DbFixture.create();
+    await DbFixture.seedAccount(db, id: 'a-c', type: 'credit', name: '晨光範例卡');
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const LedgerPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final label = find.textContaining('應付');
+      expect(label, findsOneWidget);
+      final h = tester.getSize(label).height;
+      expect(h, lessThan(22), reason: '帳戶/金額 chip 應單行（未直排）');
+      expect(tester.takeException(), isNull, reason: '不得 overflow');
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  /// PM 2026-11-27：多帳戶超出右緣 → 水平滑動可達最後一顆
+  /// （chips 依文字自適應寬、非寫死寬度）。
+  testWidgets('明細：多帳戶 chips 可水平滑動（依文字自適應）', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = DbFixture.create();
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedAccount(db, id: 'a-1', type: 'bank', name: '銀行帳戶');
+    await DbFixture.seedAccount(db, id: 'a-2', type: 'credit', name: '晨光範例卡');
+    await DbFixture.seedAccount(db, id: 'a-3', type: 'credit', name: '示例卡');
+    await DbFixture.seedAccount(
+      db,
+      id: 'a-4',
+      type: 'ewallet',
+      name: '票證卡（儲值語意）',
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const LedgerPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 可滑動的本質＝內容超出視口（maxScrollExtent > 0）——chips 依文字
+      // 自適應寬、非寫死寬度。**不用手勢模擬**（Linux CI 上 drag 行為有差異）。
+      final scrollableState = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      expect(
+        scrollableState.position.maxScrollExtent,
+        greaterThan(0),
+        reason: '多帳戶超出右緣 → 應可水平滑動',
+      );
+
+      // 滑到底（jumpTo 確定性操作）→ 最後一顆帳戶進入視窗（懶載建出）。
+      scrollableState.position.jumpTo(scrollableState.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      final last = find.textContaining('票證卡');
+      expect(last, findsOneWidget);
+      expect(
+        tester.getRect(last).right,
+        lessThanOrEqualTo(390),
+        reason: '水平滑動後應可達最後一顆帳戶',
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  /// PM 2026-11-27 回報：前三顆（既有）帳戶 chip 寬度卡死——餘額標籤變長
+  /// 後 chip 寬度沒有跟著更新（要改名才恢復）。本測試決定驗證：
+  /// 標籤由短變長 → chip 寬度應即時變大。
+  testWidgets('明細：帳戶餘額標籤變長 → chip 寬度即時更新', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = DbFixture.create();
+    await DbFixture.seedAccount(db, id: 'a-0', type: 'cash', name: '現金');
+    await DbFixture.seedTx(
+      db,
+      id: 't-1',
+      kind: 'income',
+      amountMinor: 100,
+      accountId: 'a-0',
+      occurredAt: DateTime(2026, 11, 20).millisecondsSinceEpoch,
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const LedgerPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final chip = find.byKey(const Key('acct-chip-a-0'));
+      final w1 = tester.getSize(chip).width;
+
+      // 新增大額收入 → 標籤『現金 餘額 100』→『現金 餘額 1,234,500』（變長）。
+      await DbFixture.seedTx(
+        db,
+        id: 't-2',
+        kind: 'income',
+        amountMinor: 1234400,
+        accountId: 'a-0',
+        occurredAt: DateTime(2026, 11, 21).millisecondsSinceEpoch,
+      );
+      container.read(dataVersionProvider.notifier).bump();
+      await tester.pumpAndSettle();
+
+      final w2 = tester.getSize(chip).width;
+      debugPrint('chip 寬：w1=$w1 → w2=$w2');
+      expect(w2, greaterThan(w1), reason: '標籤變長 → chip 寬度應即時更新');
+    } finally {
+      container.dispose();
+      db.close();
     }
   });
 }
