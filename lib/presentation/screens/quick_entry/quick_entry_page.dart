@@ -202,23 +202,31 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                   // **繳卡費**（T77 PM 2026-11-24）＝有信用卡帳戶才顯示。
                   SegmentedButton<QuickEntryMode>(
                     key: const Key('quick-entry-mode'),
+                    // PM 2026-11-27：手機 4 段等寬＋選中勾選圖示會把文字擠成直排——
+                    // 關勾選圖示＋收緊內距＋文字禁折行（寬度依內容自然收放）。
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(
+                      visualDensity: const VisualDensity(horizontal: -2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      textStyle: const TextStyle(fontSize: 14),
+                    ),
                     segments: [
                       const ButtonSegment(
                         value: QuickEntryMode.expense,
-                        label: Text('支出'),
+                        label: Text('支出', maxLines: 1, softWrap: false),
                       ),
                       const ButtonSegment(
                         value: QuickEntryMode.income,
-                        label: Text('收入'),
+                        label: Text('收入', maxLines: 1, softWrap: false),
                       ),
                       const ButtonSegment(
                         value: QuickEntryMode.transfer,
-                        label: Text('轉帳'),
+                        label: Text('轉帳', maxLines: 1, softWrap: false),
                       ),
                       if (accounts.any((a) => a.type == 'credit'))
                         const ButtonSegment(
                           value: QuickEntryMode.repay,
-                          label: Text('繳卡費'),
+                          label: Text('繳卡費', maxLines: 1, softWrap: false),
                         ),
                     ],
                     selected: {state.mode},

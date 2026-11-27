@@ -51,6 +51,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       _range = null;
     });
   }
+
   String? _categoryFilter; // null = 全部（category id）
   String? _accountFilter; // null = 全部帳戶（P2 雛型帳戶 chips）
   String? _kindFilter; // null = 全部（expense/income/transfer；P2 篩選 chips）
@@ -79,8 +80,11 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     // P2（雛型 02-ledger）：帳戶／收支性質維度（預設全部——不影響既有交集語意）。
     if (_accountFilter != null) {
       rows = rows
-          .where((r) =>
-              r.accountId == _accountFilter || r.toAccountId == _accountFilter)
+          .where(
+            (r) =>
+                r.accountId == _accountFilter ||
+                r.toAccountId == _accountFilter,
+          )
           .toList();
     }
     if (_kindFilter != null) {
@@ -106,25 +110,28 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
 
     // 交易列建構（手機卡片／桌面表格共用；日期由分日標題承載時 showFullDate=false）。
     TxTile tileFor(TxRow r, {required bool tableLayout}) => TxTile(
-          tx: r,
-          accountName: accountById[r.accountId]?.name ?? '',
-          toAccount:
-              r.toAccountId == null ? null : accountById[r.toAccountId!],
-          categoryName: r.kind == 'repayment'
-              ? '信用卡繳款' // T80：還款固定標籤（不建真分類）。
-              : r.categoryId == null
-                  ? '未分類'
-                  : (db.categoryName(r.categoryId!) ?? '未分類'),
-          categoryId: r.categoryId,
-          categoryIcon: iconOf(r.categoryId),
-          note: r.note,
-          hasAttachment: attachmentTxIds.contains(r.id),
-          // 點列 → 編輯（含刪除/拆分；PM 2026-10-24）。
-          onTap: () => showTxEditSheet(context, ref, r,
-              onChanged: () => ref.invalidate(ledgerProvider)),
-          tableLayout: tableLayout,
-          showFullDate: false,
-        );
+      tx: r,
+      accountName: accountById[r.accountId]?.name ?? '',
+      toAccount: r.toAccountId == null ? null : accountById[r.toAccountId!],
+      categoryName: r.kind == 'repayment'
+          ? '信用卡繳款' // T80：還款固定標籤（不建真分類）。
+          : r.categoryId == null
+          ? '未分類'
+          : (db.categoryName(r.categoryId!) ?? '未分類'),
+      categoryId: r.categoryId,
+      categoryIcon: iconOf(r.categoryId),
+      note: r.note,
+      hasAttachment: attachmentTxIds.contains(r.id),
+      // 點列 → 編輯（含刪除/拆分；PM 2026-10-24）。
+      onTap: () => showTxEditSheet(
+        context,
+        ref,
+        r,
+        onChanged: () => ref.invalidate(ledgerProvider),
+      ),
+      tableLayout: tableLayout,
+      showFullDate: false,
+    );
     // 桌面（≥900px）＝表格（08 雛型）；手機＝分日卡片（02 雛型）。
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
@@ -156,7 +163,9 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
             key: const Key('ledger-recent-deletions'),
             tooltip: '最近刪除',
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const RecentDeletionsPage()),
+              MaterialPageRoute<void>(
+                builder: (_) => const RecentDeletionsPage(),
+              ),
             ),
             icon: const Icon(Icons.delete_sweep_outlined),
           ),
@@ -189,8 +198,8 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                     ),
                   )
                 : isDesktop
-                    ? _desktopTable(context, rows, tileFor)
-                    : _dayGroupedList(context, rows, tileFor),
+                ? _desktopTable(context, rows, tileFor)
+                : _dayGroupedList(context, rows, tileFor),
           ),
         ],
       ),
@@ -211,8 +220,11 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
   }
 
   /// 分日群組（雛型 02）：今天／昨天／MM/DD（週）＋當日**小計**（淨額；轉帳不計收支）。
-  Widget _dayGroupedList(BuildContext context, List<TxRow> rows,
-      TxTile Function(TxRow, {required bool tableLayout}) tileFor) {
+  Widget _dayGroupedList(
+    BuildContext context,
+    List<TxRow> rows,
+    TxTile Function(TxRow, {required bool tableLayout}) tileFor,
+  ) {
     final groups = <(DateTime, List<TxRow>)>[];
     for (final r in rows) {
       final d = DateTime.fromMillisecondsSinceEpoch(r.occurredAt);
@@ -232,99 +244,122 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
         final (day, dayRows) = groups[i];
         // 小計＝當日淨額（expense 負、income 正；transfer/repayment 不計——AC-10）。
         final subtotal = dayRows.fold<int>(
-            0,
-            (sum, r) =>
-                sum +
-                (r.kind == 'expense'
-                    ? -r.amountMinor
-                    : r.kind == 'income'
-                        ? r.amountMinor
-                        : 0));
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
-            child: Row(children: [
-              Text(_dayLabel(day),
-                  key: Key('day-header-${day.millisecondsSinceEpoch}'),
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Text(
-                  '小計 ${subtotal < 0 ? '-' : ''}${fmt.format(subtotal.abs())}',
-                  style: TextStyle(fontSize: 12, color: tokens.subText)),
-            ]),
-          ),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
+          0,
+          (sum, r) =>
+              sum +
+              (r.kind == 'expense'
+                  ? -r.amountMinor
+                  : r.kind == 'income'
+                  ? r.amountMinor
+                  : 0),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+              child: Row(
                 children: [
-                  for (final r in dayRows) tileFor(r, tableLayout: false)
-                ]),
-          ),
-        ]);
+                  Text(
+                    _dayLabel(day),
+                    key: Key('day-header-${day.millisecondsSinceEpoch}'),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '小計 ${subtotal < 0 ? '-' : ''}${fmt.format(subtotal.abs())}',
+                    style: TextStyle(fontSize: 12, color: tokens.subText),
+                  ),
+                ],
+              ),
+            ),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (final r in dayRows) tileFor(r, tableLayout: false),
+                ],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
 
   /// 桌面表格（雛型 08）：日期｜類型｜分類｜商家／對象｜帳戶｜金額。
-  Widget _desktopTable(BuildContext context, List<TxRow> rows,
-      TxTile Function(TxRow, {required bool tableLayout}) tileFor) {
+  Widget _desktopTable(
+    BuildContext context,
+    List<TxRow> rows,
+    TxTile Function(TxRow, {required bool tableLayout}) tileFor,
+  ) {
     final tokens = AppTokens.of(context);
     const f = [13, 12, 11, 18, 13, 11];
     Widget cell(String t, int i, {bool right = false}) => Expanded(
-          flex: f[i],
-          child: Text(t,
-              textAlign: right ? TextAlign.right : TextAlign.left,
-              style: TextStyle(
-                  fontSize: 11.5,
-                  color: tokens.subText,
-                  fontWeight: FontWeight.w600)),
-        );
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text('交易明細',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+      flex: f[i],
+      child: Text(
+        t,
+        textAlign: right ? TextAlign.right : TextAlign.left,
+        style: TextStyle(
+          fontSize: 11.5,
+          color: tokens.subText,
+          fontWeight: FontWeight.w600,
         ),
       ),
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: tokens.subText.withValues(alpha: 0.10),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+    );
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '交易明細',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
         ),
-        child: Row(children: [
-          const SizedBox(width: 14),
-          cell('日期', 0),
-          cell('類型', 1),
-          cell('分類', 2),
-          cell('商家／對象', 3),
-          cell('帳戶', 4),
-          cell('金額', 5, right: true),
-          const SizedBox(width: 14),
-        ]),
-      ),
-      Expanded(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(bottom: Radius.circular(12)),
+            color: tokens.subText.withValues(alpha: 0.10),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
-          child: ListView.builder(
-            itemCount: rows.length,
-            itemBuilder: (_, i) => tileFor(rows[i], tableLayout: true),
+          child: Row(
+            children: [
+              const SizedBox(width: 14),
+              cell('日期', 0),
+              cell('類型', 1),
+              cell('分類', 2),
+              cell('商家／對象', 3),
+              cell('帳戶', 4),
+              cell('金額', 5, right: true),
+              const SizedBox(width: 14),
+            ],
           ),
         ),
-      ),
-    ]);
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(12),
+              ),
+            ),
+            child: ListView.builder(
+              itemCount: rows.length,
+              itemBuilder: (_, i) => tileFor(rows[i], tableLayout: true),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   /// 帳戶 chips 橫列（雛型 02-ledger）：名稱＋餘額（信用卡顯示「應付」）；
@@ -350,17 +385,21 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                 a.type == 'credit'
                     ? '${a.name} 應付 ${masked ? '●●●●' : fmt.format(calc.creditUnpaidTotal(card: accountEntity(a), txs: txs))}'
                     : '${a.name} ${masked ? '●●●●' : fmt.format(calc.assetBalance(account: accountEntity(a), txs: txs))}',
+                maxLines: 1,
+                softWrap: false, // PM 2026-11-27：帳戶/金額禁止直排
               ),
               selected: _accountFilter == a.id,
               selectedColor: tokens.success,
               showCheckmark: false,
               labelStyle: TextStyle(
-                  fontSize: 12,
-                  color: _accountFilter == a.id ? Colors.white : tokens.subText),
+                fontSize: 12,
+                color: _accountFilter == a.id ? Colors.white : tokens.subText,
+              ),
               side: BorderSide(
-                  color: _accountFilter == a.id
-                      ? tokens.success
-                      : Theme.of(context).dividerColor),
+                color: _accountFilter == a.id
+                    ? tokens.success
+                    : Theme.of(context).dividerColor,
+              ),
               onSelected: (on) =>
                   setState(() => _accountFilter = on ? a.id : null),
             ),
@@ -387,7 +426,8 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
           for (final (label, kind) in kinds)
             FilterChip(
               key: Key('kind-chip-$label'),
-              label: Text(label),
+              label: Text(label, maxLines: 1, softWrap: false),
+              showCheckmark: false, // 勾選圖示會擠壓文字（PM 2026-11-27）
               selected: _kindFilter == kind,
               onSelected: (_) => setState(() => _kindFilter = kind),
             ),
@@ -405,70 +445,75 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
         : (m == null ? '全部' : '${m.$1}/${m.$2.toString().padLeft(2, '0')}');
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
-      child: Row(children: [
-        IconButton(
-          key: const Key('month-prev'),
-          visualDensity: VisualDensity.compact,
-          tooltip: '上個月',
-          onPressed: () => _shiftMonth(-1),
-          icon: const Icon(Icons.chevron_left),
-        ),
-        Expanded(
-          child: PopupMenuButton<int>(
-            key: const Key('filter-period'),
-            tooltip: '期間',
-            onSelected: (v) async {
-              if (v == 0) {
+      child: Row(
+        children: [
+          IconButton(
+            key: const Key('month-prev'),
+            visualDensity: VisualDensity.compact,
+            tooltip: '上個月',
+            onPressed: () => _shiftMonth(-1),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Expanded(
+            child: PopupMenuButton<int>(
+              key: const Key('filter-period'),
+              tooltip: '期間',
+              onSelected: (v) async {
+                if (v == 0) {
+                  setState(() {
+                    _month = null;
+                    _range = null;
+                  });
+                  return;
+                }
+                if (v == -1) {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                    initialDateRange: _range,
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _range = picked;
+                      _month = null;
+                    });
+                  }
+                  return;
+                }
                 setState(() {
-                  _month = null;
+                  _month = (v ~/ 100, v % 100);
                   _range = null;
                 });
-                return;
-              }
-              if (v == -1) {
-                final picked = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                  initialDateRange: _range,
-                );
-                if (picked != null) {
-                  setState(() {
-                    _range = picked;
-                    _month = null;
-                  });
-                }
-                return;
-              }
-              setState(() {
-                _month = (v ~/ 100, v % 100);
-                _range = null;
-              });
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 0, child: Text('全部月份')),
-              const PopupMenuItem(value: -1, child: Text('自訂區間…')),
-              const PopupMenuDivider(),
-              for (final (y, mm) in _availableMonths(db))
-                PopupMenuItem(
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 0, child: Text('全部月份')),
+                const PopupMenuItem(value: -1, child: Text('自訂區間…')),
+                const PopupMenuDivider(),
+                for (final (y, mm) in _availableMonths(db))
+                  PopupMenuItem(
                     value: y * 100 + mm,
-                    child: Text('$y/${mm.toString().padLeft(2, '0')}')),
-            ],
-            child: InputDecorator(
-              decoration:
-                  const InputDecoration(labelText: '期間', isDense: true),
-              child: Text(label),
+                    child: Text('$y/${mm.toString().padLeft(2, '0')}'),
+                  ),
+              ],
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: '期間',
+                  isDense: true,
+                ),
+                child: Text(label),
+              ),
             ),
           ),
-        ),
-        IconButton(
-          key: const Key('month-next'),
-          visualDensity: VisualDensity.compact,
-          tooltip: '下個月',
-          onPressed: () => _shiftMonth(1),
-          icon: const Icon(Icons.chevron_right),
-        ),
-      ]),
+          IconButton(
+            key: const Key('month-next'),
+            visualDensity: VisualDensity.compact,
+            tooltip: '下個月',
+            onPressed: () => _shiftMonth(1),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
     );
   }
 
@@ -494,10 +539,9 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
-          ...chips.map((c) => Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: c,
-              )),
+          ...chips.map(
+            (c) => Padding(padding: const EdgeInsets.only(right: 6), child: c),
+          ),
           TextButton(
             key: const Key('filter-clear'),
             onPressed: () => setState(() {
@@ -523,7 +567,8 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheet) => Padding(
           padding: EdgeInsets.only(
-              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 8),
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 8,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -535,59 +580,68 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                   controller: TextEditingController(text: kw),
                   autofocus: kw.isEmpty,
                   decoration: const InputDecoration(
-                      labelText: '關鍵字（商家／備註／分類／帳戶／金額）',
-                      border: OutlineInputBorder()),
+                    labelText: '關鍵字（商家／備註／分類／帳戶／金額）',
+                    border: OutlineInputBorder(),
+                  ),
                   onChanged: (v) => kw = v.trim(),
                 ),
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Text('分類（與快記同款：MRU 5＋主類別點選展開子類別）',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+                child: Text(
+                  '分類（與快記同款：MRU 5＋主類別點選展開子類別）',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                 child: InkWell(
                   key: const Key('filter-category'),
                   onTap: () async {
-                    final pick = await showCategoryPicker(sheetCtx, ref,
-                        kind: 'all',
-                        selectedId: cat,
-                        recentLimit: 5,
-                        showAdd: false);
+                    final pick = await showCategoryPicker(
+                      sheetCtx,
+                      ref,
+                      kind: 'all',
+                      selectedId: cat,
+                      recentLimit: 5,
+                      showAdd: false,
+                    );
                     if (pick is CategoryPicked) {
                       setSheet(() => cat = pick.categoryId);
                     }
                   },
                   child: InputDecorator(
                     decoration: const InputDecoration(
-                        labelText: '分類（點選；MRU 5＋兩層）',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: Icon(Icons.arrow_drop_down)),
-                    child: Text(cat == null
-                        ? '全部'
-                        : (db.categoryName(cat!) ?? '全部')),
+                      labelText: '分類（點選；MRU 5＋兩層）',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: Icon(Icons.arrow_drop_down),
+                    ),
+                    child: Text(
+                      cat == null ? '全部' : (db.categoryName(cat!) ?? '全部'),
+                    ),
                   ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(children: [
-                  TextButton(
-                    onPressed: () {
-                      kw = '';
-                      cat = null;
-                      Navigator.of(sheetCtx).pop();
-                    },
-                    child: const Text('清除篩選'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () => Navigator.of(sheetCtx).pop(),
-                    child: const Text('套用'),
-                  ),
-                ]),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        kw = '';
+                        cat = null;
+                        Navigator.of(sheetCtx).pop();
+                      },
+                      child: const Text('清除篩選'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('套用'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -606,10 +660,16 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     final r = _range;
     if (r != null) {
       return (
-        DateTime(r.start.year, r.start.month, r.start.day).millisecondsSinceEpoch,
-        DateTime(r.end.year, r.end.month, r.end.day)
-            .add(const Duration(days: 1))
-            .millisecondsSinceEpoch,
+        DateTime(
+          r.start.year,
+          r.start.month,
+          r.start.day,
+        ).millisecondsSinceEpoch,
+        DateTime(
+          r.end.year,
+          r.end.month,
+          r.end.day,
+        ).add(const Duration(days: 1)).millisecondsSinceEpoch,
       );
     }
     final m = _month;
@@ -629,7 +689,9 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       months.add((d.year, d.month));
     }
     final list = months.toList()
-      ..sort((a, b) => a.$1 == b.$1 ? b.$2.compareTo(a.$2) : b.$1.compareTo(a.$1));
+      ..sort(
+        (a, b) => a.$1 == b.$1 ? b.$2.compareTo(a.$2) : b.$1.compareTo(a.$1),
+      );
     return list;
   }
 
@@ -651,7 +713,8 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
               onPressed: () => Navigator.of(ctx).pop('all'),
               icon: const Icon(Icons.download),
               label: Text(
-                  '全部資料（${NumberFormat('#,###').format(all.length)} 筆）'),
+                '全部資料（${NumberFormat('#,###').format(all.length)} 筆）',
+              ),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -659,7 +722,8 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
               onPressed: () => Navigator.of(ctx).pop('filter'),
               icon: const Icon(Icons.filter_alt_outlined),
               label: Text(
-                  '目前篩選結果（${NumberFormat('#,###').format(rows.length)} 筆）'),
+                '目前篩選結果（${NumberFormat('#,###').format(rows.length)} 筆）',
+              ),
             ),
           ],
         ),
@@ -676,31 +740,35 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     final csv = CsvExporter(
       categoryName: (id) => db.categoryName(id) ?? id,
       accountName: (id) {
-        final names =
-            db.allAccounts().where((a) => a.id == id).map((a) => a.name).toList();
+        final names = db
+            .allAccounts()
+            .where((a) => a.id == id)
+            .map((a) => a.name)
+            .toList();
         return names.isEmpty ? id : names.first;
       },
     ).export(list);
     final name =
         'ledger_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
     try {
-      final dest =
-          await ref.read(fileSaverProvider).saveCsv(name, utf8.encode(csv));
+      final dest = await ref
+          .read(fileSaverProvider)
+          .saveCsv(name, utf8.encode(csv));
       if (!context.mounted) return;
       if (dest == null) {
         // 使用者取消存檔對話框——明確回饋（此前靜默返回，PM 以為沒反應）。
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('已取消匯出（未存檔）')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已取消匯出（未存檔）')));
         return;
       }
       final m0 = _month;
       final label = scope == 'all'
           ? '全部資料'
           : (_range != null
-              ? '${DateFormat('yyyy/MM/dd').format(_range!.start)}–${DateFormat('yyyy/MM/dd').format(_range!.end)}'
-              : (m0 == null
-                  ? '全部'
-                  : '${m0.$1}/${m0.$2.toString().padLeft(2, '0')}'));
+                ? '${DateFormat('yyyy/MM/dd').format(_range!.start)}–${DateFormat('yyyy/MM/dd').format(_range!.end)}'
+                : (m0 == null
+                      ? '全部'
+                      : '${m0.$1}/${m0.$2.toString().padLeft(2, '0')}'));
       // native 回完整路徑；web 回檔名（無路徑概念）→ 指向瀏覽器下載項目。
       final where = dest.startsWith('/')
           ? '儲存於：$dest'
@@ -711,9 +779,10 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
         builder: (_) => AlertDialog(
           title: const Text('匯出 CSV'),
           content: Text(
-              '已匯出 $label交易（${NumberFormat('#,###').format(list.length)} 筆，UTF-8）'
-              '\n$where',
-              key: const Key('export-result')),
+            '已匯出 $label交易（${NumberFormat('#,###').format(list.length)} 筆，UTF-8）'
+            '\n$where',
+            key: const Key('export-result'),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -739,7 +808,6 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       );
     }
   }
-
 }
 
 /// 交易列左側分類圖示圓（02-ledger 雛型；PM 2026-10-24）。
@@ -841,11 +909,11 @@ class TxTile extends StatelessWidget {
 
   /// 語意標籤（雛型 02／08）。
   List<String> get _tags => [
-        if (hasAttachment) '掃描入帳',
-        if (tx.settlementStatus == 'pending') '預扣',
-        if (tx.source == 'recurring') '定期',
-        if (tx.kind == 'repayment') '已繳',
-      ];
+    if (hasAttachment) '掃描入帳',
+    if (tx.settlementStatus == 'pending') '預扣',
+    if (tx.source == 'recurring') '定期',
+    if (tx.kind == 'repayment') '已繳',
+  ];
 
   String get _timeLabel {
     final t = DateTime.fromMillisecondsSinceEpoch(tx.occurredAt);
@@ -889,8 +957,8 @@ class TxTile extends StatelessWidget {
 
   Widget _buildCardRow(BuildContext context) {
     final (amount, color) = _amountOf(context);
-    final amountStyle =
-        Theme.of(context).textTheme.titleMedium?.copyWith(color: color);
+    final amountStyle = Theme.of(context).textTheme.titleMedium
+        ?.copyWith(color: color);
     if (tx.splitGroupId != null) {
       // 拆分樣式（FR-T6）：群組可辨識（「拆分 · 分類」）。
       return ListTile(
@@ -898,24 +966,26 @@ class TxTile extends StatelessWidget {
         leading: _CatCircle(emoji: categoryIcon ?? '🔀'),
         title: Text('拆分 · $categoryName'),
         subtitle: Text([_timeLabel, ..._tags].join(' · ')),
-        trailing: Text('-${NumberFormat('#,###').format(tx.amountMinor)}',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: AppTokens.of(context).danger)),
+        trailing: Text(
+          '-${NumberFormat('#,###').format(tx.amountMinor)}',
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(color: AppTokens.of(context).danger),
+        ),
       );
     }
     if (tx.kind == 'transfer') {
       return ListTile(
         onTap: onTap,
-        leading: _CatCircle(
-            emoji: toAccount?.type == 'ewallet' ? '📲' : '🏦'),
+        leading: _CatCircle(emoji: toAccount?.type == 'ewallet' ? '📲' : '🏦'),
         title: Text(_title),
-        subtitle: Text([
-          _timeLabel,
-          if (accountName.isNotEmpty) '$accountName → ${toAccount?.name ?? ''}',
-          ..._tags,
-        ].join(' · ')),
+        subtitle: Text(
+          [
+            _timeLabel,
+            if (accountName.isNotEmpty)
+              '$accountName → ${toAccount?.name ?? ''}',
+            ..._tags,
+          ].join(' · '),
+        ),
         trailing: Text(amount, style: amountStyle),
       );
     }
@@ -927,8 +997,8 @@ class TxTile extends StatelessWidget {
     final title = tx.kind == 'repayment'
         ? '信用卡繳款'
         : tx.categoryId == null
-            ? '未分類'
-            : categoryName;
+        ? '未分類'
+        : categoryName;
     final subtitle = [
       _timeLabel,
       if (accountName.isNotEmpty) accountName,
@@ -941,10 +1011,9 @@ class TxTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       leading: _CatCircle(
-          // T80：還款＝💳 固定圖示（無分類圖示）。
-          emoji: tx.kind == 'repayment'
-              ? '💳'
-              : (categoryIcon ?? '🧾')),
+        // T80：還款＝💳 固定圖示（無分類圖示）。
+        emoji: tx.kind == 'repayment' ? '💳' : (categoryIcon ?? '🧾'),
+      ),
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -965,8 +1034,7 @@ class TxTile extends StatelessWidget {
     final (amount, color) = _amountOf(context);
     final t = DateTime.fromMillisecondsSinceEpoch(tx.occurredAt);
     const flexes = [13, 12, 11, 18, 13, 11];
-    Widget cell(Widget child, int i) =>
-        Expanded(flex: flexes[i], child: child);
+    Widget cell(Widget child, int i) => Expanded(flex: flexes[i], child: child);
     // 拆分＝「拆分」（分類另於分類欄）；轉帳/還款＝型別 emoji ＋ 標籤
     // （emoji 與標籤分開為兩個 Text——利於精確比對，也符雛型視覺）。
     final typeLabel = tx.splitGroupId != null ? '拆分' : _kindLabel;
@@ -983,64 +1051,98 @@ class TxTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-            border: Border(
-                top: BorderSide(color: Theme.of(context).dividerColor))),
-        child: Row(children: [
-          cell(
-              Text(DateFormat('MM/dd HH:mm').format(t),
-                  style: const TextStyle(fontSize: 11.5)),
-              0),
-          cell(
-              Row(children: [
-                if (_kindEmoji.isNotEmpty) ...[
-                  Text(_kindEmoji, style: const TextStyle(fontSize: 11)),
-                  const SizedBox(width: 3),
+          border: Border(
+            top: BorderSide(color: Theme.of(context).dividerColor),
+          ),
+        ),
+        child: Row(
+          children: [
+            cell(
+              Text(
+                DateFormat('MM/dd HH:mm').format(t),
+                style: const TextStyle(fontSize: 11.5),
+              ),
+              0,
+            ),
+            cell(
+              Row(
+                children: [
+                  if (_kindEmoji.isNotEmpty) ...[
+                    Text(_kindEmoji, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(width: 3),
+                  ],
+                  Flexible(
+                    child: Text(
+                      typeLabel,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  for (final tag in _tags) ...[
+                    const SizedBox(width: 4),
+                    _TxTag(label: tag),
+                  ],
                 ],
-                Flexible(
-                    child: Text(typeLabel,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12))),
-                for (final tag in _tags) ...[
-                  const SizedBox(width: 4),
-                  _TxTag(label: tag),
-                ],
-              ]),
-              1),
-          cell(
-              Text(catText,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12)),
-              2),
-          cell(
-              Row(children: [
-                Flexible(
-                    child: Text(objText,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600))),
-                if (hasAttachment) ...[
-                  const SizedBox(width: 4),
-                  const Text('📷',
+              ),
+              1,
+            ),
+            cell(
+              Text(
+                catText,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+              2,
+            ),
+            cell(
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      objText,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (hasAttachment) ...[
+                    const SizedBox(width: 4),
+                    const Text(
+                      '📷',
                       key: Key('tx-attachment'),
-                      style: TextStyle(fontSize: 11)),
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ],
                 ],
-              ]),
-              3),
-          cell(
-              Text(accountName,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, color: tokens.subText)),
-              4),
-          cell(
+              ),
+              3,
+            ),
+            cell(
+              Text(
+                accountName,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: tokens.subText),
+              ),
+              4,
+            ),
+            cell(
               Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(amount,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                          color: color))),
-              5),
-        ]),
+                alignment: Alignment.centerRight,
+                child: Text(
+                  amount,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    color: color,
+                  ),
+                ),
+              ),
+              5,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1060,11 +1162,14 @@ class _TxTag extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-      child: Text(label,
-          style:
-              TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: fg)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: fg),
+      ),
     );
   }
 }

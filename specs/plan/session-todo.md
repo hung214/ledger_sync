@@ -505,11 +505,21 @@
       **比照編輯交易＝純聚焦滑入制**（聚焦金額欄 → 滑入；失焦／壓住下滑 → 滑出；
       `_keypadPinned` 退役）；桌面面板維持常駐無手勢
 - [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127c`**：298 全綠→建置 4.2MB→gh-pages
-      `ab2298e`（CDN max-age=600 刷新中）＋本機 8123 同步 ✓
+      `ab2298e`＋本機 8123 同步 ✓
+- [x] **MR 已合併**（Merge PR #2：feat/keypad-focus-slide → feature/ios-pwa ✓）
+- [x] **手機版文字直排修正**（PM 2026-11-27）：①快記模式列（支出/收入/轉帳/繳卡費）
+      ——M3 SegmentedButton 選中勾選圖示＋等寬把「繳卡費」擠成直排 →
+      `showSelectedIcon: false`＋緊湊內距＋`maxLines: 1`
+      ②明細頁帳戶/金額 chips＋全部/支出/收入/轉帳 FilterChips 同款——
+      `maxLines: 1`＋`showCheckmark: false`（寬度依內容自然收放）
 - [x] **MR CI analyze 修復**：CI `channel: stable` 抓到新版 Flutter——把
       `flutter/material.dart` 標棄用（→material_ui）全專案 60+ 檔 info 素，analyze
       exit 1（非本批改動所致）→ ci.yml **鎖 flutter-version 3.47.7**＋
       `analyze --no-fatal-infos`（errors/warnings 仍為 gate）
+- [x] **GitHub Pages 404 修復**（PM 2026-11-27）：repo 轉 private（免費方案）＝
+      Pages 取消發佈；轉回 public **不會自動重新發佈**——對 gh-pages 推空 commit
+      （e4a0cf9）重新觸發建置即恢復（30 秒）。**教訓**：切換 repo 公開/私有後
+      Pages 需手動觸發；若空 commit 無效→檢查 Settings→Pages 的 Source 是否被重置
 - [ ] **material_ui 遷移**（低優先；60+ 檔 import flutter/material.dart——CI 新版
       SDK 棄用提示；本機 3.47.7 user-branch 無此棄用，遷移需升級 SDK 後統一處理）
 - [x] **介紹頁（landing）上線**（PM 2026-11-27 問「線上看得到嗎」）：gh-pages
