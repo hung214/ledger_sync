@@ -1,161 +1,169 @@
 # 📒 LedgerSync — 本地優先跨平台記帳 App
 
-> 一款**資料存在自己裝置、隱私為重**的記帳應用：連續快速記帳、台灣發票掃描、信用卡預扣管理、
-> 預算與收入目標，並以 **Google Drive / iCloud 帳號授權**做雲端備份與多裝置同步（無自建伺服器）。
+> 一款**資料存在自己裝置、隱私為重**的記帳應用：連續快速記帳、台灣發票掃描（電子 QR＋紙本 OCR）、
+> 信用卡預扣管理、預算與收入目標，並以 **Google Drive 帳號授權**做雲端備份與多裝置同步（無自建伺服器）。
 >
 > | | |
 > |---|---|
-> | 支援平台 | iOS 15+ / Android 8+ / macOS 12+ / Windows 10 21H2+ |
+> | 🌐 線上 PWA | **https://hung214.github.io/ledger_sync/**（免安裝、離線可用、加到主畫面像 App） |
+> | 📄 介紹頁 | https://hung214.github.io/ledger_sync/landing/（功能總覽＋實機截圖） |
+> | 支援平台 | **PWA（手機／桌面瀏覽器）** 為主要通道；另可建置 macOS / Android / iOS / Windows 原生版 |
 > | 技術棧 | Flutter 3.47（單一程式碼庫）— 詳見 `specs/truth/techstack.md` |
-> | 規格版本 | v0.3（需求→設計→BDD→驗收→任務全鏈文件） |
-> | 當前狀態 | M0 骨架完成；M1 開發中（進度見 `session.md` / `specs/plan/tasks.md` §6） |
+> | 當前狀態 | **v0.5.1 已發佈**（M1~M7 全數完成；PWA 已上線；PWA 版戳 `0.5.1-pwa.20261127c`） |
 
 ---
 
-## 1. 功能說明
+## 1. 功能說明（已出貨）
 
 ### 1.1 快速記帳與連續記帳（FR-Q）
-- 大金額鍵盤＋常用分類快捷格，**開啟到儲存 ≤ 3 次點擊**，儲存耗時 < 300ms。
-- **智慧預設**：帳戶沿用上一筆、分類依「同商家歷史 > 時段習慣 > 最近使用」推薦；可於設定改為固定預設。
-- **連續記帳**：每筆儲存後彈出「繼續記下一筆？」——可繼續（保留帳戶/分類/商家）、復原上一筆、完成離開。
-- 完全離線可用；桌面版 `Ctrl+N`（macOS `⌘N`）直接呼喚。
+- **大金額計算機鍵盤**：聚焦金額欄由下滑入、失焦滑出；**OK／＝ 雙態按鈕**——輸入 `50×2` 時為「＝」（求值收合為 100）、純數字時為「OK」（存檔）；支援 `＋－×÷` 連算。
+- **分類彈窗**：⭐ 常用類別（MRU 前 5）置頂＋兩層主/子類別展開＋「＋」即建即選。
+- **智慧預設（Sticky）**：帳戶沿用上一筆、分類/商家依歷史帶入；金額每筆重設。
+- **連續記帳**：儲存後彈出「繼續記下一筆？」——繼續（Sticky 保留）／復原上一筆／完成離開。
+- 完全離線可用；桌面版 `Ctrl+N`（macOS `⌘N`）開關快記面板。
 
 ### 1.2 發票掃描記帳（FR-S）
-- **台灣電子發票雙 QR 解析**：自動帶入發票號、開立日、賣方、總額（含明細）；紙本收據走本機 OCR。
-- 辨識**全在本機**（離線可用、隱私不出裝置），結果一律經「確認清單」人工把關後入帳，原圖存為附件。
-- 入口：總覽/明細頁獨立「掃描」按鈕；桌面版工具列＋`Ctrl+Shift+S`。
+- **電子發票雙 QR 解析**（財政部官方規格 v1.9）：左碼（發票資訊）＋右碼（明細）自動湊單，帶入發票號、日期、總額與明細。
+- **紙本收據 OCR**：iOS/macOS 走 Apple Vision 本機辨識（其他平台回退手動輸入）。
+- 辨識**全在本機**（離線可用、隱私不出裝置），結果一律經「**確認清單**」逐筆人工把關後入帳，原圖存為附件。
+- 入口：快記頁右上角「掃描」（桌面：工具列／`Ctrl+Shift+S`／**匯入圖片**解 QR）。
 
 ### 1.3 信用卡預扣與帳單週期（FR-C）
-- 刷卡**先記錄（預扣）**：立刻累計「本期應付」，銀行帳戶餘額不動。
-- 到結帳日自動彙總**帳單** → 繳款截止前提醒（前 3 天＋當天）→ 點「全額/部分繳款」從連結帳戶扣款。
-- **結帳日歸屬每卡可設定**（當天算本期/下期）；支援分期付款、退款衝銷、逾期標示。
+- 刷卡**先記錄（預扣）**：立刻累計「本期應付」，銀行帳戶餘額不動；繳款顯示「信用卡繳款」流向標籤。
+- 到結帳日自動彙總**帳單** → 繳款截止提醒 → 點「全額/部分繳款」從連結帳戶產生還款轉帳。
+- **結帳日歸屬每卡可設定**（當天算本期/下期）；逾期帳單持續標示（v1 不計息）。
 
 ### 1.4 支出預算與收入目標（FR-B）
-- 總預算＋分類預算（月週期、起始日可自訂），用量**含信用卡預扣**（承諾支出觀點）。
-- 進度條＋每日可用額＋月底預測；80%/100%/超支分級通知（每級每期僅一次）。
+- 總預算＋分類預算（**主分類預算＝含其全部子分類加總**；週期起始日 1~28 可自訂）＋收入目標三型。
+- 金額與起始日皆由**計算機鍵盤輸入**（聚焦滑入，不跳系統鍵盤）。
+- 進度條＋每日可用額＋月底預測；80%/100%/超支**分級視覺警示**。
 - **收入目標**：月目標額與達標率，總覽顯示「本月預計結餘 = 收入目標 − 總預算」。
-- **分類管理**（FR-B1）：自訂圖示/顏色/排序（拖曳）、一層子分類；快記快捷格依使用頻率排序。
 
 ### 1.5 雲端備份與多裝置同步（FR-Y）
-- **帳號授權式同步**：登入 Google 帳號（全平台）或 Apple ID（iOS/macOS）即可，**無需任何同步密碼**。
-- 本地優先：離線記帳不中斷，上線自動補同步；觸發時機三選一（每筆自動／節能批次預設／僅手動）＋**啟動必同步一次**。
-- 端對端保護：雲端僅存於 App 專屬隱藏資料夾；自動備份每日一次、保留 7 份。
-- 跨平台遷移：加密備份檔匯出/匯入（可選檔案密碼），四平台互通。
+- **帳號授權式同步**：登入 Google 帳號即可，**無需任何同步密碼**；未設定憑證時 UI 降級顯示（不崩）。
+- 本地優先：離線記帳不中斷，上線自動補同步；三種觸發模式＋啟動必同步一次。
+- 雲端僅存於 App 專屬隱藏資料夾；**每日自動本地備份，保留 7 份**。
+- 跨平台遷移：備份檔匯出/匯入，四平台互通。
 
-### 1.6 帳戶與多幣別（FR-A/FR-T）
-- 帳戶類型：現金／銀行／信用卡／電子支付（票證卡等票證）／其他。
-- 支出、收入、轉帳（含儲值/提款語意）、信用卡還款、退款；多幣別記錄（原幣＋匯率，整數運算無浮點誤差）。
+### 1.6 帳戶與交易類型（FR-A/FR-T）
+- 帳戶類型：現金／銀行／信用卡／電子支付（票證卡）／其他。
+- 支出、收入、轉帳（含儲值/提款語意）、信用卡還款、退款。
 
 ### 1.7 定期交易（FR-T5）
-- 房租、訂閱等固定收支：到期**推播提醒**，進「待確認」清單確認才入帳（金額可先改）；可跳過單期或刪除排程。
+- 房租、訂閱等固定收支：到期**提醒**，進「待確認」清單確認才入帳（金額可先改）；可跳過單期或刪除排程；明細頁常駐待確認 badge。
 
 ### 1.8 報表與統計（FR-R）
-- 總覽儀表板、分類占比、支出趨勢（日/週/月/年）、日曆檢視、全文搜尋（中文）、CSV 匯出（Excel 中文相容）。
+- 總覽儀表板（本月收支＋預算橫幅）、**分類占比甜甜圈**（依主類別彙總、百分比圈外引線）、**月趨勢**（上限 12 個月、可為負）、**累計結餘卡**（≥2 個月資料時出現）；三卡可切換支出／收入／淨額。
+- 明細：分日群組＋每日小計＋月份制＋搜尋（分類/帳戶/金額/備註）。
 
-### 1.9 安全與隱私（FR-X）
-- App 鎖（PIN＋Face ID/Touch ID/指紋/Windows Hello）、本地資料庫加密（SQLCipher）、金額一鍵遮蔽。
-- PIN 遺忘可經**重新登入雲端帳號**重設（資料保留）；無廣告追蹤器、無雲端不外傳。
+### 1.9 明細管理與資料安全（FR-T3/FR-X）
+- 交易**編輯／拆分**（點明細列）；**最近刪除**：30 天內可還原，另提供永久刪除（二次確認）。
+- **App 鎖（PIN）**＋背景逾時門檻＋總覽 👁 一鍵遮蔽金額；無廣告、無第三方追蹤器。
+- 資料管理：可勾選範圍清空（雲端不清空、30 天內可還原）。
+
+### 1.10 資料進出（FR-O5）
+- **CSV 匯入**：分隔符自動偵測、欄位中英別名對應、金額千分位/負號/括號解析、重複資料冪等跳過。
+- **CSV 匯出**＋**DB 備份/還原**（跨裝置）。
+
+### 1.11 PWA 體驗
+- **離線可用**（offline-first）＋**自動更新**（新版偵測→自動重載）；可「加到主畫面」全螢幕執行。
+- 手機相機掃描（getUserMedia＋WASM 解碼）與桌面「匯入圖片」解 QR 皆支援。
 
 ---
 
-## 2. 平台與雲端支援
+## 2. 平台與部署
 
-| 能力 | iOS | Android | macOS | Windows |
+| 能力 | PWA（手機瀏覽器） | PWA（桌面瀏覽器） | macOS 原生 | iOS/Android/Windows 原生 |
 |---|---|---|---|---|
 | 記帳全功能 | ✅ | ✅ | ✅ | ✅ |
-| QR 相機掃描 | ✅ | ✅ | 🔬 Spike | 🔬 Spike（fallback：匯入圖片） |
-| OCR | ✅ ML Kit | ✅ ML Kit | ✅ Vision | 🔬 Spike |
+| 電子發票 QR（相機） | ✅ | ✅ 匯入圖片 | ✅ 匯入圖片 | ✅ |
+| 紙本 OCR | — | — | ✅ Vision | —（規劃中） |
 | Google Drive 同步 | ✅ | ✅ | ✅ | ✅ |
-| iCloud 同步 | ✅ | ❌（無官方 API） | ✅ | ❌ |
-| 生物辨識 | ✅ | ✅ | ✅ | ✅（Hello） |
+| 離線＋自動更新 | ✅ | ✅ | —（本地 App） | —（本地 App） |
 
-> 跨平台遷移不受限：iCloud 裝置可經「加密備份檔」帶到其他平台。
+> 🧪 **iOS 採用 PWA（PM 2026-11-16 決策 A）**——免付費上架、免審核；原生建置仍保留。
 
 ---
 
 ## 3. 快速開始
 
-### 3.1 環境需求
-- Flutter SDK ≥ 3.47（stable）／Dart ≥ 3.13
-- 各平台工具鏈（Android Studio / Xcode / Visual Studio Desktop workload / Xcode+macOS）
+### 3.1 一般使用者（免安裝）
+1. 手機或電腦瀏覽器開 **https://hung214.github.io/ledger_sync/**
+2. 加到主畫面：iPhone Safari「分享 → 加到主畫面」；Android 選單「安裝應用程式」
+3. 詳細圖文：`specs/plan/user-guide.md`
 
-### 3.2 安裝與執行
-```powershell
+### 3.2 開發者環境
+- Flutter SDK 3.47（stable）／Dart 3.13＋各平台工具鏈
+
+```bash
 flutter pub get
 flutter run                      # 選擇裝置
-flutter run -d windows           # Windows
-flutter run -d macos             # macOS
-flutter run -d <android-device>  # Android
-flutter run -d <ios-device>      # iOS
+flutter run -d macos             # macOS 原生
+flutter run -d chrome            # PWA（開發）
 ```
 
-> ⚠️ **Windows 本機建置注意**（DBG-002）：
-> ① 專案路徑**不可含非 ASCII 字元**（含中文會使 MSBuild 崩潰）——**本 repo 已遷移至 ASCII 路徑 `E:\opencode\finora`，直接建置/分析驗證通過（2026-10-18，DBG-002-① 根治）**；若日後搬移，請保持 ASCII 路徑（搬移後需 `flutter clean` 清除含舊路徑的 `build/` 快取再建置）。
-> ② `flutter_secure_storage_windows` 需 VS「C++ ATL」元件（atlstr.h）——v0.2.x 過渡版已暫緩該插件（TR-8），M2 回歸前需安裝元件。
-
-### 3.3 測試（TDD 紅綠燈的落點）
-```powershell
-flutter test                     # 後端（@BE：領域/資料/同步邏輯，PR gate）
+### 3.3 測試（紅綠燈落點）
+```bash
+flutter test                     # unit＋widget（當前 298 全綠）
 flutter analyze                  # 靜態分析（零警告 gate）
-pwsh tool/sync_features.ps1      # 同步 BDD feature 檔（specs → test 副本，禁止手改副本）
+pwsh tool/sync_features.ps1      # 同步 BDD feature 檔（specs → 測試副本，禁止手改副本）
 ```
+> ⏸️ **FE 整合測試暫停中**（PM 2026-10-24：`integration_test/features/*` 待指示再恢復；期間護欄＝`flutter test`＋`flutter analyze`）。
 
-> 🎨 **看 UI 畫面**：`flutter run` 後點首頁「🎨 開啟 UI Demo」— 7 個畫面（總覽／明細／快記＋每筆確認／預算／信用卡／分類設定／設定同步），支援**深色/淺色切換**（FR-O1）；資料為虛構劇例。HTML 雛型（含規格便利貼）：`specs/plan/ui/`。
-
-> 💡 **本機小技巧**：若專案路徑含非 ASCII 字元，`flutter analyze` 可能崩潰（LSP 已知問題）——改用 `dart analyze`（讀同一份 `analysis_options.yaml`，規則相同）。本 repo 現位於 ASCII 路徑，兩者皆可直接使用。CI 的 checkout 路徑為 ASCII，不受影響。
-- feature 檔分佈：後端 `test/bdd/`、前端 `integration_test/features/`（來源：`specs/plan/tests/`）。
-- 標籤分級：`@P0` PR 必跑、`@P1` nightly、`@P2` release 前（見 `specs/plan/tests/README.md` §3）。
+### 3.4 PWA 部署
+```bash
+flutter build web --release -t lib/main_web_app.dart --base-href=/ledger_sync/ \
+  --pwa-strategy=offline-first --dart-define=APP_VERSION=0.5.1-pwa.<日期戳>
+# ⚠️ 必須 -t lib/main_web_app.dart（PWA 入口）——漏掉會以 native 入口（dart:io）編出白畫面空殼
+# 產物推 gh-pages 分支（orphan＋.nojekyll）→ 線上 CDN max-age=600
+```
 
 ---
 
 ## 4. 操作方式（App 內主要流程）
 
 ### 4.1 第一次使用
-1. 開啟 App → 隱私說明頁（資料預設只存本機）。
+1. 開啟 App → 引導頁（資料預設只存本機）。
 2. 三選一：**開始使用**（新建帳本）／**從雲端還原**／**匯入備份檔**。
-3. 基本設定：幣別（預設 TWD）、語系；建議開啟 App 鎖（PIN＋生物辨識）。
-4. （可跳過）**連結雲端**：選 Google Drive 或 iCloud → 登入帳號 → 同意授權 → 立即首次備份。
+3. （可跳過）連結雲端：Google Drive 授權 → 立即首次備份。
 
 ### 4.2 快速記一筆
-1. 點中央「＋」大鈕（桌面：`Ctrl+N`）。
-2. 帳戶/分類/時間已智慧預填 → 直接**輸入金額**（必要時點分類格/帳戶/時間修改）。
-3. 按**儲存** → 彈出「繼續記下一筆？」：**繼續**（Sticky 欄位保留）／**復原上一筆**／**完成**。
+1. 點「＋」（桌面：`Ctrl+N` 或工具列鈕）。
+2. 帳戶/分類/商家已智慧預填 → 點金額欄（計算機滑入）**輸入金額**（可用 `＋－×÷` 連算，按 **＝** 收合結果）。
+3. 點「分類」開彈窗選類別 → 按 **OK** 儲存 → 「繼續記下一筆？」：**繼續**／**復原上一筆**／**完成**。
 
 ### 4.3 掃發票記帳
-1. 點總覽或明細頁的「**掃描**」按鈕（桌面：工具列或 `Ctrl+Shift+S`）。
-2. 對準電子發票：先掃**左側 QR**（發票資訊）再掃**右側 QR**（明細）；可連續掃多張。
-3. 點「完成掃描」→ 確認清單逐筆檢查（低信賴欄位高亮；**總額必經人工確認**）、選分類帳戶 → 儲存 → 自動跳下一筆。
+1. 快記頁右上角「**掃描**」（桌面：工具列／`Ctrl+Shift+S`／匯入圖片）。
+2. 對準電子發票：左側 QR（資訊）＋右側 QR（明細）自動湊單；紙本走 OCR（iOS/macOS）。
+3. 進「確認清單」逐筆檢查（金額/分類/帳戶可改）→ **OK** 入帳自動跳下一筆。
 
 ### 4.4 信用卡週期
-1. **記錄**：快記時選信用卡 → 輸入金額儲存 →「本期應付」立即累加（銀行餘額不變）。
-2. **結帳**：結帳日當天起首次開啟 App 時自動彙總帳單並通知。
-3. **繳款**：點通知或信用卡頁 → 全額／部分／自訂金額 → 確認後從連結帳戶產生還款轉帳。
-4. 逾期帳單持續標示於卡頁首（v1 不計息）。
+1. **記錄**：快記選信用卡輸入金額 →「本期應付」立即累加。
+2. **結帳**：結帳日自動彙總帳單並提醒。
+3. **繳款**：全額／部分 → 從連結帳戶產生還款轉帳；逾期持續標示。
 
 ### 4.5 預算與收入目標
-1. 預算頁 →「＋」新增總預算/分類預算（起始日可自訂）或收入目標。
-2. 記帳後進度條即時更新；跨越 80%/100%/超支時收到通知（每級每期一次）。
+1. 預算頁「＋」→ 選類型（總預算/分類預算/收入目標）→ **金額與起始日都用計算機輸入**。
+2. 記帳後進度即時更新；80%/100%/超支分級變色。
 
 ### 4.6 雲端同步
-- **自動**：開啟 App 必同步一次；依設定模式（每筆自動／節能批次／僅手動）持續同步。
-- **手動**：設定→雲端與同步→「立即同步」；同步狀態頁可查看各裝置、待同步筆數與衝突檢視。
-- **換裝置**：新裝置登入**同一帳號**→「從雲端還原」即可（不需任何密碼）。
+- 開啟 App 必同步一次；設定→雲端與同步可「立即同步」、查看狀態與衝突。
+- 換裝置：新裝置登入同一帳號 →「從雲端還原」。
 
 ### 4.7 定期交易
-1. 設定定期交易（房租/訂閱：金額、帳戶、週期）。
-2. 到期日推播提醒 → 待確認清單 →「確認入帳」（可先改金額）／「本次跳過」／「刪除排程」。
+1. 設定定期項目（金額、帳戶、週期）→ 到期提醒 → 待確認清單確認入帳／跳過／刪除。
 
 ### 4.8 安全
-- 鎖定：設定→安全→App 鎖（PIN＋生物辨識，背景逾時門檻可調）。
-- 忘記 PIN：鎖定畫面→「忘記 PIN」→重新登入雲端帳號→設定新 PIN（資料保留）。
+- 鎖定：設定→安全→App 鎖（PIN；背景逾時門檻可調）。
 - 遮蔽：總覽頁 👁 一鍵遮蔽所有金額。
 
----
-
 ### 4.9 分類管理
-1. 設定 → 分類管理 →「＋ 新增」：自訂名稱、圖示、顏色（支出/收入分開）。
-2. 拖曳 ☰ 排序——快記頁的快捷格依此（使用頻率）排序。
-3. 支援一層子分類（例：餐飲 → 咖啡）；內建分類可隱藏、不可刪除；有交易的分類刪除時提示轉移。
+1. 設定 → 分類管理 →「＋ 新增」：自訂名稱、圖示（子類別跟隨主類別）。
+2. 支援一層子分類；內建分類可隱藏、不可刪除。
+
+### 4.10 明細與最近刪除
+1. 明細頁分日群組＋每日小計；點列＝**編輯**（金額用計算機）；支出可**拆分**。
+2. 刪除 →「最近刪除」30 天內可還原；亦可永久刪除（二次確認）。
 
 ---
 
@@ -163,34 +171,30 @@ pwsh tool/sync_features.ps1      # 同步 BDD feature 檔（specs → test 副�
 
 ```
 lib/
-├── main.dart              # 入口（M0 骨架頁）
-├── core/                  # Money、HLC、通用工具（平台無關）
-├── domain/
-│   ├── entities/          # Account、Tx 等實體（SDD §4）
-│   └── services/          # BalanceCalculator、（M3+）BillingCycle…
-├── application/           # UseCase 編排（SaveTransaction、SyncCoordinator…）
+├── main.dart                # native 入口（iOS/Android/macOS/Windows）
+├── main_web_app.dart        # ★ PWA 入口（建置必須 -t 指定此檔）
+├── core/                    # Clock、版本等通用工具
+├── domain/                  # 實體與領域服務
+├── application/             # UseCase／Provider 編排（SaveTransaction、SyncCoordinator…）
 ├── data/
-│   ├── drift/             # Drift 表/DAO（schema 對齊 specs/truth/data-spec.dbml）
-│   ├── repositories/      # Repository 實作
-│   └── sync/              # OpLog、BundleBuilder/Applier（SDD §5.5）
-├── platform/              # 平台抽象實作（cloud/drive、cloud/icloud、ocr、secure）
-└── presentation/          # 畫面與 Widget（對映 specs/plan/ui/ 雛型）
+│   ├── sqlite/              # AppDatabase（sqlite3／web＝sqlite3.wasm＋IndexedDB）
+│   └── ...                  # 匯入匯出、備份、同步 Bundle
+├── platform/                # 平台抽象（cloud/drive、ocr、scan、file_saver…）
+└── presentation/            # 畫面（overview／quick_entry／ledger／scan／budget／demo…）
 
-test/
-├── core/  domain/         # 後端單元測試（PR gate）
-├── bdd/                   # BDD feature 檔副本（來源 specs/plan/tests/backend/，勿手改）
-└── helpers/               # T-H 測試掛鉤（fake clock、in-memory cloud、notification spy）
+web/                          # PWA 殼：index.html、manifest、service worker、
+├── landing/                  # 介紹頁（已上線 /ledger_sync/landing/）
+└── sqlite3.wasm              # Web 資料庫引擎
 
-integration_test/
-├── features/              # 前端 BDD feature 檔副本（來源 specs/plan/tests/frontend/）
-└── helpers/
-
+test/                         # unit＋widget（298 全綠）
+integration_test/features/    # FE BDD feature 副本（暫停中，來源 specs/plan/tests/frontend/）
 specs/
-├── plan/                  # 規劃：research、tasks、ui 雛型、tests（FE/BE+dsl）、acceptance、debug
-└── truth/                 # 事實來源：techstack、api-spec（P2 草案）、data-spec（schema 唯一依據）
+├── plan/                     # tasks、ui 雛型、tests（FE/BE+dsl）、acceptance、debug、pm-actions、user-guide
+└── truth/                    # techstack／data-spec（schema 唯一依據）
+session.md / session-archive*.md   # 交接快照（近兩日）／歷史封存
 ```
 
-**分層依賴方向**：presentation → application → domain；data/platform 實作介面（依賴反轉，SDD §2.1）。
+**分層依賴方向**：presentation → application → domain；data/platform 實作介面（依賴反轉）。
 
 ---
 
@@ -198,17 +202,19 @@ specs/
 
 | 類別 | 檔案 | 說明 |
 |---|---|---|
-| 需求 | `SPEC.md` | 功能需求（FR-A~O）、非功能（NFR）、流程、通知總表、驗收場景 |
-| 設計 | `SDD.md` | 架構、資料模型、帳單引擎、同步協議、安全設計 |
+| 需求 | `SPEC.md` | 功能需求（FR-A~O）、非功能（NFR）、驗收場景 |
+| 設計 | `SDD.md` | 架構、資料模型、同步協議、安全設計 |
 | 行為 | `BDD.md` | Gherkin 情境總集＋AC 追溯矩陣 |
-| 驗收 | `specs/plan/features/acceptance/` | PM 驗收標準（10 檔 76 情境＋README） |
-| 測試 | `specs/plan/tests/` | 前後端自動化 feature 檔＋步驟 DSL（dsl.md） |
-| 研究 | `specs/plan/research.md` | 技術決策 D1~D14、Sprint 計畫、Spike 清單 |
-| 任務 | `specs/plan/tasks.md` | 開發任務分解、版控規範、TDD 紅綠藍燈、truth 對齊 |
-| 除錯 | `specs/plan/debug.md` | Debug Todolist（DBG-NNN 追蹤） |
-| 雛型 | `specs/plan/ui/` | 初步 UI HTML（附規格便利貼） |
-| 事實 | `specs/truth/` | techstack（原始碼棧）/ api-spec（P2 草案）/ data-spec（schema 唯一依據） |
-| 工作 | `session.md` | 休息交接：目前快照＋下一步＋歷程 |
+| 驗收 | `specs/plan/features/acceptance/` | PM 驗收標準 |
+| 測試 | `specs/plan/tests/` | 前後端 feature 檔＋步驟 DSL（dsl.md） |
+| 任務 | `specs/plan/tasks.md` | 任務分解、版控規範、truth 對齊 |
+| 除錯 | `specs/plan/debug.md` | DBG-NNN 追蹤表 |
+| 使用者 | `specs/plan/user-guide.md` | 安裝／備份還原／匯入／FAQ（單一來源） |
+| PM 入口 | `specs/plan/pm-actions.md` | 憑證、部署、發版、待決策清單 |
+| 雛型 | `specs/plan/ui/` | UI HTML 雛型（附規格便利貼） |
+| 事實 | `specs/truth/` | techstack／data-spec |
+| 交接 | `session.md`（＋`session-archive*.md` 歷史封存） | 目前快照＋下一步＋近兩日歷程 |
+| 變更 | `CHANGELOG.md` | 每次發行版標註本版修改 |
 
 ---
 
@@ -216,14 +222,14 @@ specs/
 
 | 主題 | 規則 | 詳見 |
 |---|---|---|
-| 分支 | **一個功能一條分支** `feature/F{nn}-{slug}`，`--no-ff` merge 回 main | tasks.md §0.1 |
-| Commit | 每個情境紅綠燈循環 ≥1 commit；`type(scope): subject` | tasks.md §0.1 |
-| TDD | 🔴 紅燈（先寫失敗測試）→ 🟢 綠燈（最小實作）→ 🔵 藍燈（重構，不得動 truth） | tasks.md §1 |
-| 文件同步 | 功能修正必同步 SDD/BDD/TDD/DDD 相關檔案（矩陣檢查，未同步不可合併） | tasks.md §7 |
-| truth | schema/API/棧變更**先改 truth 再改碼**；T-H9 自動對齊測試 | tasks.md §5 |
-| 除錯 | `specs/plan/debug.md` 建 DBG-NNN 條目；每條目至少一個回歸情境 | tasks.md §4.3 |
-| Tag/Release | 完整工作合併 main → 自動建立 `v` 版本標籤 → Release 工作流建置 **Android/Windows/macOS/iOS** 產物上 GitHub Release | tasks.md §0.1 |
-| 交接 | 休息前更新 `session.md`；恢復工作依其 SOP | session.md |
+| 分支（PM 2026-11-23 制） | **每項修改開新分支 → MR 到 `feature/ios-pwa`**；禁止直接在 feature/ios-pwa／main 修改＋推送 | session.md §1 原則⑧ |
+| Commit | `type(scope): subject`；紅綠燈循環 ≥1 commit | tasks.md §0.1 |
+| TDD | 🔴 失敗測試 → 🟢 最小實作 → 🔵 重構（不得動 truth） | tasks.md §1 |
+| 文件同步 | 功能修正必同步 SPEC/SDD/BDD/dsl 相關檔案 | tasks.md §7 |
+| truth | schema/API/棧變更**先改 truth 再改碼** | tasks.md §5 |
+| 除錯 | `specs/plan/debug.md` 建 DBG-NNN 條目＋回歸情境 | tasks.md §4.3 |
+| PWA 發佈 | `-t lib/main_web_app.dart` 建置 → 推 gh-pages（版戳 `0.5.1-pwa.YYYYMMDDx`） | pm-actions §223 |
+| 交接 | 休息前更新 `session.md`（近兩日制）＋`session-archive*.md` | session.md |
 
 ---
 
@@ -231,27 +237,32 @@ specs/
 
 | 里程碑 | 內容 | 狀態 |
 |---|---|---|
-| M0 | 規劃文件集 v0.3＋專案骨架 | ✅ 骨架完成 |
-| M1 | 核心本地記帳（帳戶/分類/交易/快記） | 🚧 開發準備 |
-| M2 | 預算收入目標＋報表＋桌面適配 | ☐ |
-| M3 | 信用卡帳單引擎＋分期 | ☐ |
-| M4 | 發票掃描（QR＋OCR） | ☐ |
-| M5 | 雲端備份（Drive，帳號授權）＋備份檔遷移 | ☐ |
-| M6 | 多裝置同步＋iCloud＋定期交易 | ☐ |
-| M7 | 安全打磨＋四平台上架 | ☐ |
+| M0 | 規劃文件集＋專案骨架 | ✅ |
+| M1 | 核心本地記帳（帳戶/分類/交易/快記） | ✅ |
+| M2 | 預算收入目標＋報表＋桌面適配 | ✅ |
+| M3 | 信用卡帳單引擎 | ✅ |
+| M4 | 發票掃描（QR＋OCR） | ✅ |
+| M5 | 雲端備份（Drive 帳號授權）＋備份檔遷移 | ✅ |
+| M6 | 多裝置同步＋定期交易 | ✅ |
+| M7 | 安全打磨＋四平台 | ✅ |
+| — | **v0.5.0 / v0.5.1 發佈（2026-11-23）＋PWA 上線** | ✅ |
+| — | **計算機鍵盤全面改版**（聚焦滑入＋OK／＝雙態＋預算表單計算機） | ✅ 2026-11-27 |
+| 後續候選 | 生物辨識（local_auth）、SQLCipher 加密（TR-6）、多幣別、iCloud、系統推播、T45 PWA 黑畫面診斷、Big5 品名 | ☐ |
 
 ---
 
 ## 9. 隱私與安全承諾
 
-- 資料**預設只存在裝置**；未連結雲端時 App 不出網（可抓包驗證）。
+- 資料**預設只存在裝置**；未連結雲端時 App 不出網。
 - QR／OCR 全部本機運算；無廣告、無第三方追蹤器。
-- 雲端同步以**你的帳號授權**為準（建議開啟兩步驟驗證）；檔案存於 App 專屬隱藏資料夾，其他 App 不可見。
+- 雲端同步以**你的 Google 帳號授權**為準；檔案存於 App 專屬隱藏資料夾。
+- 誠實聲明：本地資料庫**尚未加密**（SQLCipher 列為後續項目 TR-6）；**生物辨識尚未接入**（現行 App 鎖＝PIN）。
 
 ### 商標與素材授權（版權聲明）
 
 - 產品名稱「LedgerSync」為暫定代號（上架前待命名，SPEC §12-1）。
 - 圖示：Flutter Material Icons（**Apache-2.0**）與 Unicode 標準表情符號；未使用需授權之字型或圖庫素材。
+- App 圖示（各平台＋PWA）：**自製 SVG 草稿**（暫定「A 帳本同步」稿，來源 `specs/plan/ui/logo-drafts/`，授權＝本專案自有；草稿評估中，上架前 PM 定稿後更新本節）。
 - Demo／測試劇例中的商家、卡片、帳戶名稱（陽光超商、晨光早餐店、示例卡、票證卡等）皆為**虛構**，與任何真實品牌或商標無關；正式版亦不使用第三方商標。
 - 若未來引入圖示包／字型，將於本節登記其授權來源。
 
