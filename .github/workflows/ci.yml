@@ -25,7 +25,7 @@ jobs:
         # 本機注意：專案路徑含非 ASCII（如「記帳」）時 flutter analyze 的 LSP 會崩潰，
         # 改用 `dart analyze`（同一組 analysis_options 規則）。CI checkout 路徑為 ASCII，不受影響。
       - name: 後端單元/整合測試（@BE，PR gate）
-        run: flutter test
+        run: flutter test --reporter github # 失敗測試→annotation（可遠端診斷）
 
   # TODO(T-H9)：truth 對齊測試（drift schema ↔ data-spec.dbml、pubspec ↔ techstack.md）加入本 job
   # TODO(SP-7)：四平台 build（windows/macos：MSIX/DMG notarization）於 M5–M7 加入
