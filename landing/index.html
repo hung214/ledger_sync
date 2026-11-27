@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LedgerSync 記帳本 — 3 秒記一筆，發票掃一下就入帳</title>
+<meta name="description" content="離線優先的極簡記帳 App：快速記帳、電子發票 QR 掃描自動入帳、統計圖表一目瞭然。免安裝、免帳號，資料存在你自己手上。">
+<meta property="og:title" content="LedgerSync 記帳本 — 離線優先的極簡記帳">
+<meta property="og:description" content="3 秒記一筆，發票掃一下就入帳。免安裝、免帳號，資料存在你自己手上。">
+<meta property="og:type" content="website">
+<link rel="icon" href="img/icon01.png">
+<link rel="apple-touch-icon" href="img/icon01.png">
+<style>
+  :root {
+    --teal: #00897b;
+    --teal-bright: #00bfa5;
+    --teal-dark: #00695c;
+    --ink: #1c2b2a;
+    --muted: #5c6b69;
+    --bg: #f5f8f7;
+    --card: #ffffff;
+    --line: #e2ebe9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6efee;
+      --muted: #9db3b0;
+      --bg: #0f1615;
+      --card: #17211f;
+      --line: #243331;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.7;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(0,191,165,.18), transparent 60%),
+      linear-gradient(160deg, var(--teal-dark), var(--teal) 55%, #009688);
+    color: #fff; padding: 72px 0 64px;
+  }
+  .hero .wrap { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; }
+  .badge {
+    display: inline-block; font-size: 13px; letter-spacing: 1px;
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
+    border-radius: 999px; padding: 4px 14px; margin-bottom: 18px;
+  }
+  .hero h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.25; letter-spacing: 1px; }
+  .hero h1 small { display: block; font-size: clamp(16px, 2.4vw, 20px); font-weight: 500; opacity: .92; margin-top: 10px; }
+  .hero p.lead { margin: 16px 0 26px; font-size: 17px; opacity: .95; max-width: 34em; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-block; text-decoration: none; font-weight: 700; font-size: 17px;
+    padding: 13px 30px; border-radius: 12px; transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: #fff; color: var(--teal-dark); box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+  .btn-ghost { color: #fff; border: 1.5px solid rgba(255,255,255,.6); font-weight: 500; font-size: 15px; padding: 12px 20px; }
+  .phone {
+    background: #0c1110; border-radius: 34px; padding: 12px; width: 270px; margin: 0 auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.12);
+  }
+  .phone img { display: block; width: 100%; border-radius: 24px; }
+  .phone .notch { width: 86px; height: 8px; background: #1d2624; border-radius: 99px; margin: 6px auto 8px; }
+
+  /* ---------- Sections ---------- */
+  section { padding: 64px 0; }
+  section.alt { background: var(--card); }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); text-align: center; margin-bottom: 8px; }
+  .sec-sub { text-align: center; color: var(--muted); margin-bottom: 40px; font-size: 15px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 24px 22px; box-shadow: 0 2px 10px rgba(0,0,0,.04);
+  }
+  section.alt .card { background: var(--bg); }
+  .card .ic { font-size: 30px; margin-bottom: 10px; }
+  .card h3 { font-size: 18px; margin-bottom: 6px; color: var(--teal-dark); }
+  @media (prefers-color-scheme: dark) { .card h3 { color: var(--teal-bright); } }
+  .card p { font-size: 14.5px; color: var(--muted); }
+
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .why .card { text-align: center; }
+
+  /* ---------- Screens ---------- */
+  .shots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .shot {
+    background: #0c1110; border-radius: 20px; padding: 8px; border: 1px solid var(--line);
+    box-shadow: 0 10px 28px rgba(0,0,0,.14);
+  }
+  .shot img { display: block; width: 100%; border-radius: 14px; }
+  .shot figcaption { text-align: center; font-size: 13px; color: var(--muted); padding: 8px 0 4px; }
+
+  /* ---------- Steps ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: step; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; position: relative; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--teal); color: #fff; font-weight: 800; margin-bottom: 10px;
+  }
+  .step h3 { font-size: 17px; margin-bottom: 4px; }
+  .step p { font-size: 14px; color: var(--muted); }
+
+  /* ---------- CTA band ---------- */
+  .band {
+    background: linear-gradient(160deg, var(--teal-dark), var(--teal));
+    color: #fff; text-align: center; padding: 56px 20px; border-radius: 24px; margin: 0 20px;
+  }
+  .band h2 { color: #fff; }
+  .band p { opacity: .94; margin: 8px 0 24px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 36px 20px 44px; }
+  footer a { color: var(--teal); text-decoration: none; }
+  .footer-logo { width: 120px; height: auto; margin-bottom: 12px; opacity: 0.9; }
+
+  @media (max-width: 900px) {
+    .hero .wrap { grid-template-columns: 1fr; text-align: center; }
+    .hero p.lead { margin-inline: auto; }
+    .cta-row { justify-content: center; }
+    .grid, .why, .steps { grid-template-columns: 1fr 1fr; }
+    .shots { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 560px) {
+    .grid, .why, .steps, .shots { grid-template-columns: 1fr; }
+    .hero { padding: 56px 0 48px; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======== Hero ======== -->
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="badge">免安裝 · 免帳號 · 離線可用</span>
+      <h1>LedgerSync 記帳本
+        <small>3 秒記一筆，發票掃一下就入帳</small>
+      </h1>
+      <p class="lead">為「想記帳但懶得記」設計的極簡記帳 App：打開就能記、發票對準就解析、每月收支一眼看懂。資料存在你自己手上，不用註冊任何帳號。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://hung214.github.io/ledger_sync/" target="_blank" rel="noopener">立即使用（免費）</a>
+        <a class="btn btn-ghost" href="#start">怎麼加到主畫面？</a>
+      </div>
+    </div>
+    <div class="phone">
+      <div class="notch"></div>
+      <img src="screens/app-main.jpg" alt="LedgerSync 記帳本總覽畫面">
+    </div>
+  </div>
+</header>
+
+<!-- ======== 功能：9 張卡 ======== -->
+<section>
+  <div class="wrap">
+    <h2>把記帳變簡單的九件事</h2>
+    <p class="sec-sub">每個功能都為「少點幾下」而設計</p>
+    <div class="grid">
+      <div class="card"><div class="ic">⚡</div><h3>3 秒快速記帳</h3>
+        <p>計算機鍵盤直接加減乘除、常用分類一點就選、金額與帳戶記住你的習慣——打開到存檔三秒完成。</p></div>
+
+      <div class="card"><div class="ic">🧾</div><h3>發票 QR 掃描</h3>
+        <p>對準電子發票的 QR Code，發票號、日期、總金額與明細自動帶入，確認清單快速核對後入帳。</p></div>
+
+      <div class="card"><div class="ic">📊</div><h3>統計一看就懂</h3>
+        <p>支出／收入／淨額一鍵切換、分類占比甜甜圈、最近 12 個月趨勢與累計結餘。</p></div>
+
+      <div class="card"><div class="ic">📒</div><h3>交易明細</h3>
+        <p>分日群組＋每日小計、待確認標記、交易快速編輯與拆分、最近刪除可救回，月份之間自由切換。</p></div>
+
+      <div class="card"><div class="ic">💳</div><h3>信用卡繳費追蹤</h3>
+        <p>快速記一筆「繳卡費」，資金流向自動標示，這個月繳了多少一目瞭然。</p></div>
+
+      <div class="card"><div class="ic">🗂️</div><h3>備份與還原</h3>
+        <p>完整資料庫一鍵備份／還原（含交易、分類、帳戶、設定），換裝置、換瀏覽器無縫接續。</p></div>
+
+      <div class="card"><div class="ic">📁</div><h3>自訂分類與帳戶</h3>
+        <p>自由新增／編輯分類、帳戶，常用分類自動置頂，記帳更順手；支援多幣別顯示。</p></div>
+
+      <div class="card"><div class="ic">📥</div><h3>CSV 匯入匯出</h3>
+        <p>交易明細 CSV 雙向流通：匯入自動對應欄位、金額正負判斷、預覽去重；匯出可自訂欄位與日期範圍，轉帳、報稅皆適用。</p></div>
+
+      <div class="card"><div class="ic">🔄</div><h3>自動更新</h3>
+        <p>PWA 架構，開啟網頁即為最新版；離線快取自動更新，無需手動下載任何安裝包。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 賣點 ======== -->
+<section class="alt">
+  <div class="wrap">
+    <h2>為什麼是 LedgerSync？</h2>
+    <p class="sec-sub">三個和其他記帳 App 不一樣的地方</p>
+    <div class="why">
+      <div class="card"><div class="ic">📴</div><h3>離線優先</h3>
+        <p>本地資料庫，沒有網路照樣記——地下室、飛機上、出國漫遊都不中斷。</p></div>
+      <div class="card"><div class="ic">🔒</div><h3>資料在自己手上</h3>
+        <p>不用註冊、不用登入，帳目資料只存在你的裝置裡，不收集、不上傳。</p></div>
+      <div class="card"><div class="ic">💻</div><h3>手機平板電腦都能用</h3>
+        <p>網頁版免安裝，任何裝置的瀏覽器打開就是完整功能；電腦還有快速鍵。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 截圖區：第一張＝總覽 ======== -->
+<section>
+  <div class="wrap">
+    <h2>畫面搶先看</h2>
+    <p class="sec-sub">實際操作畫面</p>
+    <div class="shots">
+      <figure class="shot"><img src="screens/app-main.jpg" alt="總覽畫面"><figcaption>總覽 · 本月收支</figcaption></figure>
+      <figure class="shot"><img src="screens/app-entry.jpg" alt="快速記帳面板"><figcaption>快記 · 計算機鍵盤</figcaption></figure>
+      <figure class="shot"><img src="screens/app-stats.jpg" alt="統計頁"><figcaption>統計 · 分類占比</figcaption></figure>
+      <figure class="shot"><img src="screens/app-scan.jpg" alt="發票掃描"><figcaption>掃描 · 發票 QR</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 開始使用 ======== -->
+<section class="alt" id="start">
+  <div class="wrap">
+    <h2>三步開始記帳</h2>
+    <p class="sec-sub">不用下載 App、不用註冊帳號</p>
+    <div class="steps">
+      <div class="step"><h3>打開網址</h3><p>手機或電腦的瀏覽器開 <b>hung214.github.io/ledger_sync</b>。</p></div>
+      <div class="step"><h3>加到主畫面</h3><p>iPhone：Safari「分享 → 加到主畫面」；Android：選單「安裝應用程式」——之後像 App 一樣點開。</p></div>
+      <div class="step"><h3>記下第一筆</h3><p>點「快速記帳」輸入金額，或直接掃一張發票——就這麼簡單。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== CTA ======== -->
+<div class="band">
+  <h2>現在就開始，讓記帳變成習慣</h2>
+  <p>免費 · 免安裝 · 資料存在你自己手上</p>
+  <a class="btn btn-primary" href="https://hung214.github.io/ledger_sync/" target="_blank" rel="noopener">立即使用 LedgerSync 記帳本</a>
+</div>
+
+<footer>
+  <img src="img/logo.png" alt="LedgerSync" class="footer-logo">
+  <div>LedgerSync 記帳本 · 網頁版持續更新中 · <a href="https://hung214.github.io/ledger_sync/" target="_blank" rel="noopener">開啟 App</a></div>
+</footer>
+
+</body>
+</html>
