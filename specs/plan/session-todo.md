@@ -506,6 +506,16 @@
       `_keypadPinned` 退役）；桌面面板維持常駐無手勢
 - [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127c`**：298 全綠→建置 4.2MB→gh-pages
       `ab2298e`（CDN max-age=600 刷新中）＋本機 8123 同步 ✓
+- [x] **MR CI analyze 修復**：CI `channel: stable` 抓到新版 Flutter——把
+      `flutter/material.dart` 標棄用（→material_ui）全專案 60+ 檔 info 素，analyze
+      exit 1（非本批改動所致）→ ci.yml **鎖 flutter-version 3.47.7**＋
+      `analyze --no-fatal-infos`（errors/warnings 仍為 gate）
+- [ ] **material_ui 遷移**（低優先；60+ 檔 import flutter/material.dart——CI 新版
+      SDK 棄用提示；本機 3.47.7 user-branch 無此棄用，遷移需升級 SDK 後統一處理）
+- [x] **介紹頁（landing）上線**（PM 2026-11-27 問「線上看得到嗎」）：gh-pages
+      `3940314` 納入 `landing/`——`https://hung214.github.io/ledger_sync/landing/`；
+      宣傳用一頁式＋PM 實機截圖；App 本體不受影響（同一 build 20261127c）。
+      **未來部署 rsync 不再排除 landing**（scan/zxing 維持排除）
 - [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127b`**：298 全綠→建置 4.2MB→gh-pages
       `e2e7e48`（CDN 已驗證 ✓）＋本機 8123 同步 ✓
 - [x] **PWA 重建＋發佈 `0.5.1-pwa.20261127a`**：298 全綠→建置 4.2MB→gh-pages
