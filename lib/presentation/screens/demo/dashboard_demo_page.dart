@@ -47,7 +47,7 @@ class DashboardDemoContent extends StatelessWidget {
             SizedBox(width: 8),
             Expanded(
                 child: _StatCard(
-                    label: '負債（信用卡）', value: '8,000', valueColor: DemoTheme.red)),
+                    label: '負債', value: '8,000', valueColor: DemoTheme.red)),
             SizedBox(width: 8),
             Expanded(child: _StatCard(label: '淨值', value: '33,000')),
             SizedBox(width: 16),

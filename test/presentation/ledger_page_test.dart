@@ -87,4 +87,36 @@ void main() {
       container.dispose();
     }
   });
+
+  /// PM 2026-11-27：帳戶/金額 chips 於手機視窗（390 寬）不得直排——
+  /// 帳戶名＋應付金額為長字串，若被約束窄寬會逐字折行。以 chip 高度（單行）
+  /// 與無 overflow 例外雙重驗證。
+  testWidgets('明細：帳戶 chips 於手機視窗不直排（390 寬）', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final db = DbFixture.create();
+    await DbFixture.seedAccount(db, id: 'a-c', type: 'credit', name: '晨光範例卡');
+    final container = ProviderContainer(overrides: [
+      dbProvider.overrideWithValue(db),
+    ]);
+    try {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: const LedgerPage(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      final label = find.textContaining('應付');
+      expect(label, findsOneWidget);
+      final h = tester.getSize(label).height;
+      expect(h, lessThan(22), reason: '帳戶/金額 chip 應單行（未直排）');
+      expect(tester.takeException(), isNull, reason: '不得 overflow');
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
 }

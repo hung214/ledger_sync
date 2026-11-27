@@ -89,7 +89,10 @@ class OverviewPage extends ConsumerWidget {
           const SizedBox(width: 8),
           Expanded(
               child: _StatCard(
-                  label: '負債（信用卡）', value: money(liability), danger: true)),
+                  // PM 2026-11-27：手機三卡等寬，「負債（信用卡）」過長折行——簡化為「負債」。
+                  label: '負債',
+                  value: money(liability),
+                  danger: true)),
           const SizedBox(width: 8),
           Expanded(child: _StatCard(label: '淨值', value: money(asset - liability))),
         ],
