@@ -15,54 +15,67 @@ import '../helpers/in_memory_cloud_adapter.dart';
 void main() {
   var pickerKind = 'expense';
 
-  ProviderContainer buildContainer(dynamic db) => ProviderContainer(overrides: [
-        dbProvider.overrideWithValue(db),
-        cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
-        syncCoordinatorProvider.overrideWithValue(
-            SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-      ]);
+  ProviderContainer buildContainer(dynamic db) => ProviderContainer(
+    overrides: [
+      dbProvider.overrideWithValue(db),
+      cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
+      syncCoordinatorProvider.overrideWithValue(
+        SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+      ),
+    ],
+  );
 
   testWidgets('商家選擇器：最近使用 chips（依最近使用排序）＋點選回傳', (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
     // 兩家商家：蔡襄羹（最近）、全聯（較早）→ 排序＝蔡襄羹在前。
-    await DbFixture.seedTx(db,
-        id: 't-m1',
-        kind: 'expense',
-        amountMinor: 100,
-        accountId: 'cash',
-        merchant: '全聯',
-        occurredAt: DateTime(2026, 11, 1).millisecondsSinceEpoch);
-    await DbFixture.seedTx(db,
-        id: 't-m2',
-        kind: 'expense',
-        amountMinor: 60,
-        accountId: 'cash',
-        merchant: '蔡襄羹',
-        occurredAt: DateTime(2026, 11, 20).millisecondsSinceEpoch);
+    await DbFixture.seedTx(
+      db,
+      id: 't-m1',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'cash',
+      merchant: '全聯',
+      occurredAt: DateTime(2026, 11, 1).millisecondsSinceEpoch,
+    );
+    await DbFixture.seedTx(
+      db,
+      id: 't-m2',
+      kind: 'expense',
+      amountMinor: 60,
+      accountId: 'cash',
+      merchant: '蔡襄羹',
+      occurredAt: DateTime(2026, 11, 20).millisecondsSinceEpoch,
+    );
 
-    expect(db.distinctMerchants(), ['蔡襄羹', '全聯'],
-        reason: 'DISTINCT＋最近使用排序');
+    expect(db.distinctMerchants(), ['蔡襄羹', '全聯'], reason: 'DISTINCT＋最近使用排序');
 
     String? picked;
     final container = buildContainer(db);
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: Consumer(builder: (context, ref, _) => Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              onPressed: () async =>
-                  picked = await showMerchantPicker(context, ref, kind: 'expense'),
-              child: const Text('open'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () async => picked = await showMerchantPicker(
+                    context,
+                    ref,
+                    kind: 'expense',
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
             ),
           ),
-        )),
+        ),
       ),
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -81,40 +94,46 @@ void main() {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
-    await DbFixture.seedTx(db,
-        id: 't-me',
-        kind: 'expense',
-        amountMinor: 100,
-        accountId: 'cash',
-        merchant: '陽光超商',
-        occurredAt: DateTime(2026, 11, 21).millisecondsSinceEpoch);
-    await DbFixture.seedTx(db,
-        id: 't-mi',
-        kind: 'income',
-        amountMinor: 50000,
-        accountId: 'bank',
-        merchant: '薪轉公司',
-        occurredAt: DateTime(2026, 11, 22).millisecondsSinceEpoch);
+    await DbFixture.seedTx(
+      db,
+      id: 't-me',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'cash',
+      merchant: '陽光超商',
+      occurredAt: DateTime(2026, 11, 21).millisecondsSinceEpoch,
+    );
+    await DbFixture.seedTx(
+      db,
+      id: 't-mi',
+      kind: 'income',
+      amountMinor: 50000,
+      accountId: 'bank',
+      merchant: '薪轉公司',
+      occurredAt: DateTime(2026, 11, 22).millisecondsSinceEpoch,
+    );
 
-    String? picked;
     final container = buildContainer(db);
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: Consumer(builder: (context, ref, _) => Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              onPressed: () async =>
-                  picked = await showMerchantPicker(context, ref,
-                      kind: pickerKind),
-              child: const Text('open'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () async =>
+                      await showMerchantPicker(context, ref, kind: pickerKind),
+                  child: const Text('open'),
+                ),
+              ),
             ),
           ),
-        )),
+        ),
       ),
-    ));
+    );
 
     // 支出池：只見陽光超商，不見薪轉公司。
     pickerKind = 'expense';
@@ -141,26 +160,35 @@ void main() {
     final container = buildContainer(db);
     addTearDown(container.dispose);
     String? picked;
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: Consumer(builder: (context, ref, _) => Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              onPressed: () async =>
-                  picked = await showMerchantPicker(context, ref, kind: 'expense'),
-              child: const Text('open'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () async => picked = await showMerchantPicker(
+                    context,
+                    ref,
+                    kind: 'expense',
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
             ),
           ),
-        )),
+        ),
       ),
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const Key('merchant-input')), '7-ELEVEN 敦南店');
+      find.byKey(const Key('merchant-input')),
+      '7-ELEVEN 敦南店',
+    );
     await tester.tap(find.byKey(const Key('merchant-pick-save')));
     await tester.pumpAndSettle();
     expect(picked, '7-ELEVEN 敦南店', reason: '直接輸入＝新增商家');
