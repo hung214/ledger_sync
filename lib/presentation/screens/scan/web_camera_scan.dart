@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../application/providers.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
@@ -62,6 +63,22 @@ final webCameraDecodeRegionProvider =
 final scanHoldWindowProvider = Provider<Duration>(
   (ref) => const Duration(seconds: 2),
 );
+
+/// **made2 固定鏡頭模式**（PM 2026-11-28 實驗——避免 iPhone 近拍自動
+/// 切換鏡頭）：持久化 settings `scan.made2`（預設關）。診斷面板開關。
+final scanMade2Provider = NotifierProvider<ScanMade2Notifier, bool>(
+  ScanMade2Notifier.new,
+);
+
+class ScanMade2Notifier extends Notifier<bool> {
+  @override
+  bool build() => ref.watch(dbProvider).getSetting('scan.made2') == '1';
+
+  void set(bool v) {
+    ref.read(dbProvider).setSetting('scan.made2', v ? '1' : '0');
+    state = v;
+  }
+}
 
 /// 相機控制器 provider（測試可覆寫 fake）。
 final webCameraControllerProvider = Provider<CameraStreamController>(
@@ -437,8 +454,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         // **T93 繁中亂碼修復**：原生偵測器（Apple）不回原始位元組——可疑
         // 文字（Big5/UTF-8 誤解）以**該碼偵測框區域重跑 zxing2**（960
         // 放大＋rawBytes 還原鏈）——還原成功才取代，否則原樣。
-        if (isSuspectMojibake(c.text) && c.box != null) {
-          final af = await _controller.captureAnalysisFrame(region: c.box);
+        final box = c.box;
+        if (isSuspectMojibake(c.text) && box != null) {
+          // 外擴 25%（靜區——QR 解碼需要白邊；緊貼框＝zxing2 解不出）。
+          final paddedBox = box
+              .inflate(box.shortestSide * 0.25)
+              .shift(Offset(-box.shortestSide * 0.05, 0));
+          final af = await _controller.captureAnalysisFrame(region: paddedBox);
           final zx = af == null ? null : _decodeRgbaFrame(af);
           var recovered = false;
           for (final t in zx?.texts ?? const <String>[]) {
@@ -541,8 +563,16 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // —— **T93 雙鎖定狀態機**（PM 2026-11-28：隨機先掃一個、各自鎖定，
     // 格式判定左/右，無空間假設；左碼＝官方 77 碼、右碼＝`**` 起始）。
     // ①鎖定：窗內任一未鎖定的碼 → 鎖定（順序不限）。
-    if (_lockedLeftText == null && lefts.isNotEmpty) {
-      _enterHold(lefts.last, box: _boxForText(lefts.last, detected));
+    // **防重複**：已入單的左碼不鎖定（T93 回歸修復——committed 檢查曾在
+    // 舊 FULL 塊，重寫時遺漏＝同發票重複入單）。
+    final uncommittedLefts = lefts
+        .where((l) => !_committedLeftCodes.contains(l))
+        .toList();
+    if (_lockedLeftText == null && uncommittedLefts.isNotEmpty) {
+      _enterHold(
+        uncommittedLefts.last,
+        box: _boxForText(uncommittedLefts.last, detected),
+      );
     }
     if (_lockedRightText == null && rights.isNotEmpty) {
       _lockedRightText = rights.last;
@@ -553,8 +583,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         _phase = _ScanPhase.awaitingRight;
       }
     }
-    // ②換票防護：awaiting 中出現**另一張**的左碼 → 舊左碼先入＋清窗。
-    if (_lockedLeftText != null && lefts.any((l) => l != _lockedLeftText)) {
+    // ②換票防護：awaiting 中出現**另一張未入單**的左碼 → 舊左碼先入＋清窗。
+    if (_lockedLeftText != null &&
+        uncommittedLefts.any((l) => l != _lockedLeftText)) {
       await _commitLeftOnly();
       _resetScanPhase(clearWindow: true);
       for (final t in texts) {
@@ -591,6 +622,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // —— **非官方碼直入**（T93 相容路徑：舊內部格式/內部測資——無任何
     // 鎖定且能成草稿 → 既有立即入單行為；官方碼已在①鎖定不會走到這）。
     if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
+    // **防重複**：已入單的發票（左碼）不再入單（T93 回歸修復）。
+    final uncommittedLeft = lefts.firstWhere(
+      (l) => !_committedLeftCodes.contains(l),
+      orElse: () => '',
+    );
+    if (lefts.isNotEmpty && uncommittedLeft.isEmpty) return;
     final legacyMerged = _draftFromTexts(accumulated) ?? decodedDraft;
     if (legacyMerged == null) return;
     if (mounted) setState(() => _decodeHits++);
@@ -811,6 +848,24 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   child: _preview!,
                 ),
               ),
+              // **T93 點選對焦**（PM 2026-11-28）：tap 預覽 → 該點
+              // pointsOfInterest（瀏覽器支援度不一；best-effort＋提示）。
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (d) {
+                    final video = _parseVideoSize();
+                    if (video.isEmpty) return;
+                    final n = mapDisplayPointToVideoNormalized(
+                      d.localPosition,
+                      video,
+                      _previewDisplaySize,
+                    );
+                    unawaited(_controller.focusAt(n.dx, n.dy));
+                    _flashHint('已對焦');
+                  },
+                ),
+              ),
               // **T90c/T91 取景引導框**（狀態化）：FULL＝兩碼放置示意；
               // hold＝左半綠 ✓（鎖定）＋右半引導（獵右碼）＋倒數。
               // 後備路徑無偵測框座標 → 本框半邊高亮即為「掃到」的視覺提示。
@@ -976,6 +1031,36 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                               fontSize: 11,
                             ),
                           ),
+                        // **made2 固定鏡頭開關**（PM 2026-11-28 實驗——
+                        // 避免 iPhone 近拍自動切換鏡頭；診斷面板＝實驗
+                        // 功能位置，好找好取消）。
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'made2 固定鏡頭',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 26,
+                              width: 40,
+                              child: Switch(
+                                key: const Key('webcam-made2-toggle'),
+                                value: ref.watch(scanMade2Provider),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (v) {
+                                  ref.read(scanMade2Provider.notifier).set(v);
+                                  unawaited(_controller.setMade2(v));
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1048,8 +1133,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final guideHeight = constraints.maxHeight * 0.27;
     final holding = _phase == _ScanPhase.awaitingRight;
     // **T93 雙鎖定**：右碼先鎖＝無時限提示（等左碼）。
-    final rightLocked =
-        _lockedRightText != null && _lockedLeftText == null;
+    final rightLocked = _lockedRightText != null && _lockedLeftText == null;
     final remainMs = holding && _holdDeadline != null
         ? _holdDeadline!.difference(DateTime.now()).inMilliseconds
         : 0;
@@ -1084,8 +1168,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                     rightLocked
                         ? '✓ 已鎖定明細碼——掃描發票左碼'
                         : holding
-                            ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）'
-                            : '把左右 QR 條碼放進框內',
+                        ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）'
+                        : '把左右 QR 條碼放進框內',
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ],

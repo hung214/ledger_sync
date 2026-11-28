@@ -36,21 +36,17 @@ ScanPlatform detectScanPlatform() => kIsWeb
 ///   自印相容——內容不合 19 碼格式者於解析層過濾）。
 /// 同時開啟（不隨模式重建 controller）——模式分流在偵測回呼層處理。
 List<BarcodeFormat> cameraFormats(ScanPlatform platform) => switch (platform) {
-      ScanPlatform.ios ||
-      ScanPlatform.android ||
-      ScanPlatform.macos => const [
-          BarcodeFormat.qrCode,
-          BarcodeFormat.code39,
-          BarcodeFormat.code128,
-        ],
-      _ => const [BarcodeFormat.qrCode],
-    };
+  ScanPlatform.ios || ScanPlatform.android || ScanPlatform.macos => const [
+    BarcodeFormat.qrCode,
+    BarcodeFormat.code39,
+    BarcodeFormat.code128,
+  ],
+  _ => const [BarcodeFormat.qrCode],
+};
 
 /// 紙本發票一維條碼辨識支援——原生引擎（Vision/ML Kit）支援；
 /// web（zxing2 僅 QR）不支援 → 紙本模式回退手動開卡。
 bool supportsPaperBarcode(ScanPlatform platform) => switch (platform) {
-      ScanPlatform.ios ||
-      ScanPlatform.android ||
-      ScanPlatform.macos => true,
-      _ => false,
-    };
+  ScanPlatform.ios || ScanPlatform.android || ScanPlatform.macos => true,
+  _ => false,
+};

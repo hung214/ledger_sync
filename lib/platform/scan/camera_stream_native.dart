@@ -49,6 +49,12 @@ class _NativeCameraController implements CameraStreamController {
   Future<void> setZoom(double normalized) async {}
 
   @override
+  Future<void> setMade2(bool on) async {}
+
+  @override
+  Future<void> focusAt(double nx, double ny) async {}
+
+  @override
   Future<void> toggleTorch() async {}
 
   @override

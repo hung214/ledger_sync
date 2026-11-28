@@ -52,9 +52,13 @@ class WebCameraStreamController implements CameraStreamController {
   double _zoomMin = 1.0;
   double _zoomMax = 3.0;
 
+  /// **made2 固定鏡頭模式**（PM 2026-11-28 實驗——zoom 釘選主鏡頭，
+  /// 避免 iPhone 近拍自動切換鏡頭；能力不支援＝best-effort）。
+  bool made2 = false;
+
   @override
   String get diagInfo =>
-      'facing=$_facing${_switchNote == null ? '' : '｜$_switchNote'}';
+      'facing=$_facing${made2 ? '·made2' : ''}${_switchNote == null ? '' : '｜$_switchNote'}';
 
   @override
   String get resolutionInfo {
@@ -214,6 +218,43 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   @override
+  Future<void> setMade2(bool on) async {
+    made2 = on;
+    await _applyMade2Zoom();
+  }
+
+  @override
+  Future<void> focusAt(double nx, double ny) async {
+    try {
+      final track = _videoTracks().firstOrNull;
+      if (track == null) return;
+      // pointsOfInterest（package:web 型別誤植為 bool）→ dynamic 呼叫。
+      final constraints = {
+        'advanced': [
+          {
+            'pointsOfInterest': [
+              {'x': nx, 'y': ny},
+            ],
+          },
+        ],
+      }.jsify()!;
+      await (track as dynamic).applyConstraints(constraints);
+      _switchNote = '對焦✓(${(nx * 100).round()}%,${(ny * 100).round()}%)';
+    } catch (e) {
+      _switchNote = '對焦✗(${_brief(e)})';
+    }
+  }
+
+  /// made2：zoom 釘選（目標 ≈2×——主鏡頭；近拍自動切超廣角發生於
+  /// 1×附近，明確 zoom 可避免）。能力不支援 → 靜默（deviceId 精選
+  /// 仍釘住實體相機）。
+  Future<void> _applyMade2Zoom() async {
+    if (!made2 || !_zoomSupported) return;
+    final target = 2.0.clamp(_zoomMin, _zoomMax);
+    await setZoom((target - _zoomMin) / (_zoomMax - _zoomMin).clamp(0.001, 99));
+  }
+
+  @override
   Future<void> setZoom(double normalized) async {
     if (!_zoomSupported) return;
     final track = _videoTracks().firstOrNull;
@@ -336,6 +377,7 @@ class WebCameraStreamController implements CameraStreamController {
     // zoom 能力探測（T82）——capabilities.zoom 存在才支援變焦。
     final firstTrack = _videoTracks().firstOrNull;
     if (firstTrack != null) probeZoomCapabilities(firstTrack);
+    if (made2) await _applyMade2Zoom(); // made2：重套 zoom 釘選
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。

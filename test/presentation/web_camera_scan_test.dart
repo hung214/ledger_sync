@@ -430,6 +430,9 @@ class _FakeController implements CameraStreamController {
   Future<void> setMade2(bool on) async {}
 
   @override
+  Future<void> focusAt(double nx, double ny) async {}
+
+  @override
   Future<Widget> start() async {
     if (throwOnStart) {
       throw const CameraUnavailableException('相機無法使用（測試）');

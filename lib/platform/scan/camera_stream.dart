@@ -34,8 +34,11 @@ class DetectedCode {
 /// 分析用幀（**RGBA 直入**——T89 紅米卡頓修復：跳過 JPEG 編碼＋解碼鏈，
 /// 像素直接交 zxing2；native/stub 不提供＝null，呼叫端退回 JPEG 路徑）。
 class AnalysisFrame {
-  const AnalysisFrame(
-      {required this.rgba, required this.width, required this.height});
+  const AnalysisFrame({
+    required this.rgba,
+    required this.width,
+    required this.height,
+  });
 
   /// 像素（RGBA，每像素 4 bytes，row-major）。
   final Uint8List rgba;
@@ -119,6 +122,15 @@ abstract interface class CameraStreamController {
 
   /// 變焦（正規化 0~1——0=1×、1=最大；不支援＝靜默）。
   Future<void> setZoom(double normalized);
+
+  /// **made2 固定鏡頭模式**（PM 2026-11-28 實驗——避免 iPhone 近拍自動
+  /// 切換鏡頭）：on＝套用 zoom 約束釘選主鏡頭（能力支援時）；off＝取消。
+  /// 控制器記住狀態，重啟/恢復路徑自動重套。
+  Future<void> setMade2(bool on);
+
+  /// **點選對焦**（PM 2026-11-28）：對 [nx],[ny]（video 正規化 0~1）施加
+  /// pointsOfInterest——瀏覽器支援度不一（best-effort 靜默失敗）。
+  Future<void> focusAt(double nx, double ny);
 
   /// 切換補光開啟/關閉。（無能力或相機未啟動 → 靜默失敗。）
   Future<void> toggleTorch();

@@ -16,7 +16,8 @@
 /// 條件匯出（stub 保 native 編譯——web_camera_scan 在 VM 測試可載）。
 library;
 
-export 'tw_ein_parse_stub.dart' if (dart.library.js_interop) 'tw_ein_parse_web.dart';
+export 'tw_ein_parse_stub.dart'
+    if (dart.library.js_interop) 'tw_ein_parse_web.dart';
 
 /// TwEin 發票解析結果（純 Dart）。
 class TwEinInvoice {
