@@ -606,11 +606,19 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       }
       return;
     }
-    // ④逾時：左碼已鎖、右碼未到、窗期過 → 左碼先入（明細可稍後補）。
+    // ④逾時：左碼已鎖、右碼未到、窗期過：
+    // - **made2 模式**（PM 2026-11-28）：ROI 倒數完未合併＝**該次掃描取消**
+    //   （不左碼先入——避免不完整資料入庫；清窗＝可立即重掃）。
+    // - 一般模式：左碼先入（明細可稍後補）。
     if (_lockedLeftText != null &&
         _lockedRightText == null &&
         _holdDeadline != null &&
         now.isAfter(_holdDeadline!)) {
+      if (ref.read(scanMade2Provider)) {
+        _resetScanPhase(clearWindow: true);
+        _flashHint('✗ 明細未掃到——本次已取消，請重新掃描');
+        return;
+      }
       await _commitLeftOnly();
       _resetScanPhase();
       return;
