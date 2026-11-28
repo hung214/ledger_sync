@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -310,21 +311,47 @@ class _TxEditSheetState extends ConsumerState<_TxEditSheet> {
                       ],
                     ] else ...[
                       // 金額＝唯讀顯示運算式；點選聚焦 → 計算機由下滑入（PM 2026-11-26）。
-                      TextField(
-                        key: const Key('tx-edit-amount'),
-                        controller: _amountCtrl,
-                        focusNode: _amountFocus,
-                        readOnly: true,
-                        showCursor: true,
-                        keyboardType: TextInputType.none,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: '金額',
-                          border: OutlineInputBorder(),
-                        ),
+                      // PM 2026-11-27 桌面（≥900）：金額欄可用**實體鍵盤**輸入
+                      // 運算式（過濾僅數字/運算子）；手機維持唯讀＋計算機輸入。
+                      Builder(
+                        builder: (context) {
+                          final isPhone =
+                              MediaQuery.sizeOf(context).width < 900;
+                          return TextField(
+                            key: const Key('tx-edit-amount'),
+                            controller: _amountCtrl,
+                            focusNode: _amountFocus,
+                            readOnly: isPhone,
+                            showCursor: true,
+                            keyboardType: isPhone
+                                ? TextInputType.none
+                                : TextInputType.text,
+                            inputFormatters: isPhone
+                                ? null
+                                : [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9+\-*/(). ]'),
+                                    ),
+                                  ],
+                            onChanged: (v) {
+                              // ASCII 運算子→全寬（評估器語法；顯示與鍵盤一致）。
+                              final n =
+                                  AmountKeypadEvaluator.normalizeHardwareOperators(
+                                    v,
+                                  );
+                              if (n != v) _amountCtrl.text = n;
+                              setState(() => _expr = n);
+                            },
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: '金額',
+                              border: OutlineInputBorder(),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 10),
                       Row(

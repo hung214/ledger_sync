@@ -271,6 +271,14 @@ class AmountKeypadEvaluator {
 
   static final _tokenRegex = RegExp(r'\d+(?:\.\d+)?|\.\d+|[＋－×÷]');
 
+  /// 實體鍵盤 ASCII 運算子 → 鍵盤全寬語法（桌面鍵盤輸入——PM 2026-11-27）：
+  /// `+ - * /` → `＋ － × ÷`（[_tokenRegex] 僅認全寬；顯示與鍵盤輸出一致）。
+  static String normalizeHardwareOperators(String expr) => expr
+      .replaceAll('+', '＋')
+      .replaceAll('-', '－')
+      .replaceAll('*', '×')
+      .replaceAll('/', '÷');
+
   static int? evaluate(String expr) {
     if (expr.isEmpty) return null;
     if (AmountKeypad._operators.contains(expr[expr.length - 1])) return null;

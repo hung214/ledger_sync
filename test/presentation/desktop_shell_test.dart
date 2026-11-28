@@ -9,6 +9,7 @@ import 'package:ledger_sync/presentation/screens/quick_entry/quick_entry_page.da
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 
 import '../helpers/in_memory_cloud_adapter.dart';
+
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
 
 import '../helpers/db_fixture.dart';
@@ -22,36 +23,62 @@ void main() {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      // save 後的 FR-Y11 afterSave 鉤子須注入（否則 UnimplementedError 中斷閉包）。
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        // save 後的 FR-Y11 afterSave 鉤子須注入（否則 UnimplementedError 中斷閉包）。
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-            theme: buildAppTheme(Brightness.light), home: const MainShellPage()),
-      ));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const MainShellPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 三欄要件：側欄導航＋工具列搜尋/掃描/快記＋右側面板。
-      expect(find.text('LedgerSync'), findsOneWidget,
-          reason: '側欄 logo（08——T69 換定稿圖示＋文字）');
+      expect(
+        find.text('LedgerSync'),
+        findsOneWidget,
+        reason: '側欄 logo（08——T69 換定稿圖示＋文字）',
+      );
       expect(find.byKey(const Key('desktop-search')), findsOneWidget);
       expect(find.byKey(const Key('desktop-scan')), findsOneWidget);
-      expect(find.byKey(const Key('fab-quick-entry')), findsOneWidget,
-          reason: '工具列快記鈕（harness 相依 key）');
-      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget,
-          reason: '右側快記常駐面板');
-      expect(find.textContaining('雲端未設定'), findsOneWidget, reason: '側欄雲端狀態（footer 整段文字）');
+      expect(
+        find.byKey(const Key('fab-quick-entry')),
+        findsOneWidget,
+        reason: '工具列快記鈕（harness 相依 key）',
+      );
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsOneWidget,
+        reason: '右側快記常駐面板',
+      );
+      expect(
+        find.textContaining('雲端未設定'),
+        findsOneWidget,
+        reason: '側欄雲端狀態（footer 整段文字）',
+      );
 
       // PM 2026-10-25：桌面面板**無個別主類別選項**（三欄格已移除）。
-      expect(find.byKey(const Key('cat-grid-餐飲食品')), findsNothing,
-          reason: '面板不應有個別主類別選項（改由「分類」欄開彈窗）');
+      expect(
+        find.byKey(const Key('cat-grid-餐飲食品')),
+        findsNothing,
+        reason: '面板不應有個別主類別選項（改由「分類」欄開彈窗）',
+      );
       // 面板：金額 120 → 鍵盤 OK 儲存 → 交易入庫（智慧預設帳戶）。
-      await tester.enterText(find.byKey(const Key('desktop-quick-amount')), '120');
+      await tester.enterText(
+        find.byKey(const Key('desktop-quick-amount')),
+        '120',
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('quick-entry-save')));
       await tester.pump(); // 觸發 SnackBar 進場（pumpAndSettle 會快進 4s 自動關閉）
@@ -73,26 +100,42 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      // save 後的 FR-Y11 afterSave 鉤子須注入（否則 UnimplementedError 中斷閉包）。
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        // save 後的 FR-Y11 afterSave 鉤子須注入（否則 UnimplementedError 中斷閉包）。
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-            theme: buildAppTheme(Brightness.light), home: const MainShellPage()),
-      ));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const MainShellPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('nav-總覽')), findsOneWidget,
-          reason: '底部導航（手機殼）');
-      expect(find.byKey(const Key('desktop-search')), findsNothing,
-          reason: '桌面工具列不應出現在手機殼');
-      expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
-          reason: '右側面板不應出現在手機殼');
+      expect(
+        find.byKey(const Key('nav-總覽')),
+        findsOneWidget,
+        reason: '底部導航（手機殼）',
+      );
+      expect(
+        find.byKey(const Key('desktop-search')),
+        findsNothing,
+        reason: '桌面工具列不應出現在手機殼',
+      );
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsNothing,
+        reason: '右側面板不應出現在手機殼',
+      );
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
@@ -100,25 +143,30 @@ void main() {
     }
   });
 
-  testWidgets('桌面殼：工具列鈕＝切換右側面板（非整頁）；面板鍵盤可輸入（DBG-014）',
-      (tester) async {
+  testWidgets('桌面殼：工具列鈕＝切換右側面板（非整頁）；面板鍵盤可輸入（DBG-014）', (tester) async {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const MainShellPage()),
-      ));
+            home: const MainShellPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 面板預設常駐。
@@ -126,10 +174,12 @@ void main() {
       // ①工具列鈕 → **收合**（不移除整頁；不推入 QuickEntryPage）。
       await tester.tap(find.byKey(const Key('fab-quick-entry')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
-          reason: 'PM 2026-10-26：桌面＝右側面板顯示/隱藏');
-      expect(find.byType(QuickEntryPage), findsNothing,
-          reason: '不應整頁切換到快記頁');
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsNothing,
+        reason: 'PM 2026-10-26：桌面＝右側面板顯示/隱藏',
+      );
+      expect(find.byType(QuickEntryPage), findsNothing, reason: '不應整頁切換到快記頁');
       // 再點 → 展開。
       await tester.tap(find.byKey(const Key('fab-quick-entry')));
       await tester.pumpAndSettle();
@@ -146,12 +196,13 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(
-          tester
-              .widget<TextField>(find.byKey(const Key('desktop-quick-amount')))
-              .controller!
-              .text,
-          '123',
-          reason: '鍵盤輸入須寫回金額欄與 controller（DBG-014）');
+        tester
+            .widget<TextField>(find.byKey(const Key('desktop-quick-amount')))
+            .controller!
+            .text,
+        '123',
+        reason: '鍵盤輸入須寫回金額欄與 controller（DBG-014）',
+      );
 
       // OK 儲存 → 入庫（先確保金額欄聚焦、鍵盤滑入完成，OK 鍵才 tap 得到）。
       await tester.tap(find.byKey(const Key('desktop-quick-amount')));
@@ -178,39 +229,119 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('桌面殼：⌘N／Ctrl+N ＝面板**切換**（開↔收；PM 2026-10-29）',
-      (tester) async {
+  testWidgets('桌面殼：⌘N／Ctrl+N ＝面板**切換**（開↔收；PM 2026-10-29）', (tester) async {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
     try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            home: const MainShellPage()),
-      ));
+            home: const MainShellPage(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget,
-          reason: '桌面面板預設常駐');
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsOneWidget,
+        reason: '桌面面板預設常駐',
+      );
 
       await pressCtrlN(tester);
-      expect(find.byKey(const Key('desktop-quick-amount')), findsNothing,
-          reason: '快捷鍵按一次→**收合**（原本只會開不會收）');
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsNothing,
+        reason: '快捷鍵按一次→**收合**（原本只會開不會收）',
+      );
       await pressCtrlN(tester);
-      expect(find.byKey(const Key('desktop-quick-amount')), findsOneWidget,
-          reason: '再按→展開（具切換效果）');
+      expect(
+        find.byKey(const Key('desktop-quick-amount')),
+        findsOneWidget,
+        reason: '再按→展開（具切換效果）',
+      );
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
       db.close();
     }
+  });
+
+  testWidgets('桌面面板：繳卡費模式（PM 2026-11-27）——信用卡目標＋存檔＝repayment', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedStandardScenario(db);
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: const MainShellPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 繳卡費 segment（有信用卡 → 顯示；與手機一致）＋**文字禁折行**。
+    expect(find.text('繳卡費'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('繳卡費')).maxLines,
+      1,
+      reason: '繳卡費禁折行（PM 2026-11-27：按鈕放寬而非文字換行）',
+    );
+    expect(find.byKey(const Key('desktop-quick-category')), findsOneWidget);
+    await tester.tap(find.text('繳卡費'));
+    await tester.pumpAndSettle();
+
+    // 繳卡費：分類/商家不適用（與手機一致）；目標＝信用卡下拉。
+    expect(find.byKey(const Key('desktop-quick-category')), findsNothing);
+    expect(find.byKey(const Key('desktop-quick-merchant')), findsNothing);
+    expect(find.byKey(const Key('desktop-quick-target')), findsOneWidget);
+
+    // 選卡片（示例卡）＋金額 500 → 鍵盤 OK 存檔。
+    await tester.tap(find.byKey(const Key('desktop-quick-target')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('示例卡').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('desktop-quick-amount')),
+      '500',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('quick-entry-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final repay = db
+        .allTransactions()
+        .where((t) => t.kind == 'repayment')
+        .toList();
+    expect(repay.length, 1, reason: '繳卡費存檔＝repayment 交易');
+    expect(repay.first.amountMinor, 500);
+    expect(tester.takeException(), isNull);
   });
 }
