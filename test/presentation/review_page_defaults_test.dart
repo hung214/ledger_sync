@@ -15,12 +15,15 @@ import '../helpers/db_fixture.dart';
 import '../helpers/in_memory_cloud_adapter.dart';
 
 /// 測試容器（存檔需 sync 注入——同 web_camera_scan_test harness）。
-ProviderContainer _container(dynamic db) => ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+ProviderContainer _container(dynamic db) => ProviderContainer(
+  overrides: [
+    dbProvider.overrideWithValue(db),
+    cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
+    syncCoordinatorProvider.overrideWithValue(
+      SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+    ),
+  ],
+);
 
 /// 確認清單＝**快記同款**（PM 2026-11-22）＋**掃描預設帳戶**（PM 2026-11-22）：
 /// 帳戶預設＝最後一次掃描入帳的帳戶 → 第一個現金帳戶；入帳即記住（跨回合）。
@@ -71,33 +74,33 @@ void main() {
       date: DraftField(DateTime(2026, 10, 18), 1.0),
       invoiceNo: 'SR30393603',
     );
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: ReviewPage(items: [ScannedItem(draft: draft)]),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [ScannedItem(draft: draft)]),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('帳戶：現金（Sticky）'), findsOneWidget,
-        reason: '預設帳戶＝第一個現金帳戶');
-    expect(find.text('發票號 SR30393603'), findsOneWidget,
-        reason: '發票號碼自動寫入備註欄');
+    expect(find.text('帳戶：現金（Sticky）'), findsOneWidget, reason: '預設帳戶＝第一個現金帳戶');
+    expect(find.text('發票號 SR30393603'), findsOneWidget, reason: '發票號碼自動寫入備註欄');
     // PM 2026-11-26 聚焦滑入制：計算機改為金額欄聚焦才滑入，先聚焦金額欄再斷言。
     await tester.tap(find.byKey(const Key('review-total')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('amount-keypad')), findsOneWidget,
-        reason: '聚焦金額欄 → 計算機滑入（PM 2026-11-26 聚焦滑入制）');
-    expect(find.text('第 1 張 / 共 1 張'), findsOneWidget,
-        reason: '進度列');
-    expect(find.text('測試超商'), findsOneWidget,
-        reason: '商家欄帶入（快記同款輸入欄）');
+    expect(
+      find.byKey(const Key('amount-keypad')),
+      findsOneWidget,
+      reason: '聚焦金額欄 → 計算機滑入（PM 2026-11-26 聚焦滑入制）',
+    );
+    expect(find.text('第 1 張 / 共 1 張'), findsOneWidget, reason: '進度列');
+    expect(find.text('測試超商'), findsOneWidget, reason: '商家欄帶入（快記同款輸入欄）');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('帳戶/類別＝最後一次掃描優先；入帳記住＋多張 Sticky＋單張移除',
-      (tester) async {
+  testWidgets('帳戶/類別＝最後一次掃描優先；入帳記住＋多張 Sticky＋單張移除', (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
@@ -110,27 +113,35 @@ void main() {
     addTearDown(tester.view.reset);
 
     TransactionDraft draft(int total) => TransactionDraft(
-          merchant: const DraftField('測試超商', 1.0),
-          totalMinor: DraftField(total, 1.0),
-          date: DraftField(DateTime(2026, 10, 18), 1.0),
-        );
+      merchant: const DraftField('測試超商', 1.0),
+      totalMinor: DraftField(total, 1.0),
+      date: DraftField(DateTime(2026, 10, 18), 1.0),
+    );
     final item1 = ScannedItem(draft: draft(195));
     final item2 = ScannedItem(draft: draft(60));
     container.read(scanDraftsProvider.notifier).add(item1);
     container.read(scanDraftsProvider.notifier).add(item2);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: ReviewPage(items: [item1, item2]),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [item1, item2]),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('帳戶：銀行（Sticky）'), findsOneWidget,
-        reason: '最後一次掃描的帳戶優先於第一個現金帳戶');
-    expect(find.textContaining('餐飲'), findsOneWidget,
-        reason: '類別＝最後一次掃描入帳的類別（非一律「其他」）');
+    expect(
+      find.text('帳戶：銀行（Sticky）'),
+      findsOneWidget,
+      reason: '最後一次掃描的帳戶優先於第一個現金帳戶',
+    );
+    expect(
+      find.textContaining('餐飲'),
+      findsOneWidget,
+      reason: '類別＝最後一次掃描入帳的類別（非一律「其他」）',
+    );
 
     // 第 1 張：金額 195（預填）→ OK 入帳 → 自動跳第 2 張（Sticky 沿用）。
     // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
@@ -138,17 +149,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
-    expect(db.getSetting(kScanLastAccountKey), 'bank',
-        reason: '入帳即記住＝下次掃描預設');
-    expect(db.getSetting(kScanLastCategoryKey), 'c-food',
-        reason: '類別同款記住');
-    expect(container.read(scanDraftsProvider).length, 1,
-        reason: '存檔只移除**該張**（單張編輯不清其他待掃）');
+    expect(db.getSetting(kScanLastAccountKey), 'bank', reason: '入帳即記住＝下次掃描預設');
+    expect(db.getSetting(kScanLastCategoryKey), 'c-food', reason: '類別同款記住');
+    expect(
+      container.read(scanDraftsProvider).length,
+      1,
+      reason: '存檔只移除**該張**（單張編輯不清其他待掃）',
+    );
     expect(find.text('第 2 張 / 共 2 張'), findsOneWidget);
-    expect(find.text('帳戶：銀行（Sticky）'), findsOneWidget,
-        reason: '同回合 Sticky 沿用');
-    expect(find.textContaining('餐飲'), findsOneWidget,
-        reason: '類別 Sticky 沿用');
+    expect(find.text('帳戶：銀行（Sticky）'), findsOneWidget, reason: '同回合 Sticky 沿用');
+    expect(find.textContaining('餐飲'), findsOneWidget, reason: '類別 Sticky 沿用');
 
     // 第 2 張：改用現金 → 入帳 → 記住現金。
     await tester.tap(find.byKey(const Key('review-account')));
@@ -160,24 +170,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('quick-entry-save')));
     await tester.pumpAndSettle();
-    expect(db.getSetting(kScanLastAccountKey), 'cash',
-        reason: '最後入帳的帳戶＝下次掃描預設');
-    expect(container.read(scanDraftsProvider), isEmpty,
-        reason: '全部存完＝暫存清空（逐張移除）');
+    expect(
+      db.getSetting(kScanLastAccountKey),
+      'cash',
+      reason: '最後入帳的帳戶＝下次掃描預設',
+    );
+    expect(
+      container.read(scanDraftsProvider),
+      isEmpty,
+      reason: '全部存完＝暫存清空（逐張移除）',
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('時間預設＝當下時刻（PM 2026-11-23）：掃描日期配當下 HH:mm',
-      (tester) async {
+  testWidgets('時間預設＝當下時刻（PM 2026-11-23）：掃描日期配當下 HH:mm', (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
-    final container = ProviderContainer(overrides: [
-      dbProvider.overrideWithValue(db),
-      cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
-      syncCoordinatorProvider.overrideWithValue(
-          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        cloudAdapterProvider.overrideWithValue(InMemoryCloudAdapter()),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-A'),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(500, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -190,13 +208,15 @@ void main() {
       date: DraftField(DateTime(2023, 10, 17), 1.0),
       invoiceNo: 'SR30393603',
     );
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: ReviewPage(items: [ScannedItem(draft: draft)]),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [ScannedItem(draft: draft)]),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     final now = DateTime.now();
@@ -211,15 +231,16 @@ void main() {
 
     final txs = db.allTransactions();
     expect(txs, isNotEmpty);
-    final occurred =
-        DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
-    expect(occurred, DateTime(2023, 10, 16, now.hour, now.minute),
-        reason: '◀ 快調一天（2023-10-17→16）＋時間＝當下時刻（非 00:00）');
+    final occurred = DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
+    expect(
+      occurred,
+      DateTime(2023, 10, 16, now.hour, now.minute),
+      reason: '◀ 快調一天（2023-10-17→16）＋時間＝當下時刻（非 00:00）',
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('日期＝掃到即用（無確認閘）：2023 舊日期直接入帳＋發票號入備註',
-      (tester) async {
+  testWidgets('日期＝掃到即用（無確認閘）：2023 舊日期直接入帳＋發票號入備註', (tester) async {
     final db = DbFixture.create();
     addTearDown(db.close);
     await DbFixture.seedStandardScenario(db);
@@ -236,19 +257,23 @@ void main() {
       date: DraftField(DateTime(2023, 10, 17), 1.0),
       invoiceNo: 'SR30393603',
     );
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: buildAppTheme(Brightness.light),
-        home: ReviewPage(items: [ScannedItem(draft: draft)]),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [ScannedItem(draft: draft)]),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('請確認日期'), findsNothing,
-        reason: 'PM 2026-11-22：不需要確認時間按鈕——掃到即用，手動調整');
-    expect(find.text('發票號 SR30393603'), findsOneWidget,
-        reason: '發票號寫入備註欄');
+    expect(
+      find.text('請確認日期'),
+      findsNothing,
+      reason: 'PM 2026-11-22：不需要確認時間按鈕——掃到即用，手動調整',
+    );
+    expect(find.text('發票號 SR30393603'), findsOneWidget, reason: '發票號寫入備註欄');
 
     // 直接 OK 入帳（無閘）→ 交易 note＝發票號、日期＝掃描值。
     // 聚焦滑入制：先聚焦金額欄讓計算機滑入，再 tap OK。
@@ -260,12 +285,97 @@ void main() {
     expect(txs, isNotEmpty);
     expect(txs.first.note, '發票號 SR30393603');
     expect(txs.first.amountMinor, 21);
-    final occurred =
-        DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
+    final occurred = DateTime.fromMillisecondsSinceEpoch(txs.first.occurredAt);
     final now = DateTime.now();
-    expect(occurred, DateTime(2023, 10, 17, now.hour, now.minute),
-        reason: '日期＝掃描值；時間＝當下時刻（PM 2026-11-23）');
+    expect(
+      occurred,
+      DateTime(2023, 10, 17, now.hour, now.minute),
+      reason: '日期＝掃描值；時間＝當下時刻（PM 2026-11-23）',
+    );
     expect(txs.first.source, 'scan');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('確認清單備註右下「儲存」（PM 2026-11-27，僅手機）：點即存檔＋暫存移除＋返回', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedStandardScenario(db);
+    final container = _container(db);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(500, 1200); // 手機寬幅（<900 斷點）
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final draft = TransactionDraft(
+      merchant: const DraftField('測試超商', 1.0),
+      totalMinor: const DraftField(195, 1.0),
+      date: DraftField(DateTime(2026, 10, 18), 1.0),
+      invoiceNo: 'SR30393603',
+    );
+    final item = ScannedItem(draft: draft);
+    container.read(scanDraftsProvider.notifier).add(item);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [item]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 金額由草稿預填 195 → 儲存啟用（與鍵盤 OK 同判定）。
+    final btn = tester.widget<FilledButton>(
+      find.byKey(const Key('review-save-btn')),
+    );
+    expect(btn.onPressed, isNotNull, reason: '金額 195 → 可存');
+
+    // 點備註區「儲存」＝同鍵盤 OK 的存檔（單張→存完返回）。
+    await tester.tap(find.byKey(const Key('review-save-btn')));
+    await tester.pumpAndSettle();
+
+    final txs = db.allTransactions();
+    final saved = txs.where((t) => t.source == 'scan').toList();
+    expect(saved.length, 1, reason: '已入庫一筆（seedStandardScenario 另有預載）');
+    expect(saved.first.amountMinor, 195);
+    expect(saved.first.note, '發票號 SR30393603', reason: '備註（含發票號）寫入');
+    expect(container.read(scanDraftsProvider), isEmpty, reason: '存檔即從暫存移除該張');
+    expect(find.byType(ReviewPage), findsNothing, reason: '全數完成 → 返回（S3.7）');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('確認清單備註右下「儲存」＝僅手機版（≥900 桌面寬幅不渲染；PM 2026-11-27）', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedStandardScenario(db);
+    final container = _container(db);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(1080, 1200); // 桌面寬幅（≥900 斷點）
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final draft = TransactionDraft(
+      merchant: const DraftField('測試超商', 1.0),
+      totalMinor: const DraftField(195, 1.0),
+      date: DraftField(DateTime(2026, 10, 18), 1.0),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [ScannedItem(draft: draft)]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('review-save-btn')),
+      findsNothing,
+      reason: '桌面版不加備註區儲存鈕（與快記同慣例）',
+    );
     expect(tester.takeException(), isNull);
   });
 }

@@ -470,6 +470,26 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       isDense: true,
                     ),
                   ),
+                  // 儲存（PM 2026-11-27：備註右下角——備註聚焦時鍵盤收起，
+                  // 免「完成→重聚焦金額欄→鍵盤 OK」即可存）。**僅手機版**
+                  //（max-width<900，與 main_shell_page／快記 RWD 斷點一致；
+                  // PM 同日對快記的指示）——key 與鍵盤 OK 的
+                  // `quick-entry-save` 契約分開。
+                  LayoutBuilder(
+                    builder: (context, c) {
+                      if (c.maxWidth >= 900) return const SizedBox.shrink();
+                      return Row(
+                        children: [
+                          const Spacer(),
+                          FilledButton(
+                            key: const Key('review-save-btn'),
+                            onPressed: _saveEnabled ? _save : null,
+                            child: const Text('儲存'),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   if (_blockedMessage != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
