@@ -19,39 +19,55 @@ final twEinParserProvider = Provider<TwEinParser>((ref) => twEinParser);
 
 /// 解碼函式 provider（測試可覆寫；預設＝**相機幀分層解碼**——輕量 3 區 →
 /// 中央變焦 → 四象限，回傳草稿＋**解出的原始文字**（去重 key 用））。
-final webCameraDecodeProvider = Provider<
-        ({TransactionDraft? draft, List<String> texts})? Function(Uint8List)>(
-    (ref) => (bytes) => ImageQrScanner().draftFromCameraFrame(bytes));
+final webCameraDecodeProvider =
+    Provider<
+      ({TransactionDraft? draft, List<String> texts})? Function(Uint8List)
+    >(
+      (ref) =>
+          (bytes) => ImageQrScanner().draftFromCameraFrame(bytes),
+    );
 
 /// RGBA 直入解碼函式 provider（測試可覆寫；T89——**跳過 JPEG 編解碼鏈**
 /// ＋900ms 時間預算＝行動裝置主執行緒卡頓上限（**只管深度升級區**——
 /// 核心 3 區整張＋切半不受限＝辨識底線；預算只「提早帶成果收工」，
 /// 不丟已解出的文字），超時下一 tick 續掃）。
-final webCameraDecodeRgbaProvider = Provider<
-        ({TransactionDraft? draft, List<String> texts})? Function(
-            AnalysisFrame)>((ref) => (af) =>
-    ImageQrScanner().draftFromCameraFrameRgba(af.rgba, af.width, af.height,
-        budget: const Duration(milliseconds: 900)));
+final webCameraDecodeRgbaProvider =
+    Provider<
+      ({TransactionDraft? draft, List<String> texts})? Function(AnalysisFrame)
+    >(
+      (ref) =>
+          (af) => ImageQrScanner().draftFromCameraFrameRgba(
+            af.rgba,
+            af.width,
+            af.height,
+            budget: const Duration(milliseconds: 900),
+          ),
+    );
 
 /// **T91 ROI 子區解碼函式 provider**（hold 階段右側限區找明細碼——
 /// 測試可覆寫）。
 final webCameraDecodeRegionProvider =
     Provider<List<String> Function(AnalysisFrame)>(
-        (ref) => (af) => ImageQrScanner.decodeRegionRgba(
-            af.rgba, af.width, af.height));
+      (ref) =>
+          (af) => ImageQrScanner.decodeRegionRgba(af.rgba, af.width, af.height),
+    );
 
 /// **T91 時間窗長度 provider**（左碼鎖定後等右碼的時限；PM 決策＝3 秒；
 /// 測試可縮短——逾時＝左碼先入單）。
-final scanHoldWindowProvider =
-    Provider<Duration>((ref) => const Duration(seconds: 3));
+final scanHoldWindowProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 3),
+);
 
 /// 相機控制器 provider（測試可覆寫 fake）。
-final webCameraControllerProvider =
-    Provider<CameraStreamController>((ref) => createCameraController());
+final webCameraControllerProvider = Provider<CameraStreamController>(
+  (ref) => createCameraController(),
+);
 
 /// 部署版本（dart-define 帶入；掃描診斷面板顯示——確認更新已生效）。
-const String kWebScanAppVersion =
-    String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
+const String kWebScanAppVersion = String.fromEnvironment(
+  'APP_VERSION',
+  defaultValue: 'dev',
+);
 
 /// **PWA 即時相機掃描**（F14；PM 2026-11-17 決策 A）。
 ///
@@ -71,9 +87,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   _CamState _state = _CamState.starting;
   String? _error;
   Widget? _preview;
-  late final CameraStreamController _controller =
-      ref.read(webCameraControllerProvider);
+  late final CameraStreamController _controller = ref.read(
+    webCameraControllerProvider,
+  );
   Timer? _loop;
+
   /// **session 級去重＝條碼原始內容**（PM 2026-11-22 修「換一張發票就
   /// 掃描不到」：舊指紋 total|date|merchant 會把**同店家/同金額/同日期的
   /// 不同發票**誤擋——不同發票＝不同字串，永不誤擋；同一張在畫面中不重複）。
@@ -98,6 +116,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       if (mounted) setState(() => _hint = null);
     });
   }
+
   int _addedFromThisSession = 0;
   // 診斷面板（PM 2026-11-21「無法正確掃描」定位用）：
   int _frames = 0; // 取幀計數
@@ -151,8 +170,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       width: display.width * 0.88,
       height: display.height * 0.27,
     );
-    final half = Rect.fromLTRB(guide.center.dx, guide.top, guide.right,
-        guide.bottom);
+    final half = Rect.fromLTRB(
+      guide.center.dx,
+      guide.top,
+      guide.right,
+      guide.bottom,
+    );
     // padding：QR 常略高/低於橫帶——垂直多留 20%。
     final padded = half.inflate(guide.height * 0.2);
     final clipped = _clipToSize(padded, display);
@@ -243,6 +266,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
   int _decodeMs = 0; // 最近一次解碼耗時（面板顯示——行動裝置效能定位）
   bool _diagExpanded = false; // 診斷行展開（PM：預設短格式）
+
+  /// **T92 除錯簽章**（PM 2026-11-28「要知道掃描成功是哪種方式」）：
+  /// [_tickSig]＝本 tick 解碼方式（引擎×路徑）；[_lastSuccessInfo]＝最後
+  /// 一次成功入單的簽章（引擎×路徑×階段）——診斷行**持久顯示**，留到
+  /// 下一次成功才覆蓋。
+  String _tickSig = '';
+  String _lastSuccessInfo = '';
   bool _torchOn = false; // 補光開關狀態
   bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
 
@@ -306,28 +336,27 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// TwEin 解析結果 → 確認清單草稿（**金額單位＝台幣元**——TWD
   /// zero-decimal，TwEin 的 totalAmount/item unitPrice 即元，勿 ×100）。
   TransactionDraft _twEinToDraft(TwEinInvoice inv) => TransactionDraft(
-        merchant: const DraftField.none(), // QR 規格無賣方名稱欄。
-        totalMinor: DraftField(inv.totalAmountMinor, 1.0),
-        date: inv.date != null
-            ? DraftField(inv.date!, 1.0)
-            : const DraftField.none(),
-        sellerTaxId: inv.sellerTaxId,
-        invoiceNo: inv.invoiceNumber,
-        lineItems: [
-          for (final it in inv.items)
-            InvoiceLineItem(
-              name: it.name,
-              quantity: it.quantity.round(),
-              unitPrice: it.unitPrice.round(),
-              amount: (it.quantity * it.unitPrice).round(),
-            ),
-        ],
-      );
+    merchant: const DraftField.none(), // QR 規格無賣方名稱欄。
+    totalMinor: DraftField(inv.totalAmountMinor, 1.0),
+    date: inv.date != null
+        ? DraftField(inv.date!, 1.0)
+        : const DraftField.none(),
+    sellerTaxId: inv.sellerTaxId,
+    invoiceNo: inv.invoiceNumber,
+    lineItems: [
+      for (final it in inv.items)
+        InvoiceLineItem(
+          name: it.name,
+          quantity: it.quantity.round(),
+          unitPrice: it.unitPrice.round(),
+          amount: (it.quantity * it.unitPrice).round(),
+        ),
+    ],
+  );
 
   Future<void> _tryDecode() async {
     if (_state != _CamState.live || _decoding) return;
-    if (ref.read(scanPausedProvider) ||
-        DateTime.now().isBefore(_pausedUntil)) {
+    if (ref.read(scanPausedProvider) || DateTime.now().isBefore(_pausedUntil)) {
       return;
     }
     _decoding = true;
@@ -345,7 +374,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   /// zxing2 分層解碼（例外→null——異常幀只損失本 tick，不鎖死迴圈；T86）。
   ({TransactionDraft? draft, List<String> texts})? _decodeFrame(
-      Uint8List bytes) {
+    Uint8List bytes,
+  ) {
     try {
       return ref.read(webCameraDecodeProvider)(bytes);
     } catch (_) {
@@ -355,7 +385,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   /// RGBA 直入解碼（例外→null——同 JPEG 路徑防護；T89）。
   ({TransactionDraft? draft, List<String> texts})? _decodeRgbaFrame(
-      AnalysisFrame af) {
+    AnalysisFrame af,
+  ) {
     try {
       return ref.read(webCameraDecodeRgbaProvider)(af);
     } catch (_) {
@@ -382,11 +413,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     _sweepCounter++;
     // hold 逾 1.5s 仍無右碼 → 原生路徑升級 ROI 放大偵測（小碼救星）；
     // 與全幅**交替**（每 2 tick）——單 tick 只跑一種，頻率不致降級。
-    final escalate = inHold &&
+    final escalate =
+        inHold &&
         rightRoi != null &&
         _holdDeadline != null &&
-        now.difference(_holdDeadline!
-                .subtract(ref.read(scanHoldWindowProvider))) >
+        now.difference(
+              _holdDeadline!.subtract(ref.read(scanHoldWindowProvider)),
+            ) >
             const Duration(milliseconds: 1500) &&
         !_recentTexts.keys.any((t) => t.startsWith('**'));
     // 後備路徑安全掃（hold 每 3 tick 全幅——防發票移動漏掃）。
@@ -406,7 +439,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (_controller.hasNativeBarcodeDetector) {
       final useRoi = escalate && _sweepCounter % 2 == 1;
       final codes = await _controller.detectNativeBarcodes(
-          region: useRoi ? rightRoi : null);
+        region: useRoi ? rightRoi : null,
+      );
       detected.addAll(codes);
       native.addAll(codes.map((c) => c.text).where((t) => t.isNotEmpty));
     }
@@ -451,6 +485,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         draft = result?.draft;
       }
     }
+    // **T92 除錯簽章**：本 tick 的解碼方式（引擎×路徑）——入單時寫入簽章。
+    _tickSig = '$engine·${inHold ? (sweep ? '全幅sweep' : '右側ROI') : '全幅'}';
     if (mounted) {
       setState(() {
         _frames++;
@@ -474,8 +510,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     // （PM 2026-11-23 提案：已掃過的等另一碼；對應不起來＝另一張）。
     if (texts.isNotEmpty) {
       final now2 = DateTime.now();
-      _recentTexts.removeWhere((_, t) =>
-          now2.difference(t) > const Duration(seconds: 3));
+      _recentTexts.removeWhere(
+        (_, t) => now2.difference(t) > const Duration(seconds: 3),
+      );
       for (final t in texts) {
         // **T90f**（PM「辨識時慢時快」）：新的**左碼**＝新發票的開始——
         // 清掉先前孤兒右碼（`**`），防止跨發票混碼（舊右碼拼進新左碼）。
@@ -575,16 +612,23 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final draft = _draftFromTexts([left]);
     if (draft == null) return;
     await _commitMerged(draft, [left], left);
+    _lastSuccessInfo = '$_tickSig · 左碼逾時先入';
     _flashHint('✓ 已記發票——右側明細碼未掃到，明細可稍後補');
   }
 
   /// 入單（現行流程抽出共用：FULL 立即入單／hold 合併入單／左-only 入單）。
   Future<void> _commitMerged(
-      TransactionDraft merged, List<String> codes, String? leftCode) async {
+    TransactionDraft merged,
+    List<String> codes,
+    String? leftCode,
+  ) async {
+    // **T92 除錯簽章**：入單方式（引擎×路徑×階段——診斷行「上次成功」）。
+    _lastSuccessInfo = '$_tickSig · ${leftCode == null ? '直入' : 'hold合併'}';
     // **T89**：照片只在入單時擷一次 JPEG（舊版每 tick 擷幀＋同步編碼）。
     final photoBytes = await _controller.captureFrame();
-    ref.read(scanDraftsProvider.notifier).add(
-        ScannedItem(draft: merged, photoBytes: photoBytes));
+    ref
+        .read(scanDraftsProvider.notifier)
+        .add(ScannedItem(draft: merged, photoBytes: photoBytes));
     for (final t in codes) {
       _seenCodes.add(t);
       // **T90e**（PM「辨識時慢時快」）：入單即清累積窗——已入單的碼留在
@@ -604,8 +648,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     if (_navigating) return;
     _navigating = true;
     ref.read(scanPausedProvider.notifier).set(true);
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => ReviewPage(items: List.of(items))));
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReviewPage(items: List.of(items)),
+      ),
+    );
     if (!mounted) return;
     ref.read(scanPausedProvider.notifier).set(false);
     _navigating = false;
@@ -646,15 +693,17 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 紙本發票手動開卡（PM 2026-11-22：與 APP 同款——加入暫存清單，
   /// 「完成掃描」統一進確認清單；金額/日期/商家/發票號皆手動輸入）。
   void _addBlankDraft() {
-    ref.read(scanDraftsProvider.notifier)
+    ref
+        .read(scanDraftsProvider.notifier)
         .add(ScannedItem(draft: TransactionDraft.blank(DateTime.now())));
   }
 
   void _fallbackToFile() {
     _loop?.cancel();
     _controller.dispose();
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-        builder: (_) => const ImportPage()));
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const ImportPage()),
+    );
   }
 
   @override
@@ -702,9 +751,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
-                child: Text('已掃 $count 張',
-                    key: const Key('webcam-count'),
-                    style: Theme.of(context).textTheme.titleMedium),
+                child: Text(
+                  '已掃 $count 張',
+                  key: const Key('webcam-count'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
             ),
         ],
@@ -731,13 +782,15 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             key: const Key('scan-mode-toggle'),
             segments: const [
               ButtonSegment(
-                  value: ScanMode.eInvoice,
-                  icon: Icon(Icons.qr_code_scanner),
-                  label: Text('電子發票 QR')),
+                value: ScanMode.eInvoice,
+                icon: Icon(Icons.qr_code_scanner),
+                label: Text('電子發票 QR'),
+              ),
               ButtonSegment(
-                  value: ScanMode.paper,
-                  icon: Icon(Icons.receipt_long),
-                  label: Text('紙本發票')),
+                value: ScanMode.paper,
+                icon: Icon(Icons.receipt_long),
+                label: Text('紙本發票'),
+              ),
             ],
             selected: {mode},
             onSelectionChanged: (selection) =>
@@ -749,9 +802,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             fit: StackFit.expand,
             children: [
               KeyedSubtree(
-                  key: const Key('webcam-preview'),
-                  child: KeyedSubtree(
-                      key: ValueKey<int>(_previewEpoch), child: _preview!)),
+                key: const Key('webcam-preview'),
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_previewEpoch),
+                  child: _preview!,
+                ),
+              ),
               // **T90c/T91 取景引導框**（狀態化）：FULL＝兩碼放置示意；
               // hold＝左半綠 ✓（鎖定）＋右半引導（獵右碼）＋倒數。
               // 後備路徑無偵測框座標 → 本框半邊高亮即為「掃到」的視覺提示。
@@ -789,8 +845,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   left: 12,
                   top: 12,
                   child: Chip(
-                    avatar: const Icon(Icons.check_circle,
-                        color: Colors.green, size: 18),
+                    avatar: const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 18,
+                    ),
                     label: Text('已加入 ${drafts.length} 張'),
                   ),
                 ),
@@ -817,11 +876,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                     onTap: () => unawaited(_toggleTorch()),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: _torchOn
-                            ? Colors.white
-                            : Colors.black54,
+                        color: _torchOn ? Colors.white : Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -841,14 +900,20 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black87,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(_hint!,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12)),
+                      child: Text(
+                        _hint!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -874,22 +939,25 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                 bottom: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(6)),
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _diagExpanded = !_diagExpanded),
+                    onTap: () => setState(() => _diagExpanded = !_diagExpanded),
                     child: Text(
                       _diagExpanded
                           ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
-                              '命中 $_decodeHits · 解 $_decodeMs ms'
-                              '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
-                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                                '命中 $_decodeHits · 解 $_decodeMs ms'
+                                '${_lastSuccessInfo.isEmpty ? '' : ' · 上次成功：$_lastSuccessInfo'}'
+                                '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
+                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms'
+                                '${_lastSuccessInfo.isEmpty ? '' : ' · 上次成功：$_lastSuccessInfo'}',
                       key: const Key('webcam-diag'),
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 11),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
                     ),
                   ),
                 ),
@@ -899,36 +967,42 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: [
-            Text('已掃 $count 張',
-                style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            const Text('連續掃描', style: TextStyle(fontSize: 13)),
-            Switch(
-              key: const Key('scan-continuous-toggle'),
-              value: ref.watch(continuousScanProvider),
-              onChanged: (v) =>
-                  ref.read(continuousScanProvider.notifier).set(v),
-            ),
-          ]),
+          child: Row(
+            children: [
+              Text(
+                '已掃 $count 張',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const Spacer(),
+              const Text('連續掃描', style: TextStyle(fontSize: 13)),
+              Switch(
+                key: const Key('scan-continuous-toggle'),
+                value: ref.watch(continuousScanProvider),
+                onChanged: (v) =>
+                    ref.read(continuousScanProvider.notifier).set(v),
+              ),
+            ],
+          ),
         ),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(children: [
-              TextButton(
-                key: const Key('webcam-fallback-file'),
-                onPressed: _fallbackToFile,
-                child: const Text('改用檔案匯入'),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                key: const Key('webcam-done'),
-                onPressed: drafts.isEmpty ? null : _finish,
-                icon: const Icon(Icons.done_all),
-                label: const Text('完成掃描'),
-              ),
-            ]),
+            child: Row(
+              children: [
+                TextButton(
+                  key: const Key('webcam-fallback-file'),
+                  onPressed: _fallbackToFile,
+                  child: const Text('改用檔案匯入'),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  key: const Key('webcam-done'),
+                  onPressed: drafts.isEmpty ? null : _finish,
+                  icon: const Icon(Icons.done_all),
+                  label: const Text('完成掃描'),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -936,13 +1010,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   }
 
   Widget _buildQrGuideIcon() => Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.32),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(Icons.qr_code_2, color: Colors.white, size: 42),
-      );
+    padding: const EdgeInsets.all(5),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.32),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: const Icon(Icons.qr_code_2, color: Colors.white, size: 42),
+  );
 
   /// **T91 狀態化取景引導框**：
   /// - FULL：label「把左右 QR 條碼放進框內」＋兩半 QR 示意（右半在窗內
@@ -958,8 +1032,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         ? _holdDeadline!.difference(DateTime.now()).inMilliseconds
         : 0;
     final remainSec = remainMs <= 0 ? 0 : (remainMs / 1000).ceil();
-    final rightDetected = !holding &&
-        _recentTexts.keys.any((t) => t.startsWith('**'));
+    final rightDetected =
+        !holding && _recentTexts.keys.any((t) => t.startsWith('**'));
     return Center(
       child: SizedBox(
         width: guideWidth,
@@ -967,8 +1041,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: holding
                     ? const Color(0xE600C853)
@@ -985,11 +1058,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   ),
                   const SizedBox(width: 7),
                   Text(
-                    holding
-                        ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）'
-                        : '把左右 QR 條碼放進框內',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13),
+                    holding ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）' : '把左右 QR 條碼放進框內',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ],
               ),
@@ -1002,10 +1072,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                     ? const Color(0x1600C853)
                     : const Color(0x1600BFA5),
                 border: Border.all(
-                    color: holding
-                        ? const Color(0xDD00C853)
-                        : const Color(0xDD00BFA5),
-                    width: 2.5),
+                  color: holding
+                      ? const Color(0xDD00C853)
+                      : const Color(0xDD00BFA5),
+                  width: 2.5,
+                ),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -1013,9 +1084,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                 children: [
                   holding ? _buildLockedHalf() : _buildQrGuideIcon(),
                   Container(
-                      width: 1,
-                      height: guideHeight * 0.58,
-                      color: Colors.white54),
+                    width: 1,
+                    height: guideHeight * 0.58,
+                    color: Colors.white54,
+                  ),
                   _buildHuntingHalf(holding, rightDetected),
                 ],
               ),
@@ -1028,25 +1100,28 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   /// 左半：已鎖定（綠 ✓＋「已鎖定」）。
   Widget _buildLockedHalf() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0x3300C853),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF00C853), width: 1.5),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0x3300C853),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: const Color(0xFF00C853), width: 1.5),
+    ),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.check_circle, color: Colors.white, size: 30),
+        SizedBox(width: 6),
+        Text(
+          '已鎖定',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 30),
-            SizedBox(width: 6),
-            Text('已鎖定',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 
   /// 右半：hold＝獵右碼（白 icon＋綠邊高亮）；FULL＝QR 示意
   /// （右碼已在窗內時 teal 高亮——偵測到右碼的視覺回饋）。
@@ -1076,8 +1151,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           children: [
             const Icon(Icons.no_photography_outlined, size: 56),
             const SizedBox(height: 12),
-            const Text('相機無法使用',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              '相機無法使用',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text(_error ?? '', textAlign: TextAlign.center),
             const SizedBox(height: 16),
@@ -1151,17 +1228,16 @@ class _CodeBoxesPainter extends CustomPainter {
   }
 
   void _drawBox(Canvas canvas, Rect r, Color strokeColor, Color fillColor) {
-    final rrect =
-        RRect.fromRectAndRadius(r, const Radius.circular(8));
+    final rrect = RRect.fromRectAndRadius(r, const Radius.circular(8));
+    canvas.drawRRect(rrect, Paint()..color = fillColor);
     canvas.drawRRect(
-        rrect, Paint()..color = fillColor);
-    canvas.drawRRect(
-        rrect,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4
-          ..strokeJoin = StrokeJoin.round
-          ..color = strokeColor);
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..strokeJoin = StrokeJoin.round
+        ..color = strokeColor,
+    );
   }
 
   /// 鎖定框角落 ✓（綠圓＋白勾——「這碼已掃到」）。
@@ -1173,13 +1249,14 @@ class _CodeBoxesPainter extends CustomPainter {
       ..lineTo(c.dx - 1, c.dy + 4)
       ..lineTo(c.dx + 5, c.dy - 3.5);
     canvas.drawPath(
-        check,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = Colors.white);
+      check,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = Colors.white,
+    );
   }
 
   @override

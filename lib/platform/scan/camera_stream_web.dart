@@ -73,9 +73,12 @@ class WebCameraStreamController implements CameraStreamController {
   _BarcodeDetector? _getNativeDetector() {
     if (!hasNativeBarcodeDetector) return null;
     try {
-      return _nativeDetector ??= _BarcodeDetector(({
-        'formats': ['qr_code', 'code_39', 'code_128'],
-      }).jsify()! as JSObject);
+      return _nativeDetector ??= _BarcodeDetector(
+        ({
+              'formats': ['qr_code', 'code_39', 'code_128'],
+            }).jsify()!
+            as JSObject,
+      );
     } catch (_) {
       return null; // 構造失敗（不支援的格式等）——退回 zxing2 後備。
     }
@@ -135,8 +138,12 @@ class WebCameraStreamController implements CameraStreamController {
   static Rect? _mapBoxToVideo(Rect? box, double ox, double oy, double sc) {
     if (box == null) return null;
     if (sc == 1 && ox == 0 && oy == 0) return box;
-    return Rect.fromLTWH(box.left / sc + ox, box.top / sc + oy,
-        box.width / sc, box.height / sc);
+    return Rect.fromLTWH(
+      box.left / sc + ox,
+      box.top / sc + oy,
+      box.width / sc,
+      box.height / sc,
+    );
   }
 
   /// DOMRectReadOnly（video 像素座標）→ dart:ui Rect（T88 偵測框）。
@@ -252,7 +259,9 @@ class WebCameraStreamController implements CameraStreamController {
         // 頁面即將卸載——回傳佔位（不會被渲染到）。
         return HtmlElementView(viewType: _sharedViewType);
       }
-    } catch (_) {/* sessionStorage 不可用——照原流程 */}
+    } catch (_) {
+      /* sessionStorage 不可用——照原流程 */
+    }
     // video 元素：整個 session 只建立一次。
     // **T87 尺寸修復**（PM 2026-11-25「鏡頭畫面變小；第二次掃描又更小」）：
     // video 無 CSS 時以**原生解析度**渲染（1920×1080 在預覽槽內＝放大
@@ -270,7 +279,9 @@ class WebCameraStreamController implements CameraStreamController {
           ..style.setProperty('object-position', 'center');
     if (!_factoryRegistered) {
       ui_web.platformViewRegistry.registerViewFactory(
-          _sharedViewType, (int viewId) => _sharedVideo!);
+        _sharedViewType,
+        (int viewId) => _sharedVideo!,
+      );
       _factoryRegistered = true;
     }
     final video = _sharedVideo!;
@@ -358,7 +369,9 @@ class WebCameraStreamController implements CameraStreamController {
             } catch (_) {}
             return;
           }
-        } catch (_) {/* 採樣失敗——下輪再驗 */}
+        } catch (_) {
+          /* 採樣失敗——下輪再驗 */
+        }
       }
       // 黑畫面 → 釋放＋重取（遞增延遲給 iOS 硬體更多重置時間）。
       _stopStreamTracks();
@@ -371,15 +384,18 @@ class WebCameraStreamController implements CameraStreamController {
         try {
           await video.play().toDart;
         } catch (_) {}
-      } catch (_) {/* 重取失敗——下輪再試 */}
+      } catch (_) {
+        /* 重取失敗——下輪再試 */
+      }
     }
     // 4 輪自癒全數失敗 → **整頁重載後備**（乾淨 context＝第一次啟動行為；
     // 上限 2 次避免硬體故障時無限重載迴圈）。
     try {
       final prev =
-          int.tryParse(web.window.sessionStorage.getItem(_kHealReloadCount) ??
-                  '0') ??
-              0;
+          int.tryParse(
+            web.window.sessionStorage.getItem(_kHealReloadCount) ?? '0',
+          ) ??
+          0;
       if (prev < 2) {
         web.window.sessionStorage.setItem(_kHealReloadCount, '${prev + 1}');
         web.window.sessionStorage.setItem(_kPendingScan, '1');
@@ -395,19 +411,23 @@ class WebCameraStreamController implements CameraStreamController {
   ///    慣例），與目前串流不同時停舊重取。
   Future<web.MediaStream> _acquireRearCamera() async {
     final md = web.window.navigator.mediaDevices;
-    var stream = await _tryGetUserMedia(md, const {
-      'facingMode': {'exact': 'environment'},
-    })
-        .catchError((_) => _tryGetUserMedia(md, const {
-              'facingMode': {'ideal': 'environment'},
-            }))
-        .catchError((_) => _tryGetUserMedia(md, null));
+    var stream =
+        await _tryGetUserMedia(md, const {
+              'facingMode': {'exact': 'environment'},
+            })
+            .catchError(
+              (_) => _tryGetUserMedia(md, const {
+                'facingMode': {'ideal': 'environment'},
+              }),
+            )
+            .catchError((_) => _tryGetUserMedia(md, null));
     try {
       final rearId = await _pickRearDeviceId(md);
       if (rearId != null && rearId.isNotEmpty) {
         final tracks = stream.getVideoTracks().toDart;
-        final currentId =
-            tracks.isNotEmpty ? tracks.first.getSettings().deviceId : null;
+        final currentId = tracks.isNotEmpty
+            ? tracks.first.getSettings().deviceId
+            : null;
         if (currentId != rearId) {
           for (final t in stream.getTracks().toDart) {
             t.stop();
@@ -419,12 +439,17 @@ class WebCameraStreamController implements CameraStreamController {
           // （Android Chrome 常 640×480）**，QR 模組過小無法辨識。PM 實測
           // 「切換鏡頭再切回來就變好」＝switchCamera 路徑走
           // _tryGetUserMedia（有 hiRes）→ 解析度升級——與此根因吻合。
-          stream = await md.getUserMedia(web.MediaStreamConstraints(
-              video: {
-            'deviceId': {'exact': rearId},
-            'width': {'ideal': 1920, 'max': 1920},
-            'height': {'ideal': 1080, 'max': 1080},
-          }.jsify()!)).toDart;
+          stream = await md
+              .getUserMedia(
+                web.MediaStreamConstraints(
+                  video: {
+                    'deviceId': {'exact': rearId},
+                    'width': {'ideal': 1920, 'max': 1920},
+                    'height': {'ideal': 1080, 'max': 1080},
+                  }.jsify()!,
+                ),
+              )
+              .toDart;
         }
       }
     } catch (_) {
@@ -435,7 +460,9 @@ class WebCameraStreamController implements CameraStreamController {
   }
 
   Future<web.MediaStream> _tryGetUserMedia(
-      web.MediaDevices md, Map<String, Object>? facing) {
+    web.MediaDevices md,
+    Map<String, Object>? facing,
+  ) {
     // width/height ideal：拉高取像解析度（預設常 640×480——
     // 解碼距離不足的主因，PM 2026-11-21「無法正確掃描」）。
     // **T87**：加 **max 上限**——ideal 允許更高（4K 裝置會給 3840×2160：
@@ -447,10 +474,23 @@ class WebCameraStreamController implements CameraStreamController {
     };
     final video = facing == null
         ? hiRes.jsify()!
-        : {
-            'facingMode': facing,
-            ...hiRes,
-          }.jsify()!;
+        : {'facingMode': facing, ...hiRes}.jsify()!;
+    return md.getUserMedia(web.MediaStreamConstraints(video: video)).toDart;
+  }
+
+  /// **T92**：deviceId 精選＋hiRes——切換鏡頭統一走**初次開啟同款管線**
+  /// （主鏡頭啟發式＋副鏡頭排除）。facingMode ideal 會命中**任何**後鏡頭
+  /// （超廣角/望遠＝副鏡頭排在主鏡頭後）＝「切換後辨識不容易」根因
+  /// （PM 2026-11-28）。
+  Future<web.MediaStream> _getUserMediaDevice(
+    web.MediaDevices md,
+    String deviceId,
+  ) {
+    final video = {
+      'deviceId': {'exact': deviceId},
+      'width': {'ideal': 1920, 'max': 1920},
+      'height': {'ideal': 1080, 'max': 1080},
+    }.jsify()!;
     return md.getUserMedia(web.MediaStreamConstraints(video: video)).toDart;
   }
 
@@ -473,28 +513,59 @@ class WebCameraStreamController implements CameraStreamController {
         t.stop();
       }
       await Future.delayed(const Duration(milliseconds: 600));
-      web.MediaStream stream;
-      try {
-        stream = await _tryGetUserMedia(
-            web.window.navigator.mediaDevices, {'exact': target});
-        _switchNote = '✓exact→$target';
-      } catch (e) {
-        _switchNote = 'exact✗(${_brief(e)})→ideal…';
-        stream = await _tryGetUserMedia(
-            web.window.navigator.mediaDevices, {'ideal': target});
-        _switchNote = '✓ideal→$target';
+      final md = web.window.navigator.mediaDevices;
+      web.MediaStream? stream;
+      var how = '';
+      if (target == 'environment') {
+        // **T92**：後鏡頭＝**deviceId 精選**（與初次開啟同管線——主鏡頭
+        // 啟發式＋副鏡頭排除＋hiRes）。iOS 忽略 deviceId → 後備 facingMode。
+        final rearId = await _pickRearDeviceId(md);
+        if (rearId != null) {
+          try {
+            stream = await _getUserMediaDevice(md, rearId);
+            how = 'deviceId';
+            _switchNote = '✓deviceId→後鏡頭';
+          } catch (e) {
+            _switchNote = 'deviceId✗(${_brief(e)})→exact…';
+          }
+        } else {
+          _switchNote = '無後鏡頭id→exact…';
+        }
+      }
+      if (stream == null) {
+        try {
+          stream = await _tryGetUserMedia(md, {'exact': target});
+          how = 'exact';
+          _switchNote = '✓exact→$target';
+        } catch (e) {
+          _switchNote = 'exact✗(${_brief(e)})→ideal…';
+          stream = await _tryGetUserMedia(md, {'ideal': target});
+          how = 'ideal';
+          _switchNote = '✓ideal→$target';
+        }
       }
       _stream = stream;
       _facing = target;
       video.srcObject = stream;
       // 前鏡頭鏡像（自拍慣例；擷取幀不鏡像——解碼不受影響）。
       video.style.setProperty(
-          'transform', target == 'user' ? 'scaleX(-1)' : 'none');
+        'transform',
+        target == 'user' ? 'scaleX(-1)' : 'none',
+      );
       _assertPreviewCss(video);
       try {
         await video.play().toDart;
       } catch (_) {}
-      _switchNote = '✓$target';
+      // **T92 診斷**：實際落點（鏡頭標籤＋實際解析度）——回報「不順」定位用。
+      try {
+        final t0 = stream.getVideoTracks().toDart.first;
+        final st = t0.getSettings();
+        final w = st.width;
+        final h = st.height;
+        _switchNote = '✓${t0.label.isEmpty ? target : t0.label}·$w×$h·$how';
+      } catch (_) {
+        _switchNote = '✓$how→$target';
+      }
     } catch (e) {
       _switchNote = '✗${_brief(e)}';
       // 切換失敗自癒：重取後鏡頭（否則停軌後畫面凍結＋鏡像殘留）。
@@ -530,7 +601,8 @@ class WebCameraStreamController implements CameraStreamController {
     if (hinted.isNotEmpty) {
       for (final d in hinted) {
         final l = d.label.toLowerCase();
-        final isAux = l.contains('ultra') ||
+        final isAux =
+            l.contains('ultra') ||
             l.contains('tele') ||
             l.contains('廣角') ||
             l.contains('望遠');
@@ -610,10 +682,9 @@ class WebCameraStreamController implements CameraStreamController {
     final scale = v.videoWidth > 1920 ? 1920 / v.videoWidth : 1.0;
     final w = (v.videoWidth * scale).round();
     final h = (v.videoHeight * scale).round();
-    final canvas =
-        web.document.createElement('canvas') as web.HTMLCanvasElement
-          ..width = w
-          ..height = h;
+    final canvas = web.document.createElement('canvas') as web.HTMLCanvasElement
+      ..width = w
+      ..height = h;
     final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
     ctx.drawImage(v, 0, 0, w, h);
     // **T89**：本函式現在**只在入單時擷一次**（照片附件）——每 tick 的
@@ -663,8 +734,10 @@ class WebCameraStreamController implements CameraStreamController {
     _assertPreviewCss(video);
     _sharedVideo = video;
     _video = video;
-    ui_web.platformViewRegistry
-        .registerViewFactory(vt, (int viewId) => _sharedVideo!);
+    ui_web.platformViewRegistry.registerViewFactory(
+      vt,
+      (int viewId) => _sharedVideo!,
+    );
     try {
       // 確認清單期間掃描頁仍持有相機：優先將活串流接到新 video，避免
       // 停軌、等待硬體釋放、重新 getUserMedia（iPhone 上約需一秒）。
@@ -707,7 +780,9 @@ class WebCameraStreamController implements CameraStreamController {
           await v.play().toDart;
         } catch (_) {}
         return;
-      } catch (_) {/* 落到完整重取 */}
+      } catch (_) {
+        /* 落到完整重取 */
+      }
     }
     try {
       await _openOn(v);
@@ -743,7 +818,10 @@ class WebCameraStreamController implements CameraStreamController {
     final data = ctx.getImageData(x, y, rw, rh);
     final clamped = data.data.toDart; // Uint8ClampedList
     return AnalysisFrame(
-        rgba: Uint8List.sublistView(clamped), width: rw, height: rh);
+      rgba: Uint8List.sublistView(clamped),
+      width: rw,
+      height: rh,
+    );
   }
 
   /// **T89**：重斷言預覽 CSS（冪等）——重掛／切換／自癒後一律維持
@@ -824,8 +902,7 @@ class WebCameraStreamController implements CameraStreamController {
     var wasLive = false;
     try {
       final tracks = _videoTracks();
-      wasLive =
-          tracks.isNotEmpty && tracks.any((t) => t.readyState == 'live');
+      wasLive = tracks.isNotEmpty && tracks.any((t) => t.readyState == 'live');
     } catch (_) {}
     _video?.srcObject = null;
     for (final t in _videoTracks()) {
@@ -849,7 +926,8 @@ class WebCameraStreamController implements CameraStreamController {
         s.contains('SecurityError') ||
         s.contains('PermissionDenied')) {
       return const CameraUnavailableException(
-          '相機權限被拒——請允許相機後按「重試」（iOS：設定 → Safari → 相機 → 允許）');
+        '相機權限被拒——請允許相機後按「重試」（iOS：設定 → Safari → 相機 → 允許）',
+      );
     }
     if (s.contains('NotFoundError') ||
         s.contains('DevicesNotFoundError') ||
@@ -862,8 +940,9 @@ class WebCameraStreamController implements CameraStreamController {
     if (s.contains('TypeError') || s.contains('undefined')) {
       // mediaDevices 為 undefined——非安全上下文或不支援的 webview。
       return const CameraUnavailableException(
-          '此瀏覽器不支援相機——請以 Safari／Chrome 直接開啟'
-          '（LINE 等 App 內建瀏覽器不支援），並確認為 https');
+        '此瀏覽器不支援相機——請以 Safari／Chrome 直接開啟'
+        '（LINE 等 App 內建瀏覽器不支援），並確認為 https',
+      );
     }
     return const CameraUnavailableException('相機無法使用（需 https 與 Safari／Chrome）');
   }

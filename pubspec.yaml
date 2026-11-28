@@ -1,7 +1,7 @@
 name: ledger_sync
 description: "LedgerSync — 本地優先跨平台記帳 App（規格：SPEC v0.3 / techstack v0.3.1）"
 publish_to: 'none'
-version: 0.5.1+1
+version: 0.6.0+1
 
 environment:
   sdk: ^3.13.5

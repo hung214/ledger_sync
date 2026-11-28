@@ -406,6 +406,28 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  /// **T92 除錯簽章**（PM 2026-11-28）：成功入單後，診斷行顯示「上次成功」
+  /// ＝引擎×路徑×階段（除錯測試版——掃描成功方式留痕）。
+  testWidgets('T92 除錯簽章：入單後診斷行顯示「上次成功：引擎·路徑 · 階段」', (tester) async {
+    final draft = TransactionDraft.blank(DateTime(2026, 11, 17));
+    await pumpPage(
+      tester,
+      controller: _FakeController(),
+      decode: (_) => (draft: draft, texts: const ['SIG']),
+    );
+    await tester.pump(const Duration(milliseconds: 1300)); // 解碼命中 → 入單
+    await tester.pump(); // 自動推入確認清單的路由 build 幀
+    // 第一幀即自動進確認清單（連續掃描預設關）——掃描頁在樹底層仍可查診斷行。
+    expect(find.byType(ReviewPage), findsOneWidget);
+    expect(find.byKey(const Key('webcam-diag')), findsOneWidget);
+    expect(
+      find.textContaining('上次成功：後備·全幅 · 直入'),
+      findsOneWidget,
+      reason: '簽章＝引擎（後備＝zxing2 JPEG 路徑）×路徑（全幅）×階段（直入）',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 /// fake 相機控制器：start 可丟例外；captureFrame 回填位資料。
