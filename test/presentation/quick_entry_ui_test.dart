@@ -433,4 +433,79 @@ void main() {
       db.close();
     }
   });
+
+  // ── 帶入上次值切換（PM 2026-11-28，頁面頂部）：關＝單純操作 ──
+  testWidgets('帶入上次值切換：關＝選分類不帶入（金額/商家空）＋設定持久化', (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    // 記憶（150/早餐店）＋最後交易（200/便當店）——都應被切換擋下。
+    QuickEntryMemory(db).remember(
+      categoryId: 'c-food-s0',
+      amount: '150',
+      accountId: 'a-cash',
+      merchant: '早餐店',
+    );
+    final container = ProviderContainer(
+      overrides: [
+        dbProvider.overrideWithValue(db),
+        syncCoordinatorProvider.overrideWithValue(
+          SyncCoordinator(db, InMemoryCloudAdapter(), deviceId: 'd-t'),
+        ),
+      ],
+    );
+    container
+        .read(saveTransactionProvider)
+        .execute(
+          accountId: 'a-cash',
+          categoryId: 'c-food-s0',
+          amountMinor: 200,
+          occurredAt: DateTime.now(),
+          merchant: '便當店',
+        );
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const QuickEntryPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 預設開 → 關。
+      expect(
+        find.byKey(const Key('quick-entry-bring-in-toggle')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('quick-entry-bring-in-toggle')));
+      await tester.pumpAndSettle();
+      expect(db.getSetting('quick.bring_in'), '0', reason: '持久化');
+
+      // 選早餐 → 不帶入（金額/商家空）。
+      await tester.tap(find.byKey(const Key('quick-entry-category')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('picker-main-餐飲食品')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('picker-sub-早餐')));
+      await tester.pumpAndSettle();
+
+      final st = container.read(quickEntryControllerProvider);
+      expect(st.amount, '', reason: '切換關 → 金額不帶入');
+      expect(st.merchant, '', reason: '切換關 → 商家不帶入');
+
+      // 再開 → 持久化 '1'。
+      await tester.tap(find.byKey(const Key('quick-entry-bring-in-toggle')));
+      await tester.pumpAndSettle();
+      expect(db.getSetting('quick.bring_in'), '1');
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
 }

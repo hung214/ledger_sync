@@ -22,7 +22,8 @@ class QuickEntryMemory {
 
   /// 讀取上次記憶（無紀錄或資料損毀 → null＝優雅降級回 Sticky）。
   ({String amount, String? accountId, String merchant})? load(
-      String categoryId) {
+    String categoryId,
+  ) {
     final raw = _db.getSetting(_key(categoryId));
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -56,4 +57,24 @@ class QuickEntryMemory {
 }
 
 final quickEntryMemoryProvider = Provider<QuickEntryMemory>(
-    (ref) => QuickEntryMemory(ref.watch(dbProvider)));
+  (ref) => QuickEntryMemory(ref.watch(dbProvider)),
+);
+
+/// 快記頁「帶入上次值」切換（PM 2026-11-28）：**開**＝選分類按原規則帶入
+/// （金額/商家；金額已輸入非 0 → 不帶入）；**關**＝單純操作、完全不帶入。
+/// 持久化於 settings `quick.bring_in`（'1'/'0'，預設開＝既有行為）——
+/// 本機 UX 偏好，不進 oplog（與 `app.theme_mode` 同層級；SDD §5.6）。
+final quickBringInToggleProvider =
+    NotifierProvider<QuickBringInToggleNotifier, bool>(
+      QuickBringInToggleNotifier.new,
+    );
+
+class QuickBringInToggleNotifier extends Notifier<bool> {
+  @override
+  bool build() => ref.watch(dbProvider).getSetting('quick.bring_in') != '0';
+
+  void set(bool v) {
+    ref.read(dbProvider).setSetting('quick.bring_in', v ? '1' : '0');
+    state = v;
+  }
+}

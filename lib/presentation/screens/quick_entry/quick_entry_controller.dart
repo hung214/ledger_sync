@@ -156,28 +156,34 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
           category: c,
           phase: QuickEntryPhase.inputting,
         );
-        // **帶入守衛**（T72，PM 2026-11-24）：金額已輸入（非 0/空）→
-        // 變更分類**不帶入上次資料**（金額/帳戶/商家皆不動——避免蓋掉
-        // 使用者已輸入的金額）；金額為 0/空 → 照舊帶入。
-        final entered = int.tryParse(state.amount.replaceAll(',', '')) ?? 0;
-        if (entered <= 0) {
-          // 「記住上次」（PM 2026-10-24；**範圍修訂 T78** PM 2026-11-24）：
-          // 帶入**僅金額/商家**——**帳戶不動**（使用者自選的帳戶不被覆蓋）。
-          final mem = ref.read(quickEntryMemoryProvider).load(c.id);
-          if (mem != null) {
-            if (mem.amount.isNotEmpty) next = next.copyWith(amount: mem.amount);
-            if (mem.merchant.isNotEmpty) {
-              next = next.copyWith(merchant: mem.merchant);
+        // **帶入開關**（PM 2026-11-28，頁面頂部切換）：關＝單純操作、完全
+        // 不帶入；開＝按原規則帶入。
+        if (ref.read(quickBringInToggleProvider)) {
+          // **帶入守衛**（T72，PM 2026-11-24）：金額已輸入（非 0/空）→
+          // 變更分類**不帶入上次資料**（金額/帳戶/商家皆不動——避免蓋掉
+          // 使用者已輸入的金額）；金額為 0/空 → 照舊帶入。
+          final entered = int.tryParse(state.amount.replaceAll(',', '')) ?? 0;
+          if (entered <= 0) {
+            // 「記住上次」（PM 2026-10-24；**範圍修訂 T78** PM 2026-11-24）：
+            // 帶入**僅金額/商家**——**帳戶不動**（使用者自選的帳戶不被覆蓋）。
+            final mem = ref.read(quickEntryMemoryProvider).load(c.id);
+            if (mem != null) {
+              if (mem.amount.isNotEmpty) {
+                next = next.copyWith(amount: mem.amount);
+              }
+              if (mem.merchant.isNotEmpty) {
+                next = next.copyWith(merchant: mem.merchant);
+              }
             }
-          }
-          // 「子類別帶入」（PM 2026-11-21）：同分類**最後一筆交易**的商家/金額
-          // 為最新事實（涵蓋掃描/匯入等非快記入帳——記憶只記快記流程），
-          // 覆蓋記憶值；商家 null → 不清空既有值。
-          final tx = ref.read(dbProvider).latestTransactionByCategory(c.id);
-          if (tx != null) {
-            next = next.copyWith(amount: '${tx.amountMinor}');
-            if (tx.merchant != null) {
-              next = next.copyWith(merchant: tx.merchant!);
+            // 「子類別帶入」（PM 2026-11-21）：同分類**最後一筆交易**的商家/金額
+            // 為最新事實（涵蓋掃描/匯入等非快記入帳——記憶只記快記流程），
+            // 覆蓋記憶值；商家 null → 不清空既有值。
+            final tx = ref.read(dbProvider).latestTransactionByCategory(c.id);
+            if (tx != null) {
+              next = next.copyWith(amount: '${tx.amountMinor}');
+              if (tx.merchant != null) {
+                next = next.copyWith(merchant: tx.merchant!);
+              }
             }
           }
         }
