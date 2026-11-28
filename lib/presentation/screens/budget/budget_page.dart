@@ -37,6 +37,13 @@ class BudgetPage extends ConsumerStatefulWidget {
 class _BudgetPageState extends ConsumerState<BudgetPage> {
   int _version = 0; // 表單儲存後刷新（預算非交易——ledgerProvider 不覆蓋）
 
+  /// 檢視月份（PM 2026-11-28 月份選擇）：預設當月；週期＝該月 startDay
+  /// 起算（periodOfStartMonth）。◀▶ 切換、點標籤回當月。
+  late DateTime _month = () {
+    final now = Clock.now();
+    return DateTime(now.year, now.month);
+  }();
+
   Future<void> _openForm({_BudgetFormInitial? initial}) async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -85,9 +92,43 @@ class _BudgetPageState extends ConsumerState<BudgetPage> {
               key: ValueKey('budget-list-$_version'),
               padding: const EdgeInsets.all(12),
               children: [
+                // 月份選擇列（PM 2026-11-28）：◀ 2026年11月 ▶；點標籤回當月。
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      key: const Key('budget-month-prev'),
+                      tooltip: '上個月',
+                      onPressed: () => setState(() {
+                        _month = DateTime(_month.year, _month.month - 1);
+                      }),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    TextButton(
+                      key: const Key('budget-month-label'),
+                      onPressed: () => setState(() {
+                        final now = Clock.now();
+                        _month = DateTime(now.year, now.month);
+                      }),
+                      child: Text(
+                        '${_month.year}年${_month.month}月',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('budget-month-next'),
+                      tooltip: '下個月',
+                      onPressed: () => setState(() {
+                        _month = DateTime(_month.year, _month.month + 1);
+                      }),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
                 if (total.isNotEmpty)
                   _TotalBudgetCard(
                     budget: total.first,
+                    month: _month,
                     onEdit: () => _openForm(
                       initial: _BudgetFormInitial.total(total.first),
                     ),
@@ -96,12 +137,14 @@ class _BudgetPageState extends ConsumerState<BudgetPage> {
                   const SizedBox(height: 4),
                   _CategoryBudgetsCard(
                     budgets: categoryBudgets,
+                    month: _month,
                     onEdit: (b) =>
                         _openForm(initial: _BudgetFormInitial.category(b)),
                   ),
                 ],
                 const SizedBox(height: 4),
                 _IncomeGoalCard(
+                  month: _month,
                   onEdit: () {
                     final g = ref.read(dbProvider).activeIncomeGoal();
                     if (g != null) {
@@ -571,9 +614,13 @@ class BudgetProgressBar extends StatelessWidget {
 class _PeriodInfo {
   _PeriodInfo._(this.start, this.endInclusive, this.today);
 
-  factory _PeriodInfo.of(int startDay) {
+  /// month＝檢視月份（該月 startDay 起算的週期——PM 2026-11-28 月份選擇）。
+  factory _PeriodInfo.of(int startDay, DateTime month) {
     final now = Clock.now();
-    final period = const BudgetPeriodService().periodOf(startDay, now);
+    final period = const BudgetPeriodService().periodOfStartMonth(
+      startDay,
+      month,
+    );
     return _PeriodInfo._(
       DateTime.fromMillisecondsSinceEpoch(period.startMs),
       DateTime.fromMillisecondsSinceEpoch(period.endExclusiveMs)
@@ -586,8 +633,12 @@ class _PeriodInfo {
   final DateTime endInclusive;
   final DateTime today;
 
-  int get elapsedDays => today.difference(start).inDays + 1; // 含今天
-  int get remainingDays => endInclusive.difference(today).inDays + 1; // 含今天
+  // 過去月＝全期已過（elapsed=total）、未來月＝0——clamp 到 [0, total]
+  //（當月週期內數值與原行為一致）。
+  int get elapsedDays =>
+      (today.difference(start).inDays + 1).clamp(0, totalDays);
+  int get remainingDays =>
+      (endInclusive.difference(today).inDays + 1).clamp(0, totalDays);
   int get totalDays => endInclusive.difference(start).inDays + 1;
 
   /// 標題短版（雛型：10/1~10/31）。
@@ -605,18 +656,25 @@ Color _pctColor(BuildContext context, double pct) {
 
 /// 總預算卡（FR-B2/B3）：摘要行「剩餘 · 每日可用 · 月底預測（含預扣）」。
 class _TotalBudgetCard extends ConsumerWidget {
-  const _TotalBudgetCard({required this.budget, this.onEdit});
+  const _TotalBudgetCard({
+    required this.budget,
+    required this.month,
+    this.onEdit,
+  });
 
   final BudgetRow budget;
+
+  /// 檢視月份（PM 2026-11-28 月份選擇）。
+  final DateTime month;
   final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(dbProvider);
     final evaluator = BudgetEvaluator(db);
-    final usage = evaluator.totalUsageMinor() ?? 0;
+    final usage = evaluator.totalUsageMinor(month: month) ?? 0;
     final amount = budget.amountMinor;
-    final info = _PeriodInfo.of(budget.periodStartDay);
+    final info = _PeriodInfo.of(budget.periodStartDay, month);
     final pct = amount <= 0 ? 0.0 : usage * 100 / amount;
     final remaining = max(amount - usage, 0);
     // 每日可用（FR-B3）＝剩餘 ÷ 剩餘天數（含今天）。
@@ -701,9 +759,16 @@ class _TotalBudgetCard extends ConsumerWidget {
 
 /// 分類預算卡（單卡多項——雛型 bitem 版式）。
 class _CategoryBudgetsCard extends ConsumerWidget {
-  const _CategoryBudgetsCard({required this.budgets, this.onEdit});
+  const _CategoryBudgetsCard({
+    required this.budgets,
+    required this.month,
+    this.onEdit,
+  });
 
   final List<BudgetRow> budgets;
+
+  /// 檢視月份（PM 2026-11-28 月份選擇）。
+  final DateTime month;
   final void Function(BudgetRow)? onEdit;
 
   @override
@@ -733,9 +798,10 @@ class _CategoryBudgetsCard extends ConsumerWidget {
                 name:
                     (db.categoryName(b.categoryId!) ?? '分類預算') +
                     (parentIds.contains(b.categoryId) ? '（含子類）' : ''),
-                usage: evaluator.categoryUsage(b.categoryId!),
+                usage: evaluator.categoryUsage(b.categoryId!, month: month),
                 amountMinor: b.amountMinor,
                 periodStartDay: b.periodStartDay,
+                month: month,
                 fmt: fmt,
                 onEdit: onEdit == null ? null : () => onEdit!(b),
               ),
@@ -753,6 +819,7 @@ class _CategoryItem extends ConsumerWidget {
     required this.usage,
     required this.amountMinor,
     required this.periodStartDay,
+    required this.month,
     required this.fmt,
     this.onEdit,
   });
@@ -761,6 +828,9 @@ class _CategoryItem extends ConsumerWidget {
   final CategoryUsage? usage;
   final int amountMinor;
   final int periodStartDay;
+
+  /// 檢視月份（PM 2026-11-28 月份選擇）。
+  final DateTime month;
   final NumberFormat fmt;
   final VoidCallback? onEdit;
 
@@ -770,7 +840,7 @@ class _CategoryItem extends ConsumerWidget {
     final total = u?.totalMinor ?? 0;
     final pending = u?.pendingMinor ?? 0;
     final pct = amountMinor <= 0 ? 0.0 : total * 100 / amountMinor;
-    final info = _PeriodInfo.of(periodStartDay);
+    final info = _PeriodInfo.of(periodStartDay, month);
     // 日均（雛型語意）＝已用 ÷ 經過天數。
     final dailyAvg = info.elapsedDays <= 0 ? 0 : total ~/ info.elapsedDays;
     final over = total > amountMinor;
@@ -852,14 +922,16 @@ class _CategoryItem extends ConsumerWidget {
 
 /// 收入目標卡（FR-B6）：達標率 badge（>100% 不封頂）＋已入帳/目標。
 class _IncomeGoalCard extends ConsumerWidget {
-  const _IncomeGoalCard({this.onEdit});
+  const _IncomeGoalCard({required this.month, this.onEdit});
 
+  /// 檢視月份（PM 2026-11-28 月份選擇）。
+  final DateTime month;
   final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(dbProvider);
-    final status = BudgetEvaluator(db).incomeGoalStatus();
+    final status = BudgetEvaluator(db).incomeGoalStatus(month: month);
     if (status == null) {
       return const SizedBox.shrink();
     }

@@ -445,23 +445,18 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     ),
                     onChanged: controller.setNote,
                   ),
-                  // 取消／儲存（PM 2026-11-27：備註右下角，比照編輯交易——
+                  // 儲存（PM 2026-11-27：備註右下角，比照編輯交易——
                   // **僅手機版**（<900px；≥900 桌面不加，PM 同日補充；斷點
-                  // 與 main_shell_page RWD 慣例一致）。取消＝放棄草稿（清
-                  // 金額＋備註；Sticky 保留）；儲存＝同鍵盤 OK 的儲存（金額
-                  // 未定 → 禁用；key 與鍵盤 `quick-entry-save` 契約分開）。
+                  // 與 main_shell_page RWD 慣例一致）。儲存＝同鍵盤 OK 的
+                  // 儲存（金額未定 → 禁用；key 與鍵盤 `quick-entry-save`
+                  // 契約分開）。**取消按鈕已移除**（PM 2026-11-28——放棄
+                  // 草稿用鍵盤 C／⌫ 即可）。
                   LayoutBuilder(
                     builder: (context, c) {
                       if (c.maxWidth >= 900) return const SizedBox.shrink();
                       return Row(
                         children: [
                           const Spacer(),
-                          TextButton(
-                            key: const Key('quick-entry-cancel'),
-                            onPressed: controller.cancelEntry,
-                            child: const Text('取消'),
-                          ),
-                          const SizedBox(width: 8),
                           FilledButton(
                             key: const Key('quick-entry-save-btn'),
                             onPressed: quickEntrySaveEnabled(state)

@@ -14,19 +14,28 @@ class BudgetEvaluator {
   final AppDatabase _db;
   static const BudgetPeriodService _period = BudgetPeriodService();
 
+  /// 週期解析：month == null → 含現在的週期（原行為）；指定月份 → 該月
+  /// startDay 起算的週期（預算頁月份選擇——PM 2026-11-28）。
+  BudgetPeriod _periodFor(int startDay, DateTime? month) => month == null
+      ? _period.current(startDay)
+      : _period.periodOfStartMonth(startDay, month);
+
   /// 分類預算用量（含 pending 分量）；無該分類預算回 null。
   ///
   /// **主分類預算＝主分類自身＋其全部子分類加總**（PM 2026-11-24：
   /// 早餐 100＋午餐 200 →「餐飲食品」預算顯示 300）；子分類預算＝
   /// 精確比對該子分類（不受主分類影響）。
-  CategoryUsage? categoryUsage(String categoryId) {
+  CategoryUsage? categoryUsage(String categoryId, {DateTime? month}) {
     final budget = _budgetByCategory(categoryId);
     if (budget == null) return null;
-    final period = _period.current(budget.periodStartDay);
+    final period = _periodFor(budget.periodStartDay, month);
     final ids = _selfAndChildIds(categoryId);
     var total = 0;
     var pending = 0;
-    for (final t in _db.transactionsBetween(period.startMs, period.endExclusiveMs)) {
+    for (final t in _db.transactionsBetween(
+      period.startMs,
+      period.endExclusiveMs,
+    )) {
       if (t.kind != 'expense' || !ids.contains(t.categoryId)) continue;
       total += t.amountMinor;
       if (t.settlementStatus == 'pending') pending += t.amountMinor;
@@ -48,10 +57,10 @@ class BudgetEvaluator {
   }
 
   /// 總預算用量（全分類，含 pending；無總預算回 null）。
-  int? totalUsageMinor() {
+  int? totalUsageMinor({DateTime? month}) {
     final budget = _totalBudget();
     if (budget == null) return null;
-    final period = _period.current(budget.periodStartDay);
+    final period = _periodFor(budget.periodStartDay, month);
     return _db
         .transactionsBetween(period.startMs, period.endExclusiveMs)
         .where((t) => t.kind == 'expense')
@@ -59,16 +68,17 @@ class BudgetEvaluator {
   }
 
   /// 收入目標達標率（四捨五入 %）與是否達成；無目標回 null。
-  IncomeGoalStatus? incomeGoalStatus() {
+  IncomeGoalStatus? incomeGoalStatus({DateTime? month}) {
     final goal = _db.activeIncomeGoal();
     if (goal == null) return null;
-    final period = _period.current(goal.periodStartDay);
+    final period = _periodFor(goal.periodStartDay, month);
     final achievedMinor = _db
         .transactionsBetween(period.startMs, period.endExclusiveMs)
         .where((t) => t.kind == 'income')
         .fold<int>(0, (sum, t) => sum + t.amountMinor);
-    final rate =
-        goal.amountMinor <= 0 ? 0 : (achievedMinor * 100 / goal.amountMinor).round();
+    final rate = goal.amountMinor <= 0
+        ? 0
+        : (achievedMinor * 100 / goal.amountMinor).round();
     return IncomeGoalStatus(
       ratePercent: rate,
       achieved: goal.amountMinor > 0 && achievedMinor >= goal.amountMinor,

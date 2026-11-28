@@ -390,17 +390,6 @@ class QuickEntryController extends AutoDisposeNotifier<QuickEntryState> {
     );
   }
 
-  /// 取消本次輸入（PM 2026-11-27，備註右下角「取消」比照編輯交易）：
-  /// 放棄草稿＝清空金額＋備註；Sticky 帳戶/分類/商家/時間保留
-  /// （「記住上次」為刻意功能——清理範圍與 continueEntry 相同）。
-  void cancelEntry() {
-    state = state.copyWith(
-      phase: QuickEntryPhase.inputting,
-      amount: '',
-      note: '',
-    );
-  }
-
   /// 復原上一筆（FR-Q3）：軟刪除墓標＋oplog；計數減一。
   /// 信用卡預扣交易同步回沖「本期應付」——衍生值即時重算（SDD 原則 2）。
   void undoLast() {
