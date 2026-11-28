@@ -101,11 +101,14 @@ class WebCameraStreamController implements CameraStreamController {
         final y = region.top.floor().clamp(0, vh - 1);
         final rw = region.width.round().clamp(1, vw - x);
         final rh = region.height.round().clamp(1, vh - y);
-        // 放大：長邊放大至 640px（上限 2×、不縮小）——ROI 本身小，
+        // 放大：長邊放大至 960px（上限 3×、不縮小）——ROI 本身小，
         // 放大成本可忽略，小碼模組密度提升＝偵測力提升。
+        // **T92b**（PM 2026-11-28：iPhone 右碼整幅讀不到、全走 ROI——兩台
+        // 解析度同為 1080×1920，差異＝偵測器敏感度/廣角 FOV/處理）——
+        // 放大上限提高。**原值：640px／上限 2×**（需回改即改回此二值）。
         final longEdge = rw > rh ? rw : rh;
-        var scale = 640 / longEdge;
-        if (scale > 2) scale = 2;
+        var scale = 960 / longEdge;
+        if (scale > 3) scale = 3;
         if (scale < 1) scale = 1;
         final cw = (rw * scale).round();
         final ch = (rh * scale).round();

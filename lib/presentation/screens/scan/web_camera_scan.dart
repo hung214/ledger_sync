@@ -411,8 +411,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final inHold = _phase == _ScanPhase.awaitingRight;
     final rightRoi = inHold ? _rightRoiVideoRect() : null;
     _sweepCounter++;
-    // hold 逾 1.5s 仍無右碼 → 原生路徑升級 ROI 放大偵測（小碼救星）；
-    // 與全幅**交替**（每 2 tick）——單 tick 只跑一種，頻率不致降級。
+    // hold 逾**窗期一半**仍無右碼 → 原生路徑升級 ROI 放大偵測（小碼
+    // 救星）——**窗期等比例**（PM 2026-11-28：窗 3s→1s，門檻 1.5s→0.5s，
+    // 固定 1.5s 會超過 1 秒窗＝永遠升不到 ROI）。
     final escalate =
         inHold &&
         rightRoi != null &&
@@ -437,7 +438,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final native = <String>[];
     final detected = <DetectedCode>[];
     if (_controller.hasNativeBarcodeDetector) {
-      final useRoi = escalate && _sweepCounter % 2 == 1;
+      // **T92b**（PM 2026-11-28「iPhone 辨識還是沒有很好」）：升級期 ROI
+      // **每 tick 跑**（僅 sweep tick 讓位）——hold 階段唯一目標＝找右碼，
+      // 不再與全幅交替（交替讓 ROI 頻率減半＝右碼取得慢）。
+      final useRoi = escalate && !sweep;
       final codes = await _controller.detectNativeBarcodes(
         region: useRoi ? rightRoi : null,
       );
@@ -948,16 +952,32 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   ),
                   child: GestureDetector(
                     onTap: () => setState(() => _diagExpanded = !_diagExpanded),
-                    child: Text(
-                      _diagExpanded
-                          ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
-                                '命中 $_decodeHits · 解 $_decodeMs ms'
-                                '${_lastSuccessInfo.isEmpty ? '' : ' · 上次成功：$_lastSuccessInfo'}'
-                                '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
-                          : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms'
-                                '${_lastSuccessInfo.isEmpty ? '' : ' · 上次成功：$_lastSuccessInfo'}',
-                      key: const Key('webcam-diag'),
-                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    // **T92b 簽章獨立一行**（PM 2026-11-28：主行太長）。
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _diagExpanded
+                              ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
+                                    '命中 $_decodeHits · 解 $_decodeMs ms'
+                                    '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
+                              : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                          key: const Key('webcam-diag'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                        if (_lastSuccessInfo.isNotEmpty)
+                          Text(
+                            '上次成功：$_lastSuccessInfo',
+                            key: const Key('webcam-last-success'),
+                            style: const TextStyle(
+                              color: Colors.tealAccent,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
