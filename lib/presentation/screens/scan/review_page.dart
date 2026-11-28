@@ -467,12 +467,17 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // **多行備註**（PM 2026-11-28：輸入多行＋存檔完整——
+                  // 掃描明細一行一產品）。maxLines null＝可換行輸入、
+                  // 顯示隨內容成長（鍵盤換行鍵自動生效）。
                   TextField(
                     key: const Key('review-note'),
                     controller: _noteCtrl,
                     focusNode: _noteFocus,
+                    maxLines: null,
+                    style: const TextStyle(fontSize: 13, height: 1.3),
                     decoration: const InputDecoration(
-                      labelText: '備註（選填）',
+                      labelText: '備註（選填，可多行）',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),

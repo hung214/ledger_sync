@@ -420,6 +420,22 @@ void main() {
       '發票號 SR30393603\nmilk×2 100\n麵包×1 60',
       reason: '備註＝發票號＋明細（一行一產品：名稱×數量 金額）',
     );
+
+    // 多行輸入 → 存檔完整（\n 保留；PM 2026-11-28）。
+    await tester.enterText(
+      find.byKey(const Key('review-note')),
+      '發票號 SR30393603\nmilk×2 100\n麵包×1 60\n自加備註',
+    );
+    await tester.tap(find.byKey(const Key('review-save-btn')));
+    await tester.pumpAndSettle();
+
+    final txs = db.allTransactions().where((t) => t.source == 'scan').toList();
+    expect(txs.length, 1, reason: '已入庫一筆');
+    expect(
+      txs.first.note,
+      '發票號 SR30393603\nmilk×2 100\n麵包×1 60\n自加備註',
+      reason: '多行備註存檔完整（\\n 保留）',
+    );
     expect(tester.takeException(), isNull);
   });
 }
