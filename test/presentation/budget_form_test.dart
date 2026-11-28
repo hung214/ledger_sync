@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ledger_sync/application/first_run_bootstrap.dart';
+import 'package:ledger_sync/application/budgets/budget_service.dart';
 import 'package:ledger_sync/application/providers.dart';
 import 'package:ledger_sync/presentation/screens/budget/budget_page.dart';
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
@@ -142,6 +143,69 @@ void main() {
         isEmpty,
         reason: '軟刪除後查無分類預算',
       );
+      expect(tester.takeException(), isNull);
+    } finally {
+      container.dispose();
+      db.close();
+    }
+  });
+
+  testWidgets('預算頁月份選擇（PM 2026-11-28）：◀ 上月用量 ▶；點標籤回當月', (tester) async {
+    final db = DbFixture.create();
+    await FirstRunBootstrap.seedIfNeeded(db);
+    BudgetService(db).setTotalBudget(amountMinor: 10000, periodStartDay: 1);
+    final now = DateTime.now();
+    // 當月一筆 100＋上月一筆 50（皆餐飲支出）。
+    await DbFixture.seedTx(
+      db,
+      id: 't-cur',
+      kind: 'expense',
+      amountMinor: 100,
+      accountId: 'a-cash',
+      category: 'c-food',
+      occurredAt: now.millisecondsSinceEpoch,
+    );
+    final lastMonth = DateTime(now.year, now.month - 1, 3);
+    await DbFixture.seedTx(
+      db,
+      id: 't-prev',
+      kind: 'expense',
+      amountMinor: 50,
+      accountId: 'a-cash',
+      category: 'c-food',
+      occurredAt: lastMonth.millisecondsSinceEpoch,
+    );
+    final container = ProviderContainer(
+      overrides: [dbProvider.overrideWithValue(db)],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            home: const BudgetPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 預設＝當月：標籤＋用量 100。
+      expect(find.text('${now.year}年${now.month}月'), findsOneWidget);
+      expect(find.text('100'), findsWidgets, reason: '當月用量');
+
+      // ◀ → 上月：標籤變上月＋用量 50。
+      await tester.tap(find.byKey(const Key('budget-month-prev')));
+      await tester.pumpAndSettle();
+      final prev = DateTime(now.year, now.month - 1);
+      expect(find.text('${prev.year}年${prev.month}月'), findsOneWidget);
+      expect(find.text('50'), findsWidgets, reason: '上月用量');
+
+      // 點標籤 → 回當月（用量 100）。
+      await tester.tap(find.byKey(const Key('budget-month-label')));
+      await tester.pumpAndSettle();
+      expect(find.text('${now.year}年${now.month}月'), findsOneWidget);
+      expect(find.text('100'), findsWidgets);
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
