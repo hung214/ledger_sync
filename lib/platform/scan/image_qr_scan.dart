@@ -6,8 +6,11 @@ import 'package:file_selector/file_selector.dart';
 import 'package:mobile_scanner/mobile_scanner.dart' show MobileScannerPlatform;
 
 import '../../application/scan/paper_barcode.dart';
+
 import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
+
+import 'invoice_text_codec.dart';
 
 import '../../application/scan/scan_state.dart';
 import '../ocr/text_ocr.dart';
@@ -29,12 +32,14 @@ class ImageQrScanner {
 
   /// 選檔（共用；HEIC 由系統引擎直接支援）。
   Future<XFile?> _pickFile() async {
-    return openFile(acceptedTypeGroups: [
-      const XTypeGroup(
-        label: '發票／收據圖片',
-        extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic'],
-      ),
-    ]);
+    return openFile(
+      acceptedTypeGroups: [
+        const XTypeGroup(
+          label: '發票／收據圖片',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic'],
+        ),
+      ],
+    );
   }
 
   /// **原生引擎靜態圖分析**（T22，PM 2026-11-23「2077 基準照」主修法）：
@@ -103,8 +108,8 @@ class ImageQrScanner {
     final hit = findInvoiceNoWithBox(lines);
     if (hit != null) {
       final (invoiceNo, box) = hit;
-      final date = findPrintedDate(
-              [for (final l in lines) l.text]) ??
+      final date =
+          findPrintedDate([for (final l in lines) l.text]) ??
           DateTime(now.year, now.month, now.day);
       return ScannedItem(
         draft: TransactionDraft(
@@ -130,7 +135,8 @@ class ImageQrScanner {
   /// 由影像位元組建立掃描項（可單獨測試；不經檔案對話框）。
   ScannedItem itemFromImage(Uint8List bytes, {DateTime? now}) {
     final at = now ?? DateTime.now();
-    final draft = draftFromImage(bytes, now: at) ??
+    final draft =
+        draftFromImage(bytes, now: at) ??
         TransactionDraft.blank(at); // 無法辨識 → 空白確認卡（FR-S2）
     return ScannedItem(draft: draft, photoBytes: bytes);
   }
@@ -168,9 +174,10 @@ class ImageQrScanner {
   /// 並支援 [budget]（時間預算——超過即停，下一 tick 續掃；行動裝置
   /// 主執行緒同步解碼，預算＝卡頓上限）。
   ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrame(
-      Uint8List bytes,
-      {DateTime? now,
-      Duration? budget}) {
+    Uint8List bytes, {
+    DateTime? now,
+    Duration? budget,
+  }) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
     return _frameFromDecoded(decoded, budget: budget);
@@ -181,8 +188,12 @@ class ImageQrScanner {
   /// decodeImage 150–300ms＝紅米每 tick 卡頓主因；附帶消除 JPEG 糊化，
   /// 小 QR 更易解）。
   ({TransactionDraft? draft, List<String> texts})? draftFromCameraFrameRgba(
-      Uint8List rgba, int width, int height,
-      {DateTime? now, Duration? budget}) {
+    Uint8List rgba,
+    int width,
+    int height, {
+    DateTime? now,
+    Duration? budget,
+  }) {
     final decoded = _imageFromRgba(rgba, width, height);
     if (decoded == null) return null;
     return _frameFromDecoded(decoded, budget: budget);
@@ -196,11 +207,12 @@ class ImageQrScanner {
     final exact =
         rgba.offsetInBytes == 0 && rgba.buffer.lengthInBytes == rgba.length;
     return img.Image.fromBytes(
-        width: width,
-        height: height,
-        bytes: exact ? rgba.buffer : Uint8List.fromList(rgba).buffer,
-        numChannels: 4,
-        order: img.ChannelOrder.rgba);
+      width: width,
+      height: height,
+      bytes: exact ? rgba.buffer : Uint8List.fromList(rgba).buffer,
+      numChannels: 4,
+      order: img.ChannelOrder.rgba,
+    );
   }
 
   /// **T91 ROI 子區解碼**（hold 階段——右側限區找明細碼）：
@@ -212,11 +224,17 @@ class ImageQrScanner {
     if (decoded == null) return const [];
     String? text = _decodeRegion(decoded);
     if (text == null) {
-      final maxDim =
-          decoded.width > decoded.height ? decoded.width : decoded.height;
+      final maxDim = decoded.width > decoded.height
+          ? decoded.width
+          : decoded.height;
       if (maxDim < 800) {
-        text = _decodeRegion(img.copyResize(decoded,
-            width: decoded.width * 2, height: decoded.height * 2));
+        text = _decodeRegion(
+          img.copyResize(
+            decoded,
+            width: decoded.width * 2,
+            height: decoded.height * 2,
+          ),
+        );
       }
     }
     text ??= _decodeDownscaled(decoded) ?? _decodeShowThrough(decoded);
@@ -227,16 +245,15 @@ class ImageQrScanner {
   /// **帶著已解出的結果收工**——預算只提早停、絕不丟成果（T89 教訓：
   /// dart2js 上 zxing 單區可達數百 ms，丟成果＝每 tick 全部白掃））。
   static ({TransactionDraft? draft, List<String> texts})? _frameFromDecoded(
-      img.Image decoded,
-      {Duration? budget}) {
+    img.Image decoded, {
+    Duration? budget,
+  }) {
     final sw = budget == null ? null : (Stopwatch()..start());
     bool over() => sw != null && sw.elapsed > budget!;
     var texts = <String>[];
 
     ({TransactionDraft? draft, List<String> texts})? collected() =>
-        texts.isEmpty
-            ? null
-            : (draft: draftFromQrTexts(texts), texts: texts);
+        texts.isEmpty ? null : (draft: draftFromQrTexts(texts), texts: texts);
     // ① 輕量 3 區：整張＋左右半（含降採樣後備——同 decodeQrTexts
     // fullScan:false 層；去重＋上限同源）。**三區全收完才解析**——
     // 左右雙碼要齊（提前解析＝左碼就回傳，右碼商家/明細永遠讀不到）。
@@ -276,14 +293,20 @@ class ImageQrScanner {
     for (final f in const [0.7, 0.5]) {
       final cw = (w * f).round();
       final ch = (h * f).round();
-      yield img.copyCrop(src,
-          x: (w - cw) ~/ 2, y: (h - ch) ~/ 2, width: cw, height: ch);
+      yield img.copyCrop(
+        src,
+        x: (w - cw) ~/ 2,
+        y: (h - ch) ~/ 2,
+        width: cw,
+        height: ch,
+      );
     }
   }
 
   /// 單區解碼（含降採樣＋透印去除變體）。
   static List<String> _decodeSingleRegion(img.Image region) {
-    final text = _decodeRegion(region) ??
+    final text =
+        _decodeRegion(region) ??
         _decodeDownscaled(region) ??
         _decodeShowThrough(region);
     return text == null ? const [] : [text];
@@ -349,9 +372,11 @@ class ImageQrScanner {
         : decoded.height;
     if (maxDim > 2400) {
       final scale = 2400 / maxDim;
-      decoded = img.copyResize(decoded,
-          width: (decoded.width * scale).round(),
-          height: (decoded.height * scale).round());
+      decoded = img.copyResize(
+        decoded,
+        width: (decoded.width * scale).round(),
+        height: (decoded.height * scale).round(),
+      );
     }
     final found = <String>[];
     for (final region in _regions(decoded, fullScan: fullScan)) {
@@ -380,9 +405,11 @@ class ImageQrScanner {
     var src = region;
     if (maxDim > _maxDecodeDim) {
       final scale = _maxDecodeDim / maxDim;
-      src = img.copyResize(region,
-          width: (region.width * scale).round(),
-          height: (region.height * scale).round());
+      src = img.copyResize(
+        region,
+        width: (region.width * scale).round(),
+        height: (region.height * scale).round(),
+      );
     }
     for (final cutoff in const [100, 70]) {
       final text = _decodeRegion(_binarize(src, cutoff));
@@ -397,7 +424,10 @@ class ImageQrScanner {
     for (final p in out) {
       final l = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round();
       final v = l < cutoff ? 0 : 255;
-      p..r = v..g = v..b = v;
+      p
+        ..r = v
+        ..g = v
+        ..b = v;
     }
     return out;
   }
@@ -406,16 +436,20 @@ class ImageQrScanner {
     final maxDim = region.width > region.height ? region.width : region.height;
     if (maxDim <= _maxDecodeDim) return null;
     final scale = _maxDecodeDim / maxDim;
-    final small = img.copyResize(region,
-        width: (region.width * scale).round(),
-        height: (region.height * scale).round());
+    final small = img.copyResize(
+      region,
+      width: (region.width * scale).round(),
+      height: (region.height * scale).round(),
+    );
     return _decodeRegion(small);
   }
 
   /// 嘗試區域：整張 → 左／右半 →（完整掃才續）上／下半 → 四象限
   /// （發票雙 QR 多在左右）。
-  static Iterable<img.Image> _regions(img.Image src,
-      {bool fullScan = true}) sync* {
+  static Iterable<img.Image> _regions(
+    img.Image src, {
+    bool fullScan = true,
+  }) sync* {
     final w = src.width;
     final h = src.height;
     img.Image crop(int x, int y, int cw, int ch) =>
@@ -451,7 +485,15 @@ class ImageQrScanner {
           .asInt32List();
       final source = RGBLuminanceSource(image.width, image.height, pixels);
       final bitmap = BinaryBitmap(HybridBinarizer(source));
-      return QRCodeReader().decode(bitmap).text;
+      final r = QRCodeReader().decode(bitmap);
+      // **T93 繁中亂碼修復**（PM 2026-11-28）：zxing2 Byte-mode 預設
+      // ISO-8859-1——中文（UTF-8/Big5）亂碼→以 rawBytes／Latin-1 還原鏈
+      // 還原（recoverInvoiceText；Big5＝web TextDecoder）。rawBytes＝
+      // Int8List（有號）→ & 0xFF 轉無號位元組。
+      return recoverInvoiceText(
+        r.text,
+        rawBytes: r.rawBytes?.map((b) => b & 0xFF).toList(),
+      );
     } catch (_) {
       return null;
     }

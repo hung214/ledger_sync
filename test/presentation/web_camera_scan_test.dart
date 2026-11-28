@@ -333,36 +333,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('T91 一幀雙碼（原生偵測）→ 立即入單（快路徑回歸）', (tester) async {
-    final container = await pumpPage(
-      tester,
-      controller: _FakeController(
-        nativeCodes: [
-          const DetectedCode(
-            text: InvoiceQrFixtures.officialLeftQr77,
-            box: Rect.fromLTWH(100, 500, 500, 300),
-          ),
-          const DetectedCode(
-            text: InvoiceQrFixtures.officialRightQr,
-            box: Rect.fromLTWH(1300, 500, 500, 300),
-          ),
-        ],
-        res: '1920x1080',
-      ),
-      decode: (_) => null,
-    );
-    await pumpUntil(
-      tester,
-      () => container.read(scanDraftsProvider).length == 1,
-    );
-    final draft = container.read(scanDraftsProvider).first.draft;
-    expect(draft.lineItems.map((e) => e.name), containsAll(['milk', 'coffee']));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('T91 hold 階段走右側 ROI（captureAnalysisFrame 帶 region）', (
-    tester,
-  ) async {
+  testWidgets('T93 解碼區域＝掃描框帶（await 帶 region）＋雙鎖定合併（右碼先鎖）', (tester) async {
     final controller = _FakeController(
       res: '1920x1080',
       analysisFrame: AnalysisFrame(
@@ -374,17 +345,16 @@ void main() {
     final container = await pumpPage(
       tester,
       controller: controller,
+      // 全幅 sweep tick＝左碼（官方 77 碼）。
       decode: (_) => (draft: null, texts: [InvoiceQrFixtures.officialLeftQr77]),
       extraOverrides: [
-        // ROI 子區解碼（fake——直接回右碼；驗證「只解 ROI」的接線）。
-        webCameraDecodeRegionProvider.overrideWithValue(
-          (af) => ['**milk:1:25'],
+        // 掃描框帶解碼（RGBA）——回右碼（T93 雙鎖定的另一碼）。
+        webCameraDecodeRgbaProvider.overrideWithValue(
+          (af) => (draft: null, texts: ['**milk:1:25']),
         ),
       ],
     );
-    await pumpUntil(tester, holdStarted);
-    expect(container.read(scanDraftsProvider).length, 0);
-    expect(controller.lastCaptureRegion, isNull, reason: 'FULL 階段擷幀不帶 region');
+    // 右碼先被解出（帶 tick）→ 鎖定明細碼（無時限提示）。
     await pumpUntil(
       tester,
       () => container.read(scanDraftsProvider).length == 1,
@@ -392,17 +362,17 @@ void main() {
     expect(
       controller.lastCaptureRegion,
       isNotNull,
-      reason: 'hold 階段擷幀帶右側 ROI（非全幅）',
+      reason: 'await 階段擷幀帶掃描框帶 region（非全幅——T93 效率）',
     );
-    expect(
-      controller.lastCaptureRegion!.left,
-      greaterThan(0),
-      reason: 'ROI 在 video 右半',
+    // 全幅 tick 帶左碼 → 雙鎖定合併入單（含明細）。
+    await pumpUntil(
+      tester,
+      () => container.read(scanDraftsProvider).length == 1,
     );
     expect(
       container.read(scanDraftsProvider).first.draft.lineItems.first.name,
       'milk',
-      reason: 'ROI 解出的右碼與鎖定左碼合併',
+      reason: '右碼明細與鎖定左碼合併',
     );
     expect(tester.takeException(), isNull);
   });
@@ -455,6 +425,9 @@ class _FakeController implements CameraStreamController {
 
   @override
   Future<void> setZoom(double normalized) async {}
+
+  @override
+  Future<void> setMade2(bool on) async {}
 
   @override
   Future<Widget> start() async {

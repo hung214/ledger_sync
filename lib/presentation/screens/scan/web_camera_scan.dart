@@ -9,6 +9,7 @@ import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
 import '../../../platform/scan/camera_stream.dart';
 import '../../../platform/scan/image_qr_scan.dart';
+import '../../../platform/scan/invoice_text_codec.dart';
 import '../../../platform/scan/scan_haptics.dart';
 import '../../../platform/scan/tw_ein_parse.dart';
 import 'import_page.dart';
@@ -137,17 +138,22 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
 
   // **T91 順序掃描狀態機**（PM 2026-11-27「先掃左邊再掃右邊」＋「掃到
   // 一定秒數內要掃到另一碼」）：FULL＝現行全幅掃描；只掃到左碼 →
-  // 進入 AWAITING_RIGHT（左碼鎖定＋時間窗 3 秒，只獵右碼）——
-  // 逾時／換發票＝左碼先入單（明細可補）；右碼到＝合併入單（含明細）。
+  // 進入 AWAITING（**T93 雙鎖定狀態機**——PM 2026-11-28：隨機先掃一個、
+  // 各自鎖定，格式判定左/右，無空間假設）：任一碼鎖定後等另一碼；
+  // 左碼先鎖＝窗期逾時左碼先入（明細可補）；右碼先鎖＝無時限等左碼。
   _ScanPhase _phase = _ScanPhase.full;
 
-  /// 鎖定的左碼（發票身分——時間窗內持續留窗，防止 3 秒窗先過期）。
+  /// 鎖定的左碼（發票身分——等待期間持續留窗，防止窗期先過期）。
   String? _lockedLeftText;
 
   /// 鎖定左碼的偵測框（video 像素座標；原生路徑有——綠色 ✓ 持續顯示）。
   Rect? _lockedLeftBox;
 
-  /// 時間窗到期時刻（hold 開始＋[scanHoldWindowProvider]）。
+  /// **T93**：鎖定的右碼（明細——`**` 起始；可先於左碼鎖定）。
+  String? _lockedRightText;
+
+  /// 等待另一碼的時限到期時刻（左碼先鎖＋[scanHoldWindowProvider]；
+  /// **右碼先鎖＝null 無時限**——等使用者掃左碼）。
   DateTime? _holdDeadline;
 
   /// 偵測框留住時間戳（T91 防閃爍——無偵測 tick 保留上批框 600ms）。
@@ -163,9 +169,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// hold 倒數 UI 計時器（250ms 重繪——與解碼 tick 頻率脫鉤）。
   Timer? _holdTicker;
 
-  /// 右側 ROI（video 像素座標）——取景框右半＋padding，反映射＋夾限。
-  /// 無顯示尺寸／video 尺寸 → null（退回全幅）。
-  Rect? _rightRoiVideoRect() {
+  /// **T93 掃描框帶**（video 像素座標）——取景框**整條橫帶**＋垂直 20%
+  /// padding，反映射＋夾限。解碼只吃框內區域（效率：帶 ≈ 全幅 25%——
+  /// PM 2026-11-28「掃描完成的圖片不該是完整一張照片」）。
+  /// 無顯示尺寸／video 尺寸 → null（全幅後備）。
+  Rect? _guideBandVideoRect() {
     final display = _previewDisplaySize;
     final video = _parseVideoSize();
     if (display.isEmpty || video.isEmpty) return null;
@@ -174,14 +182,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       width: display.width * 0.88,
       height: display.height * 0.27,
     );
-    final half = Rect.fromLTRB(
-      guide.center.dx,
-      guide.top,
-      guide.right,
-      guide.bottom,
-    );
     // padding：QR 常略高/低於橫帶——垂直多留 20%。
-    final padded = half.inflate(guide.height * 0.2);
+    final padded = guide.inflate(guide.height * 0.2);
     final clipped = _clipToSize(padded, display);
     if (clipped == null) return null;
     final videoRect = mapDisplayRectToVideo(clipped, video, display);
@@ -204,11 +206,17 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     _phase = _ScanPhase.awaitingRight;
     _lockedLeftText = leftText;
     _lockedLeftBox = box;
+    // 左碼先鎖＝有時限（窗期逾時→左碼先入）；右碼先鎖＝無時限。
     _holdDeadline = DateTime.now().add(ref.read(scanHoldWindowProvider));
+    _startHoldTicker();
+  }
+
+  /// 倒數/提示重繪 tick（與解碼 tick 頻率脫鉤）。
+  void _startHoldTicker() {
     _holdTicker?.cancel();
     _holdTicker = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (!mounted || _phase != _ScanPhase.awaitingRight) return;
-      setState(() {}); // 倒數重繪（與解碼 tick 頻率脫鉤）
+      setState(() {});
     });
   }
 
@@ -398,37 +406,19 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     }
   }
 
-  /// **T91 ROI 子區解碼**（例外→空清單——異常幀只損失本 tick）。
-  List<String> _decodeRegionFrame(AnalysisFrame af) {
-    try {
-      return ref.read(webCameraDecodeRegionProvider)(af);
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  /// 單次 tick 偵測（雙引擎→**T91 階段狀態機**→累積窗→解析→入單）。
+  /// 單次 tick 偵測（雙引擎→**T93 雙鎖定狀態機**→累積窗→解析→入單）。
   Future<void> _tryDecodeTick() async {
     final sw = Stopwatch()..start();
-    TransactionDraft? draft;
+    TransactionDraft? decodedDraft; // 解碼器直接回傳的草稿（舊格式後備）
     final now = DateTime.now();
-    final inHold = _phase == _ScanPhase.awaitingRight;
-    final rightRoi = inHold ? _rightRoiVideoRect() : null;
+    final inAwait = _phase == _ScanPhase.awaitingRight;
     _sweepCounter++;
-    // hold 逾**窗期一半**仍無右碼 → 原生路徑升級 ROI 放大偵測（小碼
-    // 救星）——**窗期等比例**（PM 2026-11-28：窗 3s→1s，門檻 1.5s→0.5s，
-    // 固定 1.5s 會超過 1 秒窗＝永遠升不到 ROI）。
-    final escalate =
-        inHold &&
-        rightRoi != null &&
-        _holdDeadline != null &&
-        now.difference(
-              _holdDeadline!.subtract(ref.read(scanHoldWindowProvider)),
-            ) >
-            const Duration(milliseconds: 500) &&
-        !_recentTexts.keys.any((t) => t.startsWith('**'));
-    // 後備路徑安全掃（hold 每 3 tick 全幅——防發票移動漏掃）。
-    final sweep = inHold && _sweepCounter % 3 == 0;
+    // **T93 解碼區域＝掃描框帶**（PM 2026-11-28「掃描完成的圖片不該是
+    // 完整一張照片」——帶 ≈ 全幅 25%＝效率 4 倍）；每 3 tick **全幅安全
+    // 掃**（防發票構圖出框/移動漏掃）。
+    final sweep = _sweepCounter % 3 == 2;
+    final band = inAwait ? _guideBandVideoRect() : null;
+    final region = (sweep || band == null) ? null : band;
     // **雙引擎——原生優先、命中即免後備**（T86 併聯 → T89 改條件式，
     // PM 2026-11-25 紅米「很卡」）：
     // ①原生 BarcodeDetector（T10；Android Chrome 存在但底層不作用＝
@@ -436,21 +426,33 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     //   （主執行緒重活；iPhone／新 Android 每 tick 只剩原生偵測＝零卡頓）。
     // ②原生沒中／不支援 → **RGBA 直入解碼**（T89——getImageData 像素直接
     //   建圖，完全跳過 JPEG 編碼＋解碼鏈；400ms 時間預算＝卡頓上限，超時
-    //   下一 tick 續掃）。紅米（偵測器死）每 tick 主執行緒省約 250–600ms。
-    //   **T91**：hold 階段改解**右側 ROI**（面積 ≈ 全幅 1/8 → tick 快、
-    //   迴圈可維持 10fps），每 3 tick 全幅安全掃。
+    //   下一 tick 續掃）。**T93**：解碼區域＝掃描框帶（sweep tick 全幅）。
     final native = <String>[];
     final detected = <DetectedCode>[];
     if (_controller.hasNativeBarcodeDetector) {
-      // **T92b**（PM 2026-11-28「iPhone 辨識還是沒有很好」）：升級期 ROI
-      // **每 tick 跑**（僅 sweep tick 讓位）——hold 階段唯一目標＝找右碼，
-      // 不再與全幅交替（交替讓 ROI 頻率減半＝右碼取得慢）。
-      final useRoi = escalate && !sweep;
-      final codes = await _controller.detectNativeBarcodes(
-        region: useRoi ? rightRoi : null,
-      );
+      final codes = await _controller.detectNativeBarcodes(region: region);
       detected.addAll(codes);
-      native.addAll(codes.map((c) => c.text).where((t) => t.isNotEmpty));
+      for (final c in codes) {
+        if (c.text.isEmpty) continue;
+        // **T93 繁中亂碼修復**：原生偵測器（Apple）不回原始位元組——可疑
+        // 文字（Big5/UTF-8 誤解）以**該碼偵測框區域重跑 zxing2**（960
+        // 放大＋rawBytes 還原鏈）——還原成功才取代，否則原樣。
+        if (isSuspectMojibake(c.text) && c.box != null) {
+          final af = await _controller.captureAnalysisFrame(region: c.box);
+          final zx = af == null ? null : _decodeRgbaFrame(af);
+          var recovered = false;
+          for (final t in zx?.texts ?? const <String>[]) {
+            if (!isSuspectMojibake(t)) {
+              native.add(t);
+              recovered = true;
+              break;
+            }
+          }
+          if (!recovered) native.add(c.text);
+        } else {
+          native.add(c.text);
+        }
+      }
     }
     // **T88 偵測框**（video 像素座標——繪製時做 cover 映射）。
     final boxes = [
@@ -462,39 +464,26 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     var texts = native;
     var frameOk = native.isNotEmpty; // 原生命中＝有畫面（幀不必截）
     if (native.isEmpty) {
-      if (inHold && rightRoi != null && !sweep) {
-        // **T91 hold**：只解右側 ROI。
-        final af = await _controller.captureAnalysisFrame(region: rightRoi);
-        if (af != null) {
-          frameOk = true;
-          final roiTexts = _decodeRegionFrame(af);
-          if (roiTexts.isNotEmpty) {
-            engine = '後備ROI';
-            texts = roiTexts;
-          }
-        }
+      // **T93**：RGBA 直入解碼——區域＝掃描框帶（sweep tick 全幅安全掃）。
+      final af = await _controller.captureAnalysisFrame(region: region);
+      var result = af == null ? null : _decodeRgbaFrame(af);
+      if (af != null) {
+        frameOk = true;
+      } else {
+        // native/stub 平台（或 fake controller）——舊 JPEG 路徑。
+        final bytes = await _controller.captureFrame();
+        if (bytes != null) frameOk = true;
+        result = bytes == null ? null : _decodeFrame(bytes);
       }
-      if (texts.isEmpty) {
-        final af = await _controller.captureAnalysisFrame();
-        var result = af == null ? null : _decodeRgbaFrame(af);
-        if (af != null) {
-          frameOk = true;
-        } else {
-          // native/stub 平台（或 fake controller）——舊 JPEG 路徑。
-          final bytes = await _controller.captureFrame();
-          if (bytes != null) frameOk = true;
-          result = bytes == null ? null : _decodeFrame(bytes);
-        }
-        final zx = result?.texts ?? const <String>[];
-        if (zx.isNotEmpty) {
-          engine = '後備';
-          texts = zx;
-        }
-        draft = result?.draft;
+      decodedDraft = result?.draft;
+      final zx = result?.texts ?? const <String>[];
+      if (zx.isNotEmpty) {
+        engine = '後備';
+        texts = zx;
       }
     }
-    // **T92 除錯簽章**：本 tick 的解碼方式（引擎×路徑）——入單時寫入簽章。
-    _tickSig = '$engine·${inHold ? (sweep ? '全幅sweep' : '右側ROI') : '全幅'}';
+    // **T92 除錯簽章**：本 tick 的解碼方式（引擎×區域）——入單時寫入簽章。
+    _tickSig = '$engine·${region != null ? '掃描框' : '全幅'}';
     if (mounted) {
       setState(() {
         _frames++;
@@ -529,10 +518,13 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         }
         _recentTexts[t] = now2;
       }
-      // **T91**：hold 期間鎖定左碼持續留窗（窗 3s＝hold 3s——不刷新
-      // 會先過期，右碼到時合併不齊）。
-      if (inHold && _lockedLeftText != null) {
+      // **T91→T93**：鎖定中的碼持續留窗（不刷新會先過期，另一碼到時
+      // 合併不齊）。
+      if (_lockedLeftText != null) {
         _recentTexts[_lockedLeftText!] = now2;
+      }
+      if (_lockedRightText != null) {
+        _recentTexts[_lockedRightText!] = now2;
       }
     }
     final accumulated = _recentTexts.keys.toList();
@@ -546,62 +538,63 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
           ImageQrScanner.extractOfficialLeft(t)!,
     ];
 
-    // —— **T91 階段處理：AWAITING_RIGHT**（左碼已鎖定、時間窗內只獵右碼）。
-    if (inHold) {
-      final newLeft = lefts.any((l) => l != _lockedLeftText);
-      if (newLeft) {
-        // 換發票：舊左碼**先入單**（PM 決策——逾時/換票＝左碼先入單）、
-        // 清窗（T90f 精神——孤兒碼不跨票），本 tick 條碼重新入窗。
-        await _commitLeftOnly();
-        _resetScanPhase(clearWindow: true);
-        for (final t in texts) {
-          _recentTexts[t] = DateTime.now();
-        }
-        return;
+    // —— **T93 雙鎖定狀態機**（PM 2026-11-28：隨機先掃一個、各自鎖定，
+    // 格式判定左/右，無空間假設；左碼＝官方 77 碼、右碼＝`**` 起始）。
+    // ①鎖定：窗內任一未鎖定的碼 → 鎖定（順序不限）。
+    if (_lockedLeftText == null && lefts.isNotEmpty) {
+      _enterHold(lefts.last, box: _boxForText(lefts.last, detected));
+    }
+    if (_lockedRightText == null && rights.isNotEmpty) {
+      _lockedRightText = rights.last;
+      if (_lockedLeftText == null) {
+        // 右碼先鎖＝**無時限**（等使用者掃左碼）。
+        _holdDeadline = null;
+        _startHoldTicker();
+        _phase = _ScanPhase.awaitingRight;
       }
-      if (rights.isNotEmpty) {
-        final merged = _draftFromTexts(accumulated);
-        if (merged != null) {
-          if (mounted) setState(() => _decodeHits++);
-          await _commitMerged(merged, accumulated, _lockedLeftText);
-          _resetScanPhase();
-        }
-        return;
+    }
+    // ②換票防護：awaiting 中出現**另一張**的左碼 → 舊左碼先入＋清窗。
+    if (_lockedLeftText != null && lefts.any((l) => l != _lockedLeftText)) {
+      await _commitLeftOnly();
+      _resetScanPhase(clearWindow: true);
+      for (final t in texts) {
+        _recentTexts[t] = DateTime.now();
       }
-      if (_holdDeadline != null && now.isAfter(_holdDeadline!)) {
-        // 時間窗逾時（PM 決策＝3 秒）：左碼先入單——明細可稍後補。
-        await _commitLeftOnly();
+      return;
+    }
+    // ③兩碼齊 → 合併入單（含全部明細）。
+    if (_lockedLeftText != null && _lockedRightText != null) {
+      final merged = _draftFromTexts([_lockedLeftText!, _lockedRightText!]);
+      if (merged != null) {
+        if (mounted) setState(() => _decodeHits++);
+        await _commitMerged(merged, [
+          _lockedLeftText!,
+          _lockedRightText!,
+        ], _lockedLeftText);
         _resetScanPhase();
-        return;
       }
-      return; // 窗內繼續等右碼
+      return;
     }
-
-    // —— **FULL 階段**（現行行為＋左碼鎖定改造）。
+    // ④逾時：左碼已鎖、右碼未到、窗期過 → 左碼先入（明細可稍後補）。
+    if (_lockedLeftText != null &&
+        _lockedRightText == null &&
+        _holdDeadline != null &&
+        now.isAfter(_holdDeadline!)) {
+      await _commitLeftOnly();
+      _resetScanPhase();
+      return;
+    }
+    // ⑤僅右碼鎖定 → 無時限等待左碼（提示已顯示，使用者控制節奏）。
+    if (_lockedRightText != null && _lockedLeftText == null) return;
+    // 左碼已鎖、右碼未到、窗期未過 → 繼續等（④會在窗期過後處理）。
+    if (_lockedLeftText != null) return;
+    // —— **非官方碼直入**（T93 相容路徑：舊內部格式/內部測資——無任何
+    // 鎖定且能成草稿 → 既有立即入單行為；官方碼已在①鎖定不會走到這）。
     if (accumulated.every(_seenCodes.contains)) return; // 同一張還在畫面中
-    // 累積優先：右碼補齊後合併成完整明細。
-    final merged = _draftFromTexts(accumulated) ?? draft;
-    if (merged == null) {
-      // 只有右碼（明細碼）——引導對準左側（與 APP 同款提示）。
-      if (rights.isNotEmpty) {
-        _flashHint('✓ 偵測到右側明細碼——請再對準左側 QR（發票號那格）');
-      }
-      return;
-    }
-    // 左碼＝發票身分：已入單的發票不重複加入（對應不起來＝另一張）。
-    final leftCode = lefts.isNotEmpty ? lefts.first : null;
-    if (leftCode != null && _committedLeftCodes.contains(leftCode)) {
-      return;
-    }
+    final legacyMerged = _draftFromTexts(accumulated) ?? decodedDraft;
+    if (legacyMerged == null) return;
     if (mounted) setState(() => _decodeHits++);
-    if (leftCode != null && rights.isEmpty) {
-      // **T91 左碼鎖定**：只掃到左碼 → 不再立即入單（明細漏接！）——
-      // 進入 hold：時間窗 3 秒內只獵右碼，左碼框綠色 ✓ 持續顯示。
-      _enterHold(leftCode, box: _boxForText(leftCode, detected));
-      if (mounted) setState(() {});
-      return;
-    }
-    await _commitMerged(merged, accumulated, leftCode);
+    await _commitMerged(legacyMerged, accumulated, null);
   }
 
   /// 偵測結果中找 [leftText] 所在條碼的框（video 像素座標）。
@@ -1054,6 +1047,9 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
     final guideWidth = constraints.maxWidth * 0.88;
     final guideHeight = constraints.maxHeight * 0.27;
     final holding = _phase == _ScanPhase.awaitingRight;
+    // **T93 雙鎖定**：右碼先鎖＝無時限提示（等左碼）。
+    final rightLocked =
+        _lockedRightText != null && _lockedLeftText == null;
     final remainMs = holding && _holdDeadline != null
         ? _holdDeadline!.difference(DateTime.now()).inMilliseconds
         : 0;
@@ -1084,7 +1080,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                   ),
                   const SizedBox(width: 7),
                   Text(
-                    holding ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）' : '把左右 QR 條碼放進框內',
+                    // **T93 雙鎖定**：右碼先鎖＝無時限提示；左碼先鎖＝倒數。
+                    rightLocked
+                        ? '✓ 已鎖定明細碼——掃描發票左碼'
+                        : holding
+                            ? '左碼已鎖定——對準右側明細碼（$remainSec 秒）'
+                            : '把左右 QR 條碼放進框內',
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ],
