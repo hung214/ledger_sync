@@ -302,6 +302,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   /// 下一次成功才覆蓋。
   String _tickSig = '';
   String _lastSuccessInfo = '';
+
+  /// **T93 還原遙測**（PM 2026-11-28 亂碼診斷）：可疑文字數／成功還原數
+  /// ＋最後一個可疑文字的前 8 字（診斷行顯示——裝置端地面真相）。
+  int _suspectCount = 0;
+  int _recoveredCount = 0;
+  String _lastSuspectPreview = '';
   bool _torchOn = false; // 補光開關狀態
   bool _torchSupported = false; // 補光能力（web：track capabilities 有 torch）
 
@@ -455,6 +461,12 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         // 文字（Big5/UTF-8 誤解）以**該碼偵測框區域重跑 zxing2**（960
         // 放大＋rawBytes 還原鏈）——還原成功才取代，否則原樣。
         final box = c.box;
+        if (isSuspectMojibake(c.text)) {
+          _suspectCount++;
+          _lastSuspectPreview = c.text.length > 8
+              ? c.text.substring(0, 8)
+              : c.text;
+        }
         if (isSuspectMojibake(c.text) && box != null) {
           // 外擴 25%（靜區——QR 解碼需要白邊；緊貼框＝zxing2 解不出）。
           final paddedBox = box
@@ -467,6 +479,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
             if (!isSuspectMojibake(t)) {
               native.add(t);
               recovered = true;
+              _recoveredCount++;
               break;
             }
           }
@@ -1023,7 +1036,10 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                               ? '[$kWebScanAppVersion] 幀 $_frames · $_frameInfo · '
                                     '命中 $_decodeHits · 解 $_decodeMs ms'
                                     '${_controller.diagInfo.isEmpty ? '' : ' · ${_controller.diagInfo}'}'
-                              : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms',
+                              : '幀 $_frames · 命中 $_decodeHits · 解 $_decodeMs ms'
+                                    ' · zoom ${_controller.zoomSupported ? '✓' : '✗'}'
+                                    ' · 還原 $_recoveredCount/$_suspectCount'
+                                    '${_lastSuspectPreview.isEmpty ? '' : '(${_lastSuspectPreview})'}',
                           key: const Key('webcam-diag'),
                           style: const TextStyle(
                             color: Colors.white,
