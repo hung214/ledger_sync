@@ -32,6 +32,10 @@
   明細碼未等到（跨碼斷項）②Big5 亂碼丟行）——待 PM 放該張照片進
   test/fixtures/invoices/ 跑 fixture 報告確診
 
+- [x] **made2 移除＋iOS 備註只放發票號**（PM 2026-11-28 裁決：繁中亂碼
+  iOS web 層無法還原——Apple 偵測器不回位元組；Android ML Kit 正常＝
+  平台分流）
+
 ## Roadmap（0.6.x——未排期，PM 決策）
 
 ## 下一批：zxing-wasm 整合（PM 2026-11-28：直接變成工作內容）
