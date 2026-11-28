@@ -1,15 +1,57 @@
-# Session 工作清單（每輪工作前更新——PM 2026-11-22 要求，避免遺忘）
-
 > 規則：每次收到 PM 回饋 → 先把 TODO 落到本檔 → 做完打勾 → 全數完成後保留紀錄。
 > 未完成項目跨輪保留。發版前本檔應全數打勾。
 >
-> **分支現況**：
-> - `feature/ios-pwa`（主線／APP）：全部最新功能（266→270 測試全綠）
-> - `feat/pwa-scan-ui-fix`（T84 修復分支，待 MR→ios-pwa）：掃描頁三重根因修復
->   （部署 0.5.1-pwa.20261125m；線上 E2E 已驗證）
-> - `pwa-accumulate`（PWA 線）：8596c27 基底＋T52 明細修改＋累積合併＋看門狗
->   （部署 0.5.0-pwa.20261124d；**不含**分類選擇器升級/鏡頭實驗）
-> - `camera-improvements`：鏡頭實驗凍結分支（PM 2026-11-24 指示）
+> **分支現況（2026-11-28）**：
+> - `feature/ios-pwa`（主線）：0.6.0 切版＋全部已合併功能（docs 33a14a4）
+> - `feat/scan-final`（**掃描收尾批，MR 待 PM**）：簽章＋T92/T92b＋窗期修正
+>   ＋備註明細（部署 0.6.0-pwa.20261128g/h；i 待部署）
+> - `feat/cleanup-dead-code`（批 A 無用代碼清掃，MR 待 PM）
+> - 工作區另一工作流 WIP（budget/quick_entry 部分檔案）不触碰
+
+## 進行中：掃描收尾批（feat/scan-final）
+
+- [x] **T92 切換鏡頭統一**：後鏡頭 deviceId 精選（主鏡頭啟發式＋副鏡頭
+  排除＋hiRes）＋切換後診斷顯示實際落點——修「切換後辨識不容易」
+- [x] **T92 除錯簽章**：入單出口記錄「引擎×路徑×階段」＋診斷行持久顯示
+  「上次成功：…」（PM 需求：知道掃成功是哪種方式）
+- [x] **T92b iPhone 辨識速度**：窗期 3s→1s＋升級門檻等比例＋ROI 每 tick
+  ＋ROI 放大 640/2×→960/3×（原值註解留存）＋簽章獨立一行
+- [x] **T92c 窗期三修＋升級脫鉤**：窗期 1s→2s（1 秒窗 ROI 嘗試不足＝
+  左碼逾時先入、明細短缺——PM 實測回報）＋升級門檻固定 0.5s（與窗期
+  脫鉤）
+- [x] **備註多行**：掃描備註 maxLines null＋聚焦多行/失焦單行（編輯交易
+  ＋快速記帳）
+- [x] **備註明細**：掃描備註＝發票號＋內容明細（一行一產品含數量金額）
+- [ ] **掃描成功震動**（navigator.vibrate(100)——Android；iOS 不支援）
+  進行中
+- [ ] **Big5 品目還原**（7-11 品目亂碼——fixture IMG_2073 重現：
+  zxing2 把 Big5 當 UTF-8 解→U+FFFD 不可逆）＝zxing2 `Result.rawBytes`
+  （已確認存在）＋瀏覽器 TextDecoder('big5') 還原；工程含 rawBytes 從
+  解碼點穿越累積窗管線
+- [ ] **多明細碼（跨碼）確認**（EU-44525392 掃出 4/7 行——假設①第二張
+  明細碼未等到（跨碼斷項）②Big5 亂碼丟行）——待 PM 放該張照片進
+  test/fixtures/invoices/ 跑 fixture 報告確診
+
+## Roadmap（0.6.x——未排期，PM 決策）
+
+## 下一批：zxing-wasm 整合（PM 2026-11-28：直接變成工作內容）
+
+- [ ] **zxing-wasm 整合**（Web Worker 解碼＝主執行緒零卡頓——紅米
+  5-10fps 的已知路徑）：
+  1. Worker 封裝（ImageBitmap/ArrayBuffer 轉移傳輸＋解碼回呼）
+  2. webCameraDecode* providers 接 wasm 路徑（zxing2 降為後備）
+  3. 1D 條碼（Code 39 載具）順勢支援評估（zxing-c++ 支援 1D）
+  4. 效能驗證（紅米 fps 實測——目標 5-10fps 不卡主執行緒）
+- [ ] **1D 載具條碼（Code 39）支援決策**（PWA zxing2 僅 QR——需 WASM
+  引擎；載具號碼對記帳的價值待 PM 判定）
+- [ ] **Tesseract.js Android 紙本 OCR**（Android PWA 紙本＝現走手動
+  fallback；Apple Vision 僅 iOS/macOS）
+- [x] ~~財政部 API 雲端載具發票匯入~~（PM 2026-11-28：**先不做**——
+  MrMYHuang/twei 為載具列表/對獎 app，模式可日後再參考）
+- [ ] **批 B 重構**（web_camera_scan.dart 1197 行拆檔：scan_decode/
+  scan_loop/scan_overlays）——暫緩待掃描收斂
+- [ ] **demo 頁去留**（12 頁編入 PWA——PM 決策）
+- [ ] **MR feat/scan-final 合併**（PM——合併後內容＝已上線版本）
 
 - [x] **T90d/e/f 掃描體驗三修正**（PM 2026-11-26：①「辨識時慢時快」
   ②「確認清單沒按 OK 直接退出→變成連續掃描模式」③「紅米有提示掃到

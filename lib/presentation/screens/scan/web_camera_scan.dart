@@ -9,6 +9,7 @@ import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
 import '../../../platform/scan/camera_stream.dart';
 import '../../../platform/scan/image_qr_scan.dart';
+import '../../../platform/scan/scan_haptics.dart';
 import '../../../platform/scan/tw_ein_parse.dart';
 import 'import_page.dart';
 import 'review_page.dart';
@@ -52,11 +53,13 @@ final webCameraDecodeRegionProvider =
           (af) => ImageQrScanner.decodeRegionRgba(af.rgba, af.width, af.height),
     );
 
-/// **T91 時間窗長度 provider**（左碼鎖定後等右碼的時限；PM 決策＝3 秒 →
-/// **1 秒**（2026-11-28 修訂——實測簽章 iPhone 右碼全走 ROI，3 秒太長）；
-/// 測試可縮短——逾時＝左碼先入單）。
+/// **T91 時間窗長度 provider**（左碼鎖定後等右碼的**逾時上限**——找到
+/// 右碼的瞬間即合併入單，窗期不影響成功掃描的速度；PM 決策 3 秒 → 1 秒
+/// → **2 秒**（2026-11-28 三修：1 秒窗讓 ROI 嘗試不足＝左碼逾時先入、
+/// 明細短缺——他牌 App 無此上限皆可完整掃描）；測試可縮短——逾時＝左碼
+/// 先入單）。
 final scanHoldWindowProvider = Provider<Duration>(
-  (ref) => const Duration(seconds: 1),
+  (ref) => const Duration(seconds: 2),
 );
 
 /// 相機控制器 provider（測試可覆寫 fake）。
@@ -422,7 +425,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         now.difference(
               _holdDeadline!.subtract(ref.read(scanHoldWindowProvider)),
             ) >
-            ref.read(scanHoldWindowProvider) ~/ 2 &&
+            const Duration(milliseconds: 500) &&
         !_recentTexts.keys.any((t) => t.startsWith('**'));
     // 後備路徑安全掃（hold 每 3 tick 全幅——防發票移動漏掃）。
     final sweep = inHold && _sweepCounter % 3 == 0;
@@ -629,6 +632,8 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
   ) async {
     // **T92 除錯簽章**：入單方式（引擎×路徑×階段——診斷行「上次成功」）。
     _lastSuccessInfo = '$_tickSig · ${leftCode == null ? '直入' : 'hold合併'}';
+    // **掃描成功震動**（T92c；Android Chrome 支援，iOS Safari 靜默）。
+    vibrateSuccess();
     // **T89**：照片只在入單時擷一次 JPEG（舊版每 tick 擷幀＋同步編碼）。
     final photoBytes = await _controller.captureFrame();
     ref
