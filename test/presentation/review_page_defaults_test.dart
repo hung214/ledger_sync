@@ -7,6 +7,7 @@ import 'package:ledger_sync/application/scan/scan_state.dart';
 import 'package:ledger_sync/application/sync/sync_coordinator.dart';
 import 'package:ledger_sync/application/sync/sync_fe_state.dart';
 import 'package:ledger_sync/domain/entities/account.dart';
+import 'package:ledger_sync/domain/entities/invoice_line_item.dart';
 import 'package:ledger_sync/domain/entities/transaction_draft.dart';
 import 'package:ledger_sync/presentation/screens/scan/review_page.dart';
 import 'package:ledger_sync/presentation/theme/app_theme.dart';
@@ -375,6 +376,49 @@ void main() {
       find.byKey(const Key('review-save-btn')),
       findsNothing,
       reason: '桌面版不加備註區儲存鈕（與快記同慣例）',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('T92b 備註＝發票號＋內容明細（一行一產品含數量金額——PM 2026-11-28）', (tester) async {
+    final db = DbFixture.create();
+    addTearDown(db.close);
+    await DbFixture.seedStandardScenario(db);
+    final container = _container(db);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const lineItems = [
+      InvoiceLineItem(name: 'milk', quantity: 2, unitPrice: 50, amount: 100),
+      InvoiceLineItem(name: '麵包', quantity: 1, unitPrice: 60, amount: 60),
+    ];
+    final draft = TransactionDraft(
+      merchant: const DraftField('測試超商', 1.0),
+      totalMinor: const DraftField(160, 1.0),
+      date: DraftField(DateTime(2026, 11, 18), 1.0),
+      invoiceNo: 'SR30393603',
+      lineItems: lineItems,
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          home: ReviewPage(items: [ScannedItem(draft: draft)]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('review-note')))
+          .controller!
+          .text,
+      '發票號 SR30393603\nmilk×2 100\n麵包×1 60',
+      reason: '備註＝發票號＋明細（一行一產品：名稱×數量 金額）',
     );
     expect(tester.takeException(), isNull);
   });

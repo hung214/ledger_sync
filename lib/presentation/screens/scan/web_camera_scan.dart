@@ -52,10 +52,11 @@ final webCameraDecodeRegionProvider =
           (af) => ImageQrScanner.decodeRegionRgba(af.rgba, af.width, af.height),
     );
 
-/// **T91 時間窗長度 provider**（左碼鎖定後等右碼的時限；PM 決策＝3 秒；
+/// **T91 時間窗長度 provider**（左碼鎖定後等右碼的時限；PM 決策＝3 秒 →
+/// **1 秒**（2026-11-28 修訂——實測簽章 iPhone 右碼全走 ROI，3 秒太長）；
 /// 測試可縮短——逾時＝左碼先入單）。
 final scanHoldWindowProvider = Provider<Duration>(
-  (ref) => const Duration(seconds: 3),
+  (ref) => const Duration(seconds: 1),
 );
 
 /// 相機控制器 provider（測試可覆寫 fake）。
@@ -421,7 +422,7 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
         now.difference(
               _holdDeadline!.subtract(ref.read(scanHoldWindowProvider)),
             ) >
-            const Duration(milliseconds: 1500) &&
+            ref.read(scanHoldWindowProvider) ~/ 2 &&
         !_recentTexts.keys.any((t) => t.startsWith('**'));
     // 後備路徑安全掃（hold 每 3 tick 全幅——防發票移動漏掃）。
     final sweep = inHold && _sweepCounter % 3 == 0;

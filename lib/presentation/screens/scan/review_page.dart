@@ -120,8 +120,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       );
     }
     _merchantCtrl.text = draft.merchant.value ?? '';
-    // 發票號碼寫入備註欄（PM 2026-11-22：掃描帶金額/時間，發票號入備註）。
-    _noteCtrl.text = draft.invoiceNo == null ? '' : '發票號 ${draft.invoiceNo}';
+    // 發票號碼＋**內容明細**寫入備註（PM 2026-11-28：一行一產品含**數量
+    // 與金額**——右碼明細碼解出的品目；無明細＝僅發票號）。
+    final noteFmt = NumberFormat('#,###');
+    _noteCtrl.text = [
+      if (draft.invoiceNo != null) '發票號 ${draft.invoiceNo}',
+      for (final item in draft.lineItems)
+        if (item.name.trim().isNotEmpty)
+          '${item.name.trim()}×${item.quantity} ${noteFmt.format(item.amount)}',
+    ].join('\n');
     // 類別預設（PM 2026-11-22：與帳戶同款 Sticky）＝**最後一次掃描入帳的
     // 類別**；無（或已刪除）→「其他」（acceptance S3.3）。
     final cats = ref.read(expenseCategoriesProvider);
