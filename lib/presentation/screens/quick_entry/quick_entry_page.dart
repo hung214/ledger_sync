@@ -470,6 +470,9 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
                     key: const Key('quick-entry-note'),
                     controller: _noteCtrl,
                     focusNode: _noteFocus,
+                    // **聚焦多行／失焦單行**（PM 2026-11-28）：聚焦展開可
+                    // 換行；失焦收合為單行顯示（內容完整保留）。
+                    maxLines: _noteFocus.hasFocus ? null : 1,
                     decoration: const InputDecoration(
                       labelText: '備註（選填）',
                       border: OutlineInputBorder(),

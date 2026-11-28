@@ -453,6 +453,9 @@ class _TxEditSheetState extends ConsumerState<_TxEditSheet> {
                         key: const Key('tx-edit-note'),
                         controller: _noteCtrl,
                         focusNode: _noteFocus,
+                        // **聚焦多行／失焦單行**（PM 2026-11-28）：聚焦展開
+                        // 可換行；失焦收合為單行顯示（內容完整保留）。
+                        maxLines: _noteFocus.hasFocus ? null : 1,
                         decoration: const InputDecoration(
                           labelText: '備註（選填）',
                           border: OutlineInputBorder(),
