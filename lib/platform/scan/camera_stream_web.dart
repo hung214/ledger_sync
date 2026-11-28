@@ -58,7 +58,7 @@ class WebCameraStreamController implements CameraStreamController {
 
   @override
   String get diagInfo =>
-      'facing=$_facing${made2 ? '·made2' : ''}${_switchNote == null ? '' : '｜$_switchNote'}';
+      'facing=$_facing${_switchNote == null ? '' : '｜$_switchNote'}';
 
   @override
   String get resolutionInfo {
@@ -217,11 +217,6 @@ class WebCameraStreamController implements CameraStreamController {
     }
   }
 
-  @override
-  Future<void> setMade2(bool on) async {
-    made2 = on;
-    await _applyMade2Zoom();
-  }
 
   @override
   Future<void> focusAt(double nx, double ny) async {
@@ -238,20 +233,13 @@ class WebCameraStreamController implements CameraStreamController {
           },
         ],
       }.jsify()!;
-      await (track as dynamic).applyConstraints(constraints);
+      await ((track as dynamic).applyConstraints(
+        constraints,
+      ) as JSPromise).toDart;
       _switchNote = '對焦✓(${(nx * 100).round()}%,${(ny * 100).round()}%)';
     } catch (e) {
       _switchNote = '對焦✗(${_brief(e)})';
     }
-  }
-
-  /// made2：zoom 釘選（目標 ≈2×——主鏡頭；近拍自動切超廣角發生於
-  /// 1×附近，明確 zoom 可避免）。能力不支援 → 靜默（deviceId 精選
-  /// 仍釘住實體相機）。
-  Future<void> _applyMade2Zoom() async {
-    if (!made2 || !_zoomSupported) return;
-    final target = 2.0.clamp(_zoomMin, _zoomMax);
-    await setZoom((target - _zoomMin) / (_zoomMax - _zoomMin).clamp(0.001, 99));
   }
 
   @override
@@ -377,7 +365,6 @@ class WebCameraStreamController implements CameraStreamController {
     // zoom 能力探測（T82）——capabilities.zoom 存在才支援變焦。
     final firstTrack = _videoTracks().firstOrNull;
     if (firstTrack != null) probeZoomCapabilities(firstTrack);
-    if (made2) await _applyMade2Zoom(); // made2：重套 zoom 釘選
     video.srcObject = _stream;
     // 初始/恢復一律後鏡頭——鏡像清除（防切換失敗殘留 scaleX(-1)，
     // PM 2026-11-21「顯示不正常」＝鏡像殘留疊在後鏡頭上）。

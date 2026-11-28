@@ -123,11 +123,6 @@ abstract interface class CameraStreamController {
   /// 變焦（正規化 0~1——0=1×、1=最大；不支援＝靜默）。
   Future<void> setZoom(double normalized);
 
-  /// **made2 固定鏡頭模式**（PM 2026-11-28 實驗——避免 iPhone 近拍自動
-  /// 切換鏡頭）：on＝套用 zoom 約束釘選主鏡頭（能力支援時）；off＝取消。
-  /// 控制器記住狀態，重啟/恢復路徑自動重套。
-  Future<void> setMade2(bool on);
-
   /// **點選對焦**（PM 2026-11-28）：對 [nx],[ny]（video 正規化 0~1）施加
   /// pointsOfInterest——瀏覽器支援度不一（best-effort 靜默失敗）。
   Future<void> focusAt(double nx, double ny);

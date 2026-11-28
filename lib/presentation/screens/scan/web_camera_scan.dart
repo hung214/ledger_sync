@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../application/providers.dart';
 import '../../../application/scan/scan_state.dart';
 import '../../../domain/entities/invoice_line_item.dart';
 import '../../../domain/entities/transaction_draft.dart';
@@ -63,22 +62,6 @@ final webCameraDecodeRegionProvider =
 final scanHoldWindowProvider = Provider<Duration>(
   (ref) => const Duration(seconds: 2),
 );
-
-/// **made2 固定鏡頭模式**（PM 2026-11-28 實驗——避免 iPhone 近拍自動
-/// 切換鏡頭）：持久化 settings `scan.made2`（預設關）。診斷面板開關。
-final scanMade2Provider = NotifierProvider<ScanMade2Notifier, bool>(
-  ScanMade2Notifier.new,
-);
-
-class ScanMade2Notifier extends Notifier<bool> {
-  @override
-  bool build() => ref.watch(dbProvider).getSetting('scan.made2') == '1';
-
-  void set(bool v) {
-    ref.read(dbProvider).setSetting('scan.made2', v ? '1' : '0');
-    state = v;
-  }
-}
 
 /// 相機控制器 provider（測試可覆寫 fake）。
 final webCameraControllerProvider = Provider<CameraStreamController>(
@@ -619,19 +602,11 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
       }
       return;
     }
-    // ④逾時：左碼已鎖、右碼未到、窗期過：
-    // - **made2 模式**（PM 2026-11-28）：ROI 倒數完未合併＝**該次掃描取消**
-    //   （不左碼先入——避免不完整資料入庫；清窗＝可立即重掃）。
-    // - 一般模式：左碼先入（明細可稍後補）。
+    // ④逾時：左碼已鎖、右碼未到、窗期過 → 左碼先入（明細可稍後補）。
     if (_lockedLeftText != null &&
         _lockedRightText == null &&
         _holdDeadline != null &&
         now.isAfter(_holdDeadline!)) {
-      if (ref.read(scanMade2Provider)) {
-        _resetScanPhase(clearWindow: true);
-        _flashHint('✗ 明細未掃到——本次已取消，請重新掃描');
-        return;
-      }
       await _commitLeftOnly();
       _resetScanPhase();
       return;
@@ -1055,36 +1030,6 @@ class _WebCameraScanPageState extends ConsumerState<WebCameraScanPage> {
                               fontSize: 11,
                             ),
                           ),
-                        // **made2 固定鏡頭開關**（PM 2026-11-28 實驗——
-                        // 避免 iPhone 近拍自動切換鏡頭；診斷面板＝實驗
-                        // 功能位置，好找好取消）。
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'made2 固定鏡頭',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              height: 26,
-                              width: 40,
-                              child: Switch(
-                                key: const Key('webcam-made2-toggle'),
-                                value: ref.watch(scanMade2Provider),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                onChanged: (v) {
-                                  ref.read(scanMade2Provider.notifier).set(v);
-                                  unawaited(_controller.setMade2(v));
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),

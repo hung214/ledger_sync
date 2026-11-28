@@ -11,6 +11,7 @@ import '../../../core/clock.dart';
 import '../../category_display.dart';
 import '../quick_entry/amount_keypad.dart';
 import '../quick_entry/category_picker_dialog.dart';
+import '../../../platform/scan/scan_platform.dart';
 import '../quick_entry/quick_date_time_picker.dart';
 
 /// 確認清單（FR-S4/S5）——**與快速記帳同款互動**（PM 2026-11-22）：
@@ -120,15 +121,22 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       );
     }
     _merchantCtrl.text = draft.merchant.value ?? '';
-    // 發票號碼＋**內容明細**寫入備註（PM 2026-11-28：一行一產品含**數量
-    // 與金額**——右碼明細碼解出的品目；無明細＝僅發票號）。
-    final noteFmt = NumberFormat('#,###');
-    _noteCtrl.text = [
-      if (draft.invoiceNo != null) '發票號 ${draft.invoiceNo}',
-      for (final item in draft.lineItems)
-        if (item.name.trim().isNotEmpty)
-          '${item.name.trim()}×${item.quantity} ${noteFmt.format(item.amount)}',
-    ].join('\n');
+    // 備註寫入（PM 2026-11-28 平台分流）：
+    // - **iOS**：Apple 偵測器的繁中亂碼無法在 web 層還原（不回原始位元
+    //   組）→ 備註**只放發票號**（乾淨、可對帳）。
+    // - 其他平台（Android 等）：發票號＋**內容明細一行一產品含數量金額**
+    //   （右碼明細碼解出的品目；無明細＝僅發票號）。
+    if (isIOSDevice) {
+      _noteCtrl.text = draft.invoiceNo == null ? '' : '發票號 ${draft.invoiceNo}';
+    } else {
+      final noteFmt = NumberFormat('#,###');
+      _noteCtrl.text = [
+        if (draft.invoiceNo != null) '發票號 ${draft.invoiceNo}',
+        for (final item in draft.lineItems)
+          if (item.name.trim().isNotEmpty)
+            '${item.name.trim()}×${item.quantity} ${noteFmt.format(item.amount)}',
+      ].join('\n');
+    }
     // 類別預設（PM 2026-11-22：與帳戶同款 Sticky）＝**最後一次掃描入帳的
     // 類別**；無（或已刪除）→「其他」（acceptance S3.3）。
     final cats = ref.read(expenseCategoriesProvider);
