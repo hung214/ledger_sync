@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../application/appearance/theme_mode_state.dart';
 import '../../../application/categories/category_service.dart';
+import '../../../application/quick_entry/quick_entry_memory.dart';
 import '../../../application/providers.dart';
 import '../../category_display.dart';
 import '../scan/scan_page.dart' show openScanFlow;
@@ -198,6 +199,37 @@ class _QuickEntryPageState extends ConsumerState<QuickEntryPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 children: [
+                  // 帶入上次值切換（PM 2026-11-28，頁面頂部）：開＝選分類
+                  // 按原規則帶入（金額/商家；金額已輸入非 0 → 不帶入）；
+                  // 關＝單純操作。持久化於 settings（跨重啟）。
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.history,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '帶入上次值',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        height: 28,
+                        child: Switch(
+                          key: const Key('quick-entry-bring-in-toggle'),
+                          value: ref.watch(quickBringInToggleProvider),
+                          onChanged: (v) => ref
+                              .read(quickBringInToggleProvider.notifier)
+                              .set(v),
+                        ),
+                      ),
+                    ],
+                  ),
                   // 模式列（PM 2026-10-24 定稿）：支出／收入／轉帳；
                   // **繳卡費**（T77 PM 2026-11-24）＝有信用卡帳戶才顯示。
                   SegmentedButton<QuickEntryMode>(
