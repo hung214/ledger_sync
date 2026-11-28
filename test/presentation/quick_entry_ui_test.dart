@@ -304,7 +304,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 按鈕列常駐（不需聚焦即可見）；key 與鍵盤 OK 契約分開。
-      expect(find.byKey(const Key('quick-entry-cancel')), findsOneWidget);
+      // 取消按鈕已移除（PM 2026-11-28）。
+      expect(find.byKey(const Key('quick-entry-cancel')), findsNothing);
       expect(find.byKey(const Key('quick-entry-save-btn')), findsOneWidget);
       expect(
         find.byKey(const Key('quick-entry-save')),
@@ -341,7 +342,7 @@ void main() {
     }
   });
 
-  testWidgets('快記備註右下角「取消」＝放棄草稿（清金額＋備註；Sticky 商家保留）', (tester) async {
+  testWidgets('快記備註右下角「取消」按鈕＝已移除（PM 2026-11-28；儲存保留）', (tester) async {
     final db = DbFixture.create();
     await FirstRunBootstrap.seedIfNeeded(db);
     final container = ProviderContainer(
@@ -367,38 +368,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 草稿：金額 200＋備註「臨時」＋商家「測試店」（Sticky 語意）。
-      await tester.tap(find.byKey(const Key('quick-entry-amount')));
-      await tester.pumpAndSettle();
-      for (final k in ['2', '0', '0']) {
-        await tester.tap(find.byKey(Key('keypad-$k')));
-        await tester.pump();
-      }
-      await tester.enterText(find.byKey(const Key('quick-entry-note')), '臨時');
-      await tester.enterText(
-        find.byKey(const Key('quick-entry-merchant')),
-        '測試店',
-      );
-      await tester.pumpAndSettle();
-
-      // 取消 → 金額＋備註清空；商家 Sticky 保留；未入庫。
-      await tester.tap(find.byKey(const Key('quick-entry-cancel')));
-      await tester.pumpAndSettle();
-
-      final st = container.read(quickEntryControllerProvider);
-      expect(st.amount, '', reason: '取消＝清空金額');
-      expect(st.note, '', reason: '取消＝清空備註');
-      expect(st.merchant, '測試店', reason: '商家 Sticky 保留（記住上次）');
-      expect(find.byKey(const Key('quick-entry-note')), findsOneWidget);
+      // 取消按鈕不存在；儲存按鈕仍在（僅手機版顯示）。
       expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('quick-entry-note')))
-            .controller!
-            .text,
-        '',
-        reason: '備註欄已清空',
+        find.byKey(const Key('quick-entry-cancel')),
+        findsNothing,
+        reason: '取消按鈕已移除（PM 2026-11-28）',
       );
-      expect(db.allTransactions(), isEmpty, reason: '取消不入庫');
+      expect(
+        find.byKey(const Key('quick-entry-save-btn')),
+        findsOneWidget,
+        reason: '儲存按鈕保留',
+      );
       expect(tester.takeException(), isNull);
     } finally {
       container.dispose();
